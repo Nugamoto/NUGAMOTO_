@@ -13,4 +13,4 @@ app = FastAPI(
 # -------------------------------------------------------------------------
 from .api.v1 import user as user_router  # noqa: E402, F401
 
-app.include_router(user_router.router)
+app.include_router(user_router.router, prefix="/v1")
