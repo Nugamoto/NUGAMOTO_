@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.crud import user as crud_user
+from app.db.session import SessionLocal
 from app.schemas.user import UserCreate, UserRead
-from app.db.session import SessionLocal  # adjust import path if different
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -28,31 +28,12 @@ def get_db() -> Generator[Session, None, None]:
 # --------------------------------------------------------------------- #
 # Routes                                                                #
 # --------------------------------------------------------------------- #
-@router.post(
-    "",
-    response_model=UserRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a new user",
-)
+@router.post("", response_model=UserRead, status_code=201)
 def create_user(user_in: UserCreate, db: Session = Depends(get_db)) -> UserRead:
-    """Create a new user.
-
-    Args:
-        user_in: Payload validated against :class:`~app.schemas.user.UserCreate`.
-        db: Injected database session.
-
-    Returns:
-        The newly created user.
-
-    Raises:
-        HTTPException: *400* if the email is already registered.
-    """
-    if crud_user.get_user_by_email(db, email=user_in.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered.",
-        )
-    return crud_user.create_user(db, user_in)
+    if crud_user.get_user_by_email(db, str(user_in.email)):
+        raise HTTPException(status_code=400, detail="Email already registered.")
+    db_user = crud_user.create_user(db, user_in)
+    return UserRead.model_validate(db_user, from_attributes=True)
 
 
 @router.get(
@@ -76,8 +57,5 @@ def read_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
     """
     user = crud_user.get_user(db, user_id)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
-        )
-    return user
+        raise HTTPException(status_code=404, detail="User not found.")
+    return UserRead.model_validate(user, from_attributes=True)

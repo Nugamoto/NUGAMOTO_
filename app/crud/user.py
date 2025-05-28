@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 
+from pydantic import EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,13 +20,13 @@ def get_user(db: Session, user_id: int) -> Optional[User]:
         user_id: Primary key of the user.
 
     Returns:
-        The matching :class:`~app.models.user.User` or ``None``.
+        The matching : class:`~app.models.user.User` or ``None``.
     """
     stmt = select(User).where(User.id == user_id)
     return db.scalar(stmt)
 
 
-def get_user_by_email(db: Session, email: str) -> Optional[User]:
+def get_user_by_email(db: Session, email: Union[str, EmailStr]) -> Optional[User]:
     """Return a user by *unique* e-mail address (case-insensitive).
 
     Args:
@@ -35,7 +36,8 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
     Returns:
         The matching user or ``None``.
     """
-    stmt = select(User).where(User.email == email.lower())
+    normalized = str(email).lower()
+    stmt = select(User).where(User.email == normalized)
     return db.scalar(stmt)
 
 
@@ -51,7 +53,7 @@ def create_user(db: Session, user_in: UserCreate) -> User:
     """
     new_user = User(
         name=user_in.name,
-        email=user_in.email.lower(),
+        email=str(user_in.email).lower(),
         diet_type=user_in.diet_type,
         allergies=user_in.allergies,
         preferences=user_in.preferences,
