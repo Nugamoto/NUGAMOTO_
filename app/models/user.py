@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
@@ -23,9 +21,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True
     )
-    diet_type: Mapped[Optional[str]] = mapped_column(String(50))
-    allergies: Mapped[Optional[str]] = mapped_column(Text)
-    preferences: Mapped[Optional[str]] = mapped_column(Text)
+    diet_type: Mapped[str | None] = mapped_column(String(50))
+    allergies: Mapped[str | None] = mapped_column(Text)
+    preferences: Mapped[str | None] = mapped_column(Text)
 
     # ------------------------------------------------------------------ #
     # Validators                                                          #

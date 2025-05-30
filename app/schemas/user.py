@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Union
-
 from pydantic import BaseModel, EmailStr, Field
 from pydantic.config import ConfigDict
 
@@ -13,9 +11,9 @@ class _UserBase(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
-    diet_type: Union[str, None] = Field(default=None, max_length=50)
-    allergies: Union[str, None] = Field(default=None)
-    preferences: Union[str, None] = Field(default=None)
+    diet_type: str | None = Field(default=None, max_length=50)
+    allergies: str | None = Field(default=None)
+    preferences: str | None = Field(default=None)
 
     # Allow ORM objects to be returned directly from CRUD.
     model_config = ConfigDict(from_attributes=True)

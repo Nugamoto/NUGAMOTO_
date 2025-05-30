@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
-
 from pydantic import EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,7 +10,7 @@ from app.models.user import User
 from app.schemas.user import UserCreate
 
 
-def get_user(db: Session, user_id: int) -> Optional[User]:
+def get_user(db: Session, user_id: int) -> User | None:
     """Return a user by primary key.
 
     Args:
@@ -26,7 +24,7 @@ def get_user(db: Session, user_id: int) -> Optional[User]:
     return db.scalar(stmt)
 
 
-def get_user_by_email(db: Session, email: Union[str, EmailStr]) -> Optional[User]:
+def get_user_by_email(db: Session, email: str | EmailStr) -> User | None:
     """Return a user by *unique* e-mail address (case-insensitive).
 
     Args:
