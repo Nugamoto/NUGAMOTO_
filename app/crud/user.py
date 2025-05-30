@@ -34,27 +34,27 @@ def get_user_by_email(db: Session, email: str | EmailStr) -> User | None:
     Returns:
         The matching user or ``None``.
     """
-    normalized = str(email).lower()
+    normalized = email.lower()
     stmt = select(User).where(User.email == normalized)
     return db.scalar(stmt)
 
 
-def create_user(db: Session, user_in: UserCreate) -> User:
+def create_user(db: Session, user_data: UserCreate) -> User:
     """Create and persist a new user.
 
     Args:
         db: Database session.
-        user_in: Validated user payload.
+        user_data: Validated user payload.
 
     Returns:
         The newly created, *refreshed* user instance.
     """
     new_user = User(
-        name=user_in.name,
-        email=str(user_in.email).lower(),
-        diet_type=user_in.diet_type,
-        allergies=user_in.allergies,
-        preferences=user_in.preferences,
+        name=user_data.name,
+        email=str(user_data.email).lower(),
+        diet_type=user_data.diet_type,
+        allergies=user_data.allergies,
+        preferences=user_data.preferences,
     )
     db.add(new_user)
     db.commit()

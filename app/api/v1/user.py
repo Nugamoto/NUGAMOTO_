@@ -28,11 +28,11 @@ def get_db() -> Generator[Session, None, None]:
 # --------------------------------------------------------------------- #
 # Routes                                                                #
 # --------------------------------------------------------------------- #
-@router.post("", response_model=UserRead, status_code=201)
-def create_user(user_in: UserCreate, db: Session = Depends(get_db)) -> UserRead:
-    if crud_user.get_user_by_email(db, str(user_in.email)):
+@router.post("/", response_model=UserRead, status_code=201)
+def create_user(user_data: UserCreate, db: Session = Depends(get_db)) -> UserRead:
+    if crud_user.get_user_by_email(db, user_data.email):
         raise HTTPException(status_code=400, detail="Email already registered.")
-    db_user = crud_user.create_user(db, user_in)
+    db_user = crud_user.create_user(db, user_data)
     return UserRead.model_validate(db_user, from_attributes=True)
 
 
