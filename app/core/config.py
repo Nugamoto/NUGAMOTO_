@@ -18,7 +18,7 @@ def find_project_root():
 PROJECT_ROOT = find_project_root()
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./nugamoto.db"
+    DATABASE_URL: str = "sqlite:///./nugamoto.sqlite"
     OPENAI_API_KEY: str = "dummy-key"
 
     class Config:
