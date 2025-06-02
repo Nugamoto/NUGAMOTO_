@@ -60,3 +60,38 @@ def create_user(db: Session, user_data: UserCreate) -> User:
     db.commit()
     db.refresh(new_user)
     return new_user
+
+
+def update_user(db: Session, user_id: int, user_data: UserCreate) -> User:
+    """Update an existing user.
+
+    Args:
+        db: Active database session.
+        user_id: Primary key of the target user.
+        user_data: Validated payload containing the *complete* user data.
+
+    Returns:
+        The updated and refreshed user instance.
+
+    Raises:
+        ValueError: If the user does not exist or the e-mail is already taken.
+    """
+    user = get_user(db, user_id)
+    if user is None:
+        raise ValueError("User not found.")
+
+    # Check for a duplicate e-mail if it is being modified.
+    new_email = str(user_data.email).lower()
+    if user.email != new_email and get_user_by_email(db, new_email):
+        raise ValueError("Email already registered.")
+
+    # Apply incoming changes.
+    user.name = user_data.name
+    user.email = new_email
+    user.diet_type = user_data.diet_type
+    user.allergies = user_data.allergies
+    user.preferences = user_data.preferences
+
+    db.commit()
+    db.refresh(user)
+    return user

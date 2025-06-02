@@ -59,3 +59,43 @@ def read_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
     return UserRead.model_validate(user, from_attributes=True)
+
+
+@router.put(
+    "/{user_id}",
+    response_model=UserRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update an existing user",
+)
+def update_user(
+    user_id: int,
+    user_data: UserCreate,
+    db: Session = Depends(get_db),
+) -> UserRead:
+    """Replace an existing user (full update).
+
+    Args:
+        user_id: Primary key of the user to update.
+        user_data: Complete user payload.
+        db: Injected database session.
+
+    Returns:
+        The updated user.
+
+    Raises:
+        HTTPException:
+            * 404 – if the user does not exist.
+            * 400 – if the e-mail address is already taken.
+    """
+    try:
+        updated_user = crud_user.update_user(db, user_id, user_data)
+    except ValueError as exc:
+        match str(exc):
+            case "User not found.":
+                raise HTTPException(status_code=404, detail="User not found.") from exc
+            case "Email already registered.":
+                raise HTTPException(status_code=400, detail="Email already registered.") from exc
+        # Re-raise unexpected errors
+        raise
+
+    return UserRead.model_validate(updated_user, from_attributes=True)
