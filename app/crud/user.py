@@ -95,3 +95,21 @@ def update_user(db: Session, user_id: int, user_data: UserCreate) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def delete_user(db: Session, user_id: int) -> None:
+    """Remove a user from the database.
+
+    Args:
+        db: Active database session.
+        user_id: Primary key of the user to delete.
+
+    Raises:
+        ValueError: If the user does not exist.
+    """
+    user = get_user(db, user_id)
+    if user is None:
+        raise ValueError("User not found.")
+
+    db.delete(user)
+    db.commit()

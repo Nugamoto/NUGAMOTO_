@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Generator
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.crud import user as crud_user
@@ -99,3 +99,29 @@ def update_user(
         raise
 
     return UserRead.model_validate(updated_user, from_attributes=True)
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a user",
+)
+def delete_user(
+        user_id: int,
+        db: Session = Depends(get_db),
+) -> Response:
+    """Delete a user by primary key.
+
+    Args:
+        user_id: ID of the user to delete.
+        db: Injected database session.
+
+    Raises:
+        HTTPException: 404 if the user does not exist.
+    """
+    try:
+        crud_user.delete_user(db, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="User not found.") from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
