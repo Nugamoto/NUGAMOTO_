@@ -3,14 +3,50 @@
 from __future__ import annotations
 
 from pydantic import EmailStr
-from sqlalchemy import select
+from sqlalchemy import select, Sequence
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 
 
-def get_user(db: Session, user_id: int) -> User | None:
+def create_user(db: Session, user_data: UserCreate) -> User:
+    """Create and persist a new user.
+
+    Args:
+        db: Database session.
+        user_data: Validated user payload.
+
+    Returns:
+        The newly created, *refreshed* user instance.
+    """
+    new_user = User(
+        name=user_data.name,
+        email=str(user_data.email).lower(),
+        diet_type=user_data.diet_type,
+        allergies=user_data.allergies,
+        preferences=user_data.preferences,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
+def get_all_users(db: Session) -> Sequence[User]:
+    """Return all users from the database.
+
+    Args:
+        db: Database session.
+
+    Returns:
+        A sequence of all users in the database.
+    """
+    stmt = select(User)
+    return db.scalars(stmt).all()
+
+
+def get_user_by_id(db: Session, user_id: int) -> User | None:
     """Return a user by primary key.
 
     Args:
@@ -39,27 +75,6 @@ def get_user_by_email(db: Session, email: str | EmailStr) -> User | None:
     return db.scalar(stmt)
 
 
-def create_user(db: Session, user_data: UserCreate) -> User:
-    """Create and persist a new user.
-
-    Args:
-        db: Database session.
-        user_data: Validated user payload.
-
-    Returns:
-        The newly created, *refreshed* user instance.
-    """
-    new_user = User(
-        name=user_data.name,
-        email=str(user_data.email).lower(),
-        diet_type=user_data.diet_type,
-        allergies=user_data.allergies,
-        preferences=user_data.preferences,
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
 
 
 def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User:
@@ -76,7 +91,7 @@ def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User:
     Raises:
         ValueError: If the user does not exist or the e-mail is already taken.
     """
-    user = get_user(db, user_id)
+    user = get_user_by_id(db, user_id)
     if user is None:
         raise ValueError("User not found.")
 
@@ -110,7 +125,7 @@ def delete_user(db: Session, user_id: int) -> None:
     Raises:
         ValueError: If the user does not exist.
     """
-    user = get_user(db, user_id)
+    user = get_user_by_id(db, user_id)
     if user is None:
         raise ValueError("User not found.")
 

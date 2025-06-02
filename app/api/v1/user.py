@@ -28,13 +28,34 @@ def get_db() -> Generator[Session, None, None]:
 # --------------------------------------------------------------------- #
 # Routes                                                                #
 # --------------------------------------------------------------------- #
-@router.post("/", response_model=UserRead, status_code=201)
+
+@router.post(
+    "/",
+    response_model=UserRead,
+    status_code=201
+)
 def create_user(user_data: UserCreate, db: Session = Depends(get_db)) -> UserRead:
     if crud_user.get_user_by_email(db, user_data.email):
         raise HTTPException(status_code=400, detail="Email already registered.")
     db_user = crud_user.create_user(db, user_data)
     return UserRead.model_validate(db_user, from_attributes=True)
 
+
+@router.get("/",
+            response_model=list[UserRead],
+            status_code=200
+            )
+def read_all_users(db: Session = Depends(get_db)) -> list[UserRead]:
+    """Retrieve all users from the database.
+
+    Args:
+        db: Injected database session.
+
+    Returns:
+        A list of all users.
+    """
+    users = crud_user.get_all_users(db)
+    return [UserRead.model_validate(user, from_attributes=True) for user in users]
 
 @router.get(
     "/{user_id}",
@@ -55,7 +76,7 @@ def read_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
     Raises:
         HTTPException: *404* if the user does not exist.
     """
-    user = crud_user.get_user(db, user_id)
+    user = crud_user.get_user_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
     return UserRead.model_validate(user, from_attributes=True)
