@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate, UserUpdate
 
 
 def get_user(db: Session, user_id: int) -> User | None:
@@ -62,13 +62,13 @@ def create_user(db: Session, user_data: UserCreate) -> User:
     return new_user
 
 
-def update_user(db: Session, user_id: int, user_data: UserCreate) -> User:
-    """Update an existing user.
+def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User:
+    """Update an existing user with partial data.
 
     Args:
         db: Active database session.
         user_id: Primary key of the target user.
-        user_data: Validated payload containing the *complete* user data.
+        user_data: Validated payload containing partial user data.
 
     Returns:
         The updated and refreshed user instance.
@@ -80,17 +80,20 @@ def update_user(db: Session, user_id: int, user_data: UserCreate) -> User:
     if user is None:
         raise ValueError("User not found.")
 
-    # Check for a duplicate e-mail if it is being modified.
-    new_email = str(user_data.email).lower()
-    if user.email != new_email and get_user_by_email(db, new_email):
-        raise ValueError("Email already registered.")
+    if user_data.email is not None:
+        new_email = str(user_data.email).lower()
+        if user.email != new_email and get_user_by_email(db, new_email):
+            raise ValueError("Email already registered.")
+        user.email = new_email
 
-    # Apply incoming changes.
-    user.name = user_data.name
-    user.email = new_email
-    user.diet_type = user_data.diet_type
-    user.allergies = user_data.allergies
-    user.preferences = user_data.preferences
+    if user_data.name is not None:
+        user.name = user_data.name
+    if user_data.diet_type is not None:
+        user.diet_type = user_data.diet_type
+    if user_data.allergies is not None:
+        user.allergies = user_data.allergies
+    if user_data.preferences is not None:
+        user.preferences = user_data.preferences
 
     db.commit()
     db.refresh(user)

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.crud import user as crud_user
 from app.db.session import SessionLocal
-from app.schemas.user import UserCreate, UserRead
+from app.schemas.user import UserCreate, UserRead, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -69,7 +69,7 @@ def read_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
 )
 def update_user(
     user_id: int,
-    user_data: UserCreate,
+        user_data: UserUpdate,
     db: Session = Depends(get_db),
 ) -> UserRead:
     """Replace an existing user (full update).

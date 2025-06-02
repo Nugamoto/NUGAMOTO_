@@ -30,3 +30,10 @@ class UserRead(_UserBase):
     """Schema returned to the client."""
 
     id: int
+
+
+class UserUpdate(_UserBase):
+    """Schema for partial user updates (PATCH operations)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    email: EmailStr | None = None
