@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 
 from app.crud import kitchen as crud_kitchen
-from app.db.session import get_db
+from app.core.dependencies import get_db
 from app.schemas.kitchen import (
     KitchenCreate,
     KitchenRead,
