@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.kitchen import Kitchen, UserKitchen
 from app.models.user import User
-from app.schemas.kitchen import KitchenCreate, KitchenUpdate, UserKitchenCreate
+from app.schemas.kitchen import KitchenCreate, KitchenUpdate, UserKitchenCreate, UserKitchenUpdate
 
 
 def create_kitchen(db: Session, kitchen_data: KitchenCreate) -> Kitchen:
@@ -117,7 +117,7 @@ def delete_kitchen(db: Session, kitchen_id: int) -> None:
 
 
 def add_user_to_kitchen(
-        db: Session, kitchen_id: int, user_kitchen_data: UserKitchenCreate
+    db: Session, kitchen_id: int, user_kitchen_data: UserKitchenCreate
 ) -> UserKitchen:
     """Add a user to a kitchen with a specific role.
 
@@ -155,12 +155,69 @@ def add_user_to_kitchen(
     user_kitchen = UserKitchen(
         user_id=user_kitchen_data.user_id,
         kitchen_id=kitchen_id,
-        role=user_kitchen_data.role,
+        role=user_kitchen_data.role.value,  # Convert enum to string
     )
     db.add(user_kitchen)
     db.commit()
     db.refresh(user_kitchen)
     return user_kitchen
+
+
+def update_user_role_in_kitchen(
+    db: Session, kitchen_id: int, user_id: int, role_data: UserKitchenUpdate
+) -> UserKitchen:
+    """Update a user's role in a kitchen.
+
+    Args:
+        db: Database session.
+        kitchen_id: Primary key of the kitchen.
+        user_id: Primary key of the user.
+        role_data: Validated payload containing the new role.
+
+    Returns:
+        The updated UserKitchen relationship.
+
+    Raises:
+        ValueError: If the kitchen, user, or relationship does not exist.
+    """
+    # Get the existing relationship
+    stmt = select(UserKitchen).where(
+        UserKitchen.user_id == user_id,
+        UserKitchen.kitchen_id == kitchen_id,
+    )
+    user_kitchen = db.scalar(stmt)
+    if user_kitchen is None:
+        raise ValueError("User is not a member of this kitchen.")
+
+    # Update the role
+    user_kitchen.role = role_data.role.value  # Convert enum to string
+    db.commit()
+    db.refresh(user_kitchen)
+    return user_kitchen
+
+
+def get_user_kitchen_relationship(
+    db: Session, kitchen_id: int, user_id: int
+) -> UserKitchen | None:
+    """Get a specific user-kitchen relationship.
+
+    Args:
+        db: Database session.
+        kitchen_id: Primary key of the kitchen.
+        user_id: Primary key of the user.
+
+    Returns:
+        The UserKitchen relationship or ``None``.
+    """
+    stmt = (
+        select(UserKitchen)
+        .options(selectinload(UserKitchen.user))
+        .where(
+            UserKitchen.user_id == user_id,
+            UserKitchen.kitchen_id == kitchen_id,
+        )
+    )
+    return db.scalar(stmt)
 
 
 def remove_user_from_kitchen(db: Session, kitchen_id: int, user_id: int) -> None:

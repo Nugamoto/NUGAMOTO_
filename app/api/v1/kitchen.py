@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.crud import kitchen as crud_kitchen
 from app.core.dependencies import get_db
+from app.crud import kitchen as crud_kitchen
 from app.schemas.kitchen import (
     KitchenCreate,
     KitchenRead,
     KitchenWithUsers,
     UserKitchenCreate,
     UserKitchenRead,
+    UserKitchenUpdate,
 )
 
 router = APIRouter(prefix="/kitchens", tags=["Kitchens"])
@@ -120,6 +121,76 @@ def add_user_to_kitchen(
     return UserKitchenRead.model_validate(user_kitchen, from_attributes=True)
 
 
+@router.put(
+    "/{kitchen_id}/users/{user_id}/role",
+    response_model=UserKitchenRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update user role in kitchen",
+)
+def update_user_role_in_kitchen(
+        kitchen_id: int,
+        user_id: int,
+        role_data: UserKitchenUpdate,
+        db: Session = Depends(get_db),
+) -> UserKitchenRead:
+    """Update a user's role in a kitchen.
+
+    Args:
+        kitchen_id: Primary key of the kitchen.
+        user_id: Primary key of the user.
+        role_data: New role information.
+        db: Injected database session.
+
+    Returns:
+        The updated user-kitchen relationship.
+
+    Raises:
+        HTTPException:
+            * 404 – if the kitchen, user, or relationship does not exist.
+    """
+    try:
+        user_kitchen = crud_kitchen.update_user_role_in_kitchen(
+            db, kitchen_id, user_id, role_data
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404, detail="User is not a member of this kitchen."
+        ) from exc
+
+    return UserKitchenRead.model_validate(user_kitchen, from_attributes=True)
+
+
+@router.get(
+    "/{kitchen_id}/users/{user_id}",
+    response_model=UserKitchenRead,
+    status_code=status.HTTP_200_OK,
+    summary="Get user's role in kitchen",
+)
+def get_user_role_in_kitchen(
+        kitchen_id: int, user_id: int, db: Session = Depends(get_db)
+) -> UserKitchenRead:
+    """Get a user's role in a specific kitchen.
+
+    Args:
+        kitchen_id: Primary key of the kitchen.
+        user_id: Primary key of the user.
+        db: Injected database session.
+
+    Returns:
+        The user-kitchen relationship with role information.
+
+    Raises:
+        HTTPException: 404 if the relationship does not exist.
+    """
+    user_kitchen = crud_kitchen.get_user_kitchen_relationship(db, kitchen_id, user_id)
+    if user_kitchen is None:
+        raise HTTPException(
+            status_code=404, detail="User is not a member of this kitchen."
+        )
+
+    return UserKitchenRead.model_validate(user_kitchen, from_attributes=True)
+
+
 @router.get(
     "/",
     response_model=list[KitchenRead],
@@ -153,6 +224,9 @@ def remove_user_from_kitchen(
         kitchen_id: Primary key of the kitchen.
         user_id: Primary key of the user.
         db: Injected database session.
+
+    Returns:
+        Response with 204 status code.
 
     Raises:
         HTTPException: 404 if the user-kitchen relationship does not exist.

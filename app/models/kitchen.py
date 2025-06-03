@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db.base import Base
 from app.models.user import User
@@ -36,7 +36,7 @@ class Kitchen(Base):
 
 class UserKitchen(Base):
     """Represents a row in the ``user_kitchens`` table.
-    
+
     This is the association table between User and Kitchen with additional role data.
     """
 
@@ -58,6 +58,30 @@ class UserKitchen(Base):
     # ------------------------------------------------------------------ #
     user: Mapped[User] = relationship("User", back_populates="user_kitchens")
     kitchen: Mapped[Kitchen] = relationship("Kitchen", back_populates="user_kitchens")
+
+    # ------------------------------------------------------------------ #
+    # Validators                                                          #
+    # ------------------------------------------------------------------ #
+    @validates("role")
+    def _validate_role(self, _key: str, role: str) -> str:
+        """Validate that the role is one of the allowed values.
+
+        Args:
+            _key: The column key being validated (unused).
+            role: The role value to validate.
+
+        Returns:
+            The validated role.
+
+        Raises:
+            ValueError: If the role is not valid.
+        """
+        valid_roles = {"owner", "admin", "member"}
+        if role not in valid_roles:
+            raise ValueError(
+                f"Role must be one of: {', '.join(valid_roles)}. Got: {role}"
+            )
+        return role
 
     # ------------------------------------------------------------------ #
     # Dunder                                                               #
