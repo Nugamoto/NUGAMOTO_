@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column, validates
+from sqlalchemy.orm import Mapped, mapped_column, validates, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.kitchen import UserKitchen
 
 
 class User(Base):
@@ -24,6 +29,13 @@ class User(Base):
     diet_type: Mapped[str | None] = mapped_column(String(50))
     allergies: Mapped[str | None] = mapped_column(Text)
     preferences: Mapped[str | None] = mapped_column(Text)
+
+    # ------------------------------------------------------------------ #
+    # Relationships                                                       #
+    # ------------------------------------------------------------------ #
+    user_kitchens: Mapped[list[UserKitchen]] = relationship(
+        "UserKitchen", back_populates="user", cascade="all, delete-orphan"
+    )
 
     # ------------------------------------------------------------------ #
     # Validators                                                          #

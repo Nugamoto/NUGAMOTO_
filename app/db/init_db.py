@@ -16,7 +16,7 @@ from sqlalchemy import MetaData
 from app.db.session import engine
 from app.db.base import Base  # Base must already have all models imported!
 from app.models import user  # noqa: F401  – ensures User model is registered
-
+from app.models import kitchen  # noqa: F401  – ensures Kitchen model is registered
 
 def init_db(*, reset: bool = False) -> None:
     """
