@@ -11,8 +11,8 @@ app = FastAPI(
 # Register routers (use *relative* import to guarantee we import
 # the sibling package, not an external module named “app”).
 # -------------------------------------------------------------------------
-from .api.v1 import user as user_router  # noqa: E402, F401
-from .api.v1 import kitchen as kitchen_router  # noqa: E402, F401
+from .api.v1 import user as user_router
+from .api.v1 import kitchen as kitchen_router
 from .api.v1 import inventory as inventory_router
 app.include_router(user_router.router, prefix="/v1")
 app.include_router(kitchen_router.router, prefix="/v1")
