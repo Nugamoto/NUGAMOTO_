@@ -13,7 +13,7 @@ app = FastAPI(
 # -------------------------------------------------------------------------
 from .api.v1 import user as user_router  # noqa: E402, F401
 from .api.v1 import kitchen as kitchen_router  # noqa: E402, F401
-
+from .api.v1 import inventory as inventory_router
 app.include_router(user_router.router, prefix="/v1")
-
 app.include_router(kitchen_router.router, prefix="/v1")
+app.include_router(inventory_router.router, prefix="/v1")
