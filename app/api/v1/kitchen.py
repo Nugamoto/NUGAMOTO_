@@ -10,6 +10,7 @@ from app.crud import kitchen as crud_kitchen
 from app.schemas.kitchen import (
     KitchenCreate,
     KitchenRead,
+    KitchenUpdate,
     KitchenWithUsers,
     UserKitchenCreate,
     UserKitchenRead,
@@ -47,6 +48,25 @@ def create_kitchen(
 
 
 @router.get(
+    "/",
+    response_model=list[KitchenRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get all kitchens",
+)
+def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
+    """Retrieve all kitchens from the database.
+
+    Args:
+        db: Injected database session.
+
+    Returns:
+        A list of all kitchens.
+    """
+    kitchens = crud_kitchen.get_all_kitchens(db)
+    return [KitchenRead.model_validate(kitchen, from_attributes=True) for kitchen in kitchens]
+
+
+@router.get(
     "/{kitchen_id}",
     response_model=KitchenWithUsers,
     status_code=status.HTTP_200_OK,
@@ -70,6 +90,70 @@ def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUs
         raise HTTPException(status_code=404, detail="Kitchen not found.")
 
     return KitchenWithUsers.model_validate(kitchen, from_attributes=True)
+
+
+@router.put(
+    "/{kitchen_id}",
+    response_model=KitchenRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update an existing kitchen",
+)
+def update_kitchen(
+        kitchen_id: int,
+        kitchen_data: KitchenUpdate,
+        db: Session = Depends(get_db),
+) -> KitchenRead:
+    """Update an existing kitchen (partial update).
+
+    Args:
+        kitchen_id: Primary key of the kitchen to update.
+        kitchen_data: Partial kitchen payload.
+        db: Injected database session.
+
+    Returns:
+        The updated kitchen.
+
+    Raises:
+        HTTPException: 404 if the kitchen does not exist.
+    """
+    try:
+        updated_kitchen = crud_kitchen.update_kitchen(db, kitchen_id, kitchen_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Kitchen not found.") from exc
+
+    return KitchenRead.model_validate(updated_kitchen, from_attributes=True)
+
+
+@router.delete(
+    "/{kitchen_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a kitchen",
+)
+def delete_kitchen(
+        kitchen_id: int,
+        db: Session = Depends(get_db),
+) -> Response:
+    """Delete a kitchen by primary key.
+
+    This will also automatically delete all user-kitchen relationships
+    due to the cascade="all, delete-orphan" configuration.
+
+    Args:
+        kitchen_id: ID of the kitchen to delete.
+        db: Injected database session.
+
+    Returns:
+        Response with 204 status code.
+
+    Raises:
+        HTTPException: 404 if the kitchen does not exist.
+    """
+    try:
+        crud_kitchen.delete_kitchen(db, kitchen_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Kitchen not found.") from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -189,25 +273,6 @@ def get_user_role_in_kitchen(
         )
 
     return UserKitchenRead.model_validate(user_kitchen, from_attributes=True)
-
-
-@router.get(
-    "/",
-    response_model=list[KitchenRead],
-    status_code=status.HTTP_200_OK,
-    summary="Get all kitchens",
-)
-def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
-    """Retrieve all kitchens from the database.
-
-    Args:
-        db: Injected database session.
-
-    Returns:
-        A list of all kitchens.
-    """
-    kitchens = crud_kitchen.get_all_kitchens(db)
-    return [KitchenRead.model_validate(kitchen, from_attributes=True) for kitchen in kitchens]
 
 
 @router.delete(
