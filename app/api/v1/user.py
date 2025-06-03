@@ -2,27 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Generator
-
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.crud import user as crud_user
-from app.db.session import SessionLocal
+from app.db.session import get_db
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["Users"])
-
-# --------------------------------------------------------------------- #
-# Dependency                                                            #
-# --------------------------------------------------------------------- #
-def get_db() -> Generator[Session, None, None]:
-    """Yield a database session for the request lifecycle."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # --------------------------------------------------------------------- #

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Generator
-
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 
 from app.crud import kitchen as crud_kitchen
-from app.db.session import SessionLocal
+from app.db.session import get_db
 from app.schemas.kitchen import (
     KitchenCreate,
     KitchenRead,
@@ -18,20 +16,6 @@ from app.schemas.kitchen import (
 )
 
 router = APIRouter(prefix="/kitchens", tags=["Kitchens"])
-
-
-# --------------------------------------------------------------------- #
-# Dependency                                                            #
-# --------------------------------------------------------------------- #
-
-
-def get_db() -> Generator[Session, None, None]:
-    """Yield a database session for the request lifecycle."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # --------------------------------------------------------------------- #
