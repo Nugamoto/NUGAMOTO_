@@ -1,7 +1,5 @@
 """CRUD operations for AI-related functionality."""
 
-from typing import List
-
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -47,12 +45,55 @@ def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOu
     return db_output
 
 
+def get_ai_output_by_id(db: Session, output_id: int) -> AIModelOutput | None:
+    """Retrieve a single AI output by its ID.
+
+    Args:
+        db: Database session.
+        output_id: The unique identifier of the AI output.
+
+    Returns:
+        The AI output if found, None otherwise.
+
+    Example:
+        >>> output = get_ai_output_by_id(db, 123)
+        >>> if output:
+        ...     print(f"Found output: {output.ai_service}")
+    """
+    return db.scalar(select(AIModelOutput).where(AIModelOutput.id == output_id))
+
+
+def delete_ai_output(db: Session, output_id: int) -> bool:
+    """Delete an AI output by its ID.
+
+    Args:
+        db: Database session.
+        output_id: The unique identifier of the AI output to delete.
+
+    Returns:
+        True if the output was deleted, False if it wasn't found.
+
+    Example:
+        >>> success = delete_ai_output(db, 123)
+        >>> if success:
+        ...     print("Output deleted successfully")
+    """
+    output = db.scalar(select(AIModelOutput).where(AIModelOutput.id == output_id))
+
+    if output is None:
+        return False
+
+    db.delete(output)
+    db.commit()
+    return True
+
+
 def get_all_ai_outputs(
         db: Session,
         search_params: AIOutputSearchParams,
         skip: int = 0,
         limit: int = 100
-) -> List[AIModelOutput]:
+) -> list[AIModelOutput]:
     """Retrieve all AI outputs with optional filtering and pagination.
 
     Args:
