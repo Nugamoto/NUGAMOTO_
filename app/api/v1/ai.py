@@ -30,7 +30,8 @@ def create_ai_output(
 
     This endpoint is used to log AI-generated content for tracking,
     analytics, and future reference. Supports all types of AI outputs
-    including recipes, nutrition tips, messages, and shopping lists.
+    including recipes, nutrition tips, coaching messages, shopping suggestions,
+    and general content.
 
     Args:
         output_data: Validated AI output payload.
@@ -42,17 +43,18 @@ def create_ai_output(
     Example:
         ```json
         {
-            "ai_service": "openai-gpt4",
+            "user_id": 123,
+            "model_version": "gpt-4",
             "output_type": "recipe",
             "output_format": "markdown",
-            "prompt": "Generate a healthy pasta recipe",
-            "content": "# Healthy Veggie Pasta\\n\\n...",
-            "metadata": {
+            "prompt_used": "Generate a healthy pasta recipe",
+            "raw_output": "# Healthy Veggie Pasta\\n\\n...",
+            "extra_data": {
                 "tokens": 250,
                 "cost": 0.005,
-                "model_version": "gpt-4-0125-preview"
+                "temperature": 0.7
             },
-            "target_id": 123
+            "target_id": 456
         }
         ```
 
@@ -150,7 +152,8 @@ def delete_ai_output(
     summary="Get all AI outputs with optional filtering",
 )
 def get_all_ai_outputs(
-        ai_service: str | None = Query(None, description="Filter by AI service"),
+        user_id: int | None = Query(None, gt=0, description="Filter by user ID"),
+        model_version: str | None = Query(None, description="Filter by AI model version"),
         output_type: OutputType | None = Query(None, description="Filter by output type"),
         output_format: OutputFormat | None = Query(None, description="Filter by output format"),
         target_id: int | None = Query(None, gt=0, description="Filter by target entity ID"),
@@ -165,7 +168,8 @@ def get_all_ai_outputs(
     by creation time (newest first) for better usability.
 
     Args:
-        ai_service: Optional filter for specific AI service.
+        user_id: Optional filter for specific user.
+        model_version: Optional filter for AI model version (gpt-4, claude-3, etc.).
         output_type: Optional filter for output type (recipe, nutrition_tip, etc.).
         output_format: Optional filter for output format (json, markdown, plain_text).
         target_id: Optional filter for linked entity ID.
@@ -179,7 +183,7 @@ def get_all_ai_outputs(
 
     Example:
         ```
-        GET /ai/outputs/?output_type=recipe&ai_service=openai-gpt4&limit=20
+        GET /ai/outputs/?user_id=123&output_type=recipe&model_version=gpt-4&limit=20
         ```
 
     Note:
@@ -187,7 +191,8 @@ def get_all_ai_outputs(
         and building AI output management interfaces.
     """
     search_params = AIOutputSearchParams(
-        ai_service=ai_service,
+        user_id=user_id,
+        model_version=model_version,
         output_type=output_type,
         output_format=output_format,
         target_id=target_id,
@@ -208,7 +213,7 @@ def get_ai_output_summary(db: Session = Depends(get_db)) -> AIOutputSummary:
     """Retrieve summary statistics for all AI outputs.
 
     Provides overview statistics including total counts and breakdowns
-    by AI service, output type, and format. Useful for analytics dashboards.
+    by user, AI model, output type, and format. Useful for analytics dashboards.
 
     Args:
         db: Injected database session.
@@ -220,14 +225,20 @@ def get_ai_output_summary(db: Session = Depends(get_db)) -> AIOutputSummary:
         ```json
         {
             "total_outputs": 1250,
-            "outputs_by_service": {
-                "openai-gpt4": 800,
+            "outputs_by_user": {
+                "123": 400,
+                "456": 350,
+                "789": 500
+            },
+            "outputs_by_model": {
+                "gpt-4": 800,
                 "claude-3": 450
             },
             "outputs_by_type": {
                 "recipe": 600,
                 "nutrition_tip": 400,
-                "message": 250
+                "coaching_message": 150,
+                "general": 100
             },
             "outputs_by_format": {
                 "markdown": 700,
@@ -238,7 +249,7 @@ def get_ai_output_summary(db: Session = Depends(get_db)) -> AIOutputSummary:
         ```
 
     Note:
-        This endpoint is particularly useful for monitoring AI usage patterns
-        and making decisions about AI service allocation and costs.
+        This endpoint is particularly useful for monitoring AI usage patterns,
+        user behavior analysis, and making decisions about AI service allocation.
     """
     return crud_ai.get_ai_output_summary(db)
