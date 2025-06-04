@@ -1,112 +1,154 @@
-"""Pydantic schemas for shopping list functionality."""
+"""Pydantic schemas for shopping system."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
+from pydantic.config import ConfigDict
 
-from app.models.shopping import ShoppingListType, PackageType
+from app.core.enums import PackageType, ShoppingListType
 
+
+# ================================================================== #
+# Shopping List Schemas                                              #
+# ================================================================== #
 
 class _ShoppingListBase(BaseModel):
-    """Base schema for shopping list validation."""
+    """Fields shared by all shopping list schemas."""
 
-    kitchen_id: int = Field(..., gt=0, description="ID of the kitchen this list belongs to")
-    name: str = Field(..., min_length=1, max_length=255, description="Name of the shopping list")
-    type: ShoppingListType = Field(..., description="Type of shopping destination")
+    name: str = Field(..., min_length=1, max_length=255)
+    type: ShoppingListType
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ShoppingListCreate(_ShoppingListBase):
-    """Schema for creating new shopping lists."""
-    pass
+    """Schema for creating a new shopping list."""
+
+    kitchen_id: int = Field(..., gt=0)
 
 
 class ShoppingListRead(_ShoppingListBase):
-    """Schema for reading shopping lists."""
+    """Schema returned to the client."""
 
-    id: int = Field(..., description="Unique identifier")
-    created_at: datetime = Field(..., description="Creation timestamp")
+    id: int
+    kitchen_id: int
+    created_at: datetime
 
 
 class ShoppingListUpdate(BaseModel):
-    """Schema for updating shopping lists."""
+    """Schema for updating shopping list."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=255, description="Name of the shopping list")
-    type: ShoppingListType | None = Field(default=None, description="Type of shopping destination")
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class _ShoppingListItemBase(BaseModel):
-    """Base schema for shopping list item validation."""
-
-    food_item_id: int = Field(..., gt=0, description="ID of the food item")
-    quantity: float = Field(..., gt=0, description="Quantity needed")
-    unit: str = Field(..., min_length=1, max_length=50, description="Unit of measurement")
-    package_type: PackageType | None = Field(default=None, description="Type of packaging")
-    estimated_price: float | None = Field(default=None, ge=0, description="Estimated price in euros")
-    is_auto_added: bool = Field(default=False, description="Whether item was added automatically")
-    added_by_user_id: int | None = Field(default=None, gt=0, description="ID of user who added the item manually")
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    type: ShoppingListType | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class ShoppingListItemCreate(_ShoppingListItemBase):
-    """Schema for creating new shopping list items."""
+# ================================================================== #
+# Shopping Product Schemas                                           #
+# ================================================================== #
+
+class _ShoppingProductBase(BaseModel):
+    """Fields shared by all shopping product schemas."""
+
+    food_item_id: int = Field(..., gt=0)
+    unit: str = Field(..., min_length=1, max_length=20)
+    quantity: float = Field(..., gt=0)
+    package_type: PackageType
+    estimated_price: float | None = Field(default=None, ge=0)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ShoppingProductCreate(_ShoppingProductBase):
+    """Schema for creating a new shopping product."""
     pass
 
 
-class ShoppingListItemRead(_ShoppingListItemBase):
-    """Schema for reading shopping list items."""
+class ShoppingProductRead(_ShoppingProductBase):
+    """Schema returned to the client."""
 
-    id: int = Field(..., description="Unique identifier")
-    shopping_list_id: int = Field(..., description="ID of the shopping list")
-    created_at: datetime = Field(..., description="Creation timestamp")
+    id: int
+    created_at: datetime
 
-
-class ShoppingListItemUpdate(BaseModel):
-    """Schema for updating shopping list items."""
-
-    quantity: float | None = Field(default=None, gt=0, description="Quantity needed")
-    unit: str | None = Field(default=None, min_length=1, max_length=50, description="Unit of measurement")
-    package_type: PackageType | None = Field(default=None, description="Type of packaging")
-    estimated_price: float | None = Field(default=None, ge=0, description="Estimated price in euros")
-    is_auto_added: bool | None = Field(default=None, description="Whether item was added automatically")
-    added_by_user_id: int | None = Field(default=None, gt=0, description="ID of user who added the item manually")
-
-    model_config = ConfigDict(from_attributes=True)
+    # Optional nested food item details
+    food_item: dict | None = None
 
 
-class ShoppingListWithItems(ShoppingListRead):
-    """Shopping list schema that includes all items."""
+class ShoppingProductUpdate(BaseModel):
+    """Schema for updating shopping product."""
 
-    items: list[ShoppingListItemRead] = Field(default_factory=list, description="Items in the shopping list")
-
-
-class ShoppingListItemSearchParams(BaseModel):
-    """Schema for shopping list item search and filtering parameters."""
-
-    is_auto_added: bool | None = Field(default=None, description="Filter by auto-added status")
-    added_by_user_id: int | None = Field(default=None, gt=0, description="Filter by user who added the item")
-    food_item_id: int | None = Field(default=None, gt=0, description="Filter by food item")
-    package_type: PackageType | None = Field(default=None, description="Filter by package type")
-    min_price: float | None = Field(default=None, ge=0, description="Minimum estimated price")
-    max_price: float | None = Field(default=None, ge=0, description="Maximum estimated price")
+    unit: str | None = Field(default=None, min_length=1, max_length=20)
+    quantity: float | None = Field(default=None, gt=0)
+    package_type: PackageType | None = None
+    estimated_price: float | None = Field(default=None, ge=0)
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class ShoppingListSummary(BaseModel):
-    """Schema for shopping list statistics summary."""
+# ================================================================== #
+# Shopping Product Assignment Schemas                               #
+# ================================================================== #
 
-    total_lists: int = Field(..., description="Total number of shopping lists")
-    total_items: int = Field(..., description="Total number of items across all lists")
-    items_by_type: dict[str, int] = Field(..., description="Count by shopping list type")
-    auto_added_items: int = Field(..., description="Number of auto-added items")
-    manual_items: int = Field(..., description="Number of manually added items")
-    total_estimated_value: float = Field(..., description="Total estimated value of all items")
+class _ShoppingProductAssignmentBase(BaseModel):
+    """Fields shared by assignment schemas."""
+
+    added_by_user_id: int | None = Field(default=None, gt=0)
+    is_auto_added: bool = False
+    note: str | None = Field(default=None, max_length=500)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ShoppingProductAssignmentCreate(_ShoppingProductAssignmentBase):
+    """Schema for assigning a product to a list."""
+
+    shopping_product_id: int = Field(..., gt=0)
+
+
+class ShoppingProductAssignmentRead(_ShoppingProductAssignmentBase):
+    """Schema returned to client with full product details."""
+
+    shopping_list_id: int
+    shopping_product_id: int
+    created_at: datetime
+
+    # Nested product details
+    shopping_product: ShoppingProductRead
+
+
+class ShoppingProductAssignmentUpdate(BaseModel):
+    """Schema for updating assignment."""
+
+    note: str | None = Field(default=None, max_length=500)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ================================================================== #
+# Search Parameters                                                 #
+# ================================================================== #
+
+class ShoppingProductSearchParams(BaseModel):
+    """Parameters for filtering shopping products."""
+
+    food_item_id: int | None = None
+    package_type: PackageType | None = None
+    min_price: float | None = None
+    max_price: float | None = None
+    unit: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ShoppingProductAssignmentSearchParams(BaseModel):
+    """Parameters for filtering product assignments."""
+
+    is_auto_added: bool | None = None
+    added_by_user_id: int | None = None
+    food_item_id: int | None = None
+    package_type: PackageType | None = None
 
     model_config = ConfigDict(from_attributes=True)

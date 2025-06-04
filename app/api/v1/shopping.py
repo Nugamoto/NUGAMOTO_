@@ -1,57 +1,62 @@
-"""FastAPI router exposing shopping list endpoints."""
+"""FastAPI router for shopping system with global products."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.core.enums import PackageType
 from app.crud import shopping as crud_shopping
 from app.schemas.shopping import (
     ShoppingListCreate,
     ShoppingListRead,
     ShoppingListUpdate,
-    ShoppingListWithItems,
-    ShoppingListItemCreate,
-    ShoppingListItemRead,
-    ShoppingListItemUpdate,
-    ShoppingListItemSearchParams,
-    ShoppingListSummary
+    ShoppingProductCreate,
+    ShoppingProductRead,
+    ShoppingProductUpdate,
+    ShoppingProductAssignmentCreate,
+    ShoppingProductAssignmentRead,
+    ShoppingProductAssignmentUpdate,
+    ShoppingProductSearchParams,
+    ShoppingProductAssignmentSearchParams,
 )
 
-# ------------------------------------------------------------------ #
-# Two Router Approach: Kitchen-scoped + Global                      #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# Router Setup                                                       #
+# ================================================================== #
 
-# 🏠 Kitchen-scoped router for ShoppingList operations
-kitchen_router = APIRouter(prefix="/kitchens", tags=["Shopping Lists"])
+# 🏠 Kitchen-scoped router for Shopping Lists
+kitchen_router = APIRouter(prefix="/kitchens", tags=["Shopping - Kitchen"])
 
-# 📦 Global router for ShoppingListItem operations  
-items_router = APIRouter(prefix="/shopping-list-items", tags=["Shopping List Items"])
-
-# 📊 Global router for summary/analytics
-summary_router = APIRouter(prefix="/shopping-lists", tags=["Shopping Lists - Analytics"])
+# 🌍 Global router for Shopping Products
+products_router = APIRouter(prefix="/shopping-products", tags=["Shopping Products"])
 
 
 # ================================================================== #
-# KITCHEN-SCOPED: ShoppingList Operations                           #
+# KITCHEN-SCOPED: Shopping List Operations                          #
 # ================================================================== #
 
 @kitchen_router.post(
     "/{kitchen_id}/shopping-lists",
     response_model=ShoppingListRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new shopping list for a kitchen",
+    summary="Create a new shopping list for a kitchen"
 )
 def create_shopping_list(
     kitchen_id: int,
     list_data: ShoppingListCreate,
-    db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
 ) -> ShoppingListRead:
-    """Create a new shopping list for a specific kitchen."""
-    # Validate kitchen_id matches
-    if list_data.kitchen_id != kitchen_id:
-        raise HTTPException(400, "Kitchen ID mismatch")
-        
-    db_list = crud_shopping.create_shopping_list(db, list_data)
+    """Create a new shopping list for a kitchen."""
+    # Ensure kitchen_id matches route parameter
+    list_data.kitchen_id = kitchen_id
+
+    try:
+        db_list = crud_shopping.create_shopping_list(db, list_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     return ShoppingListRead.model_validate(db_list, from_attributes=True)
 
 
@@ -59,48 +64,44 @@ def create_shopping_list(
     "/{kitchen_id}/shopping-lists",
     response_model=list[ShoppingListRead],
     status_code=status.HTTP_200_OK,
-    summary="Get all shopping lists for a kitchen",
+    summary="Get all shopping lists for a kitchen"
 )
 def get_kitchen_shopping_lists(
     kitchen_id: int,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db),
+        db: Session = Depends(get_db)
 ) -> list[ShoppingListRead]:
-    """Retrieve all shopping lists for a specific kitchen."""
-    lists = crud_shopping.get_shopping_lists_by_kitchen(db, kitchen_id, skip, limit)
-    return [ShoppingListRead.model_validate(shopping_list, from_attributes=True) for shopping_list in lists]
+    """Retrieve all shopping lists for a kitchen."""
+    shopping_lists = crud_shopping.get_kitchen_shopping_lists(db, kitchen_id)
+    return [
+        ShoppingListRead.model_validate(list_item, from_attributes=True)
+        for list_item in shopping_lists
+    ]
 
 
 @kitchen_router.get(
     "/{kitchen_id}/shopping-lists/{list_id}",
-    response_model=ShoppingListWithItems,
+    response_model=ShoppingListRead,
     status_code=status.HTTP_200_OK,
-    summary="Get shopping list with all items",
+    summary="Get a specific shopping list"
 )
-def get_shopping_list_with_items(
+def get_shopping_list(
     kitchen_id: int,
     list_id: int,
-    db: Session = Depends(get_db),
-) -> ShoppingListWithItems:
-    """Retrieve a shopping list including all its items."""
-    shopping_list = crud_shopping.get_shopping_list_with_items(db, list_id)
-
-    if shopping_list is None:
-        raise HTTPException(404, f"Shopping list with ID {list_id} not found")
-        
-    # Validate list belongs to kitchen
-    if shopping_list.kitchen_id != kitchen_id:
+        db: Session = Depends(get_db)
+) -> ShoppingListRead:
+    """Get a specific shopping list."""
+    shopping_list = crud_shopping.get_shopping_list_by_id(db, list_id)
+    if not shopping_list or shopping_list.kitchen_id != kitchen_id:
         raise HTTPException(404, "Shopping list not found in this kitchen")
 
-    return ShoppingListWithItems.model_validate(shopping_list, from_attributes=True)
+    return ShoppingListRead.model_validate(shopping_list, from_attributes=True)
 
 
 @kitchen_router.put(
     "/{kitchen_id}/shopping-lists/{list_id}",
     response_model=ShoppingListRead,
     status_code=status.HTTP_200_OK,
-    summary="Update a shopping list",
+    summary="Update a shopping list"
 )
 def update_shopping_list(
     kitchen_id: int,
@@ -108,214 +109,289 @@ def update_shopping_list(
     list_data: ShoppingListUpdate,
     db: Session = Depends(get_db),
 ) -> ShoppingListRead:
-    """Update an existing shopping list."""
-    # First verify list belongs to kitchen
-    existing = crud_shopping.get_shopping_list_by_id(db, list_id)
-    if not existing or existing.kitchen_id != kitchen_id:
+    """Update a shopping list."""
+    # Verify list belongs to kitchen
+    shopping_list = crud_shopping.get_shopping_list_by_id(db, list_id)
+    if not shopping_list or shopping_list.kitchen_id != kitchen_id:
         raise HTTPException(404, "Shopping list not found in this kitchen")
-        
-    updated_list = crud_shopping.update_shopping_list(db, list_id, list_data)
+
+    try:
+        updated_list = crud_shopping.update_shopping_list(db, list_id, list_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     return ShoppingListRead.model_validate(updated_list, from_attributes=True)
 
 
 @kitchen_router.delete(
     "/{kitchen_id}/shopping-lists/{list_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a shopping list",
+    summary="Delete a shopping list"
 )
 def delete_shopping_list(
     kitchen_id: int,
     list_id: int,
     db: Session = Depends(get_db),
-) -> None:
-    """Delete a shopping list and all its items."""
-    # Verify list belongs to kitchen
-    existing = crud_shopping.get_shopping_list_by_id(db, list_id)
-    if not existing or existing.kitchen_id != kitchen_id:
-        raise HTTPException(404, "Shopping list not found in this kitchen")
-        
-    success = crud_shopping.delete_shopping_list(db, list_id)
-    if not success:
-        raise HTTPException(404, "Shopping list not found")
-
-
-@kitchen_router.post(
-    "/{kitchen_id}/shopping-lists/{list_id}/items",
-    response_model=ShoppingListItemRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Add an item to a shopping list",
-)
-def add_shopping_list_item(
-    kitchen_id: int,
-    list_id: int,
-    item_data: ShoppingListItemCreate,
-    db: Session = Depends(get_db)
-) -> ShoppingListItemRead:
-    """Add a new item to a shopping list."""
+) -> Response:
+    """Delete a shopping list."""
     # Verify list belongs to kitchen
     shopping_list = crud_shopping.get_shopping_list_by_id(db, list_id)
     if not shopping_list or shopping_list.kitchen_id != kitchen_id:
         raise HTTPException(404, "Shopping list not found in this kitchen")
-        
-    try:
-        db_item = crud_shopping.create_shopping_list_item(db, list_id, item_data)
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
 
-    return ShoppingListItemRead.model_validate(db_item, from_attributes=True)
+    try:
+        crud_shopping.delete_shopping_list(db, list_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ================================================================== #
+# KITCHEN-SCOPED: Product Assignment Operations                     #
+# ================================================================== #
+
+@kitchen_router.post(
+    "/{kitchen_id}/shopping-lists/{list_id}/products",
+    response_model=ShoppingProductAssignmentRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Assign a product to a shopping list"
+)
+def assign_product_to_list(
+    kitchen_id: int,
+    list_id: int,
+        assignment_data: ShoppingProductAssignmentCreate,
+        db: Session = Depends(get_db),
+) -> ShoppingProductAssignmentRead:
+    """Assign a shopping product to a shopping list."""
+    # Verify list belongs to kitchen
+    shopping_list = crud_shopping.get_shopping_list_by_id(db, list_id)
+    if not shopping_list or shopping_list.kitchen_id != kitchen_id:
+        raise HTTPException(404, "Shopping list not found in this kitchen")
+
+    try:
+        assignment = crud_shopping.assign_product_to_list(db, list_id, assignment_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return ShoppingProductAssignmentRead.model_validate(assignment, from_attributes=True)
 
 
 @kitchen_router.get(
-    "/{kitchen_id}/shopping-lists/{list_id}/items",
-    response_model=list[ShoppingListItemRead],
+    "/{kitchen_id}/shopping-lists/{list_id}/products",
+    response_model=list[ShoppingProductAssignmentRead],
     status_code=status.HTTP_200_OK,
-    summary="Get items from a shopping list",
+    summary="Get all products assigned to a shopping list"
 )
-def get_shopping_list_items(
+def get_shopping_list_products(
     kitchen_id: int,
     list_id: int,
     is_auto_added: bool | None = Query(None),
     added_by_user_id: int | None = Query(None, gt=0),
     food_item_id: int | None = Query(None, gt=0),
-    package_type: str | None = Query(None),
-    min_price: float | None = Query(None, ge=0),
-    max_price: float | None = Query(None, ge=0),
+        package_type: PackageType | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-) -> list[ShoppingListItemRead]:
-    """Retrieve items from a shopping list with optional filtering."""
+) -> list[ShoppingProductAssignmentRead]:
+    """Get all products assigned to a shopping list with optional filtering."""
     # Verify list belongs to kitchen
     shopping_list = crud_shopping.get_shopping_list_by_id(db, list_id)
     if not shopping_list or shopping_list.kitchen_id != kitchen_id:
         raise HTTPException(404, "Shopping list not found in this kitchen")
-        
-    search_params = ShoppingListItemSearchParams(
+
+    search_params = ShoppingProductAssignmentSearchParams(
         is_auto_added=is_auto_added,
         added_by_user_id=added_by_user_id,
         food_item_id=food_item_id,
         package_type=package_type,
-        min_price=min_price,
-        max_price=max_price,
     )
 
-    items = crud_shopping.get_shopping_list_items(db, list_id, search_params, skip, limit)
-    return [ShoppingListItemRead.model_validate(item, from_attributes=True) for item in items]
+    assignments = crud_shopping.get_shopping_list_product_assignments(
+        db, list_id, search_params, skip, limit
+    )
+    return [
+        ShoppingProductAssignmentRead.model_validate(assignment, from_attributes=True)
+        for assignment in assignments
+    ]
 
 
-# ================================================================== #
-# GLOBAL: ShoppingListItem Operations                               #
-# ================================================================== #
-
-@items_router.get(
-    "/{item_id}",
-    response_model=ShoppingListItemRead,
+@kitchen_router.put(
+    "/{kitchen_id}/shopping-lists/{list_id}/products/{product_id}",
+    response_model=ShoppingProductAssignmentRead,
     status_code=status.HTTP_200_OK,
-    summary="Get a shopping list item by ID",
+    summary="Update a product assignment"
 )
-def get_shopping_list_item(
-    item_id: int,
+def update_product_assignment(
+        kitchen_id: int,
+        list_id: int,
+        product_id: int,
+        assignment_data: ShoppingProductAssignmentUpdate,
     db: Session = Depends(get_db),
-) -> ShoppingListItemRead:
-    """Get a shopping list item by its global ID."""
-    item = crud_shopping.get_shopping_list_item_by_id(db, item_id)
-    if item is None:
-        raise HTTPException(404, f"Shopping list item with ID {item_id} not found")
-    return ShoppingListItemRead.model_validate(item, from_attributes=True)
+) -> ShoppingProductAssignmentRead:
+    """Update a product assignment."""
+    # Verify list belongs to kitchen
+    shopping_list = crud_shopping.get_shopping_list_by_id(db, list_id)
+    if not shopping_list or shopping_list.kitchen_id != kitchen_id:
+        raise HTTPException(404, "Shopping list not found in this kitchen")
+
+    try:
+        assignment = crud_shopping.update_product_assignment(
+            db, list_id, product_id, assignment_data
+        )
+    except ValueError as exc:
+        if "not found" in str(exc):
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        else:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return ShoppingProductAssignmentRead.model_validate(assignment, from_attributes=True)
 
 
-@items_router.put(
-    "/{item_id}",
-    response_model=ShoppingListItemRead,
-    status_code=status.HTTP_200_OK,
-    summary="Update a shopping list item",
-)
-def update_shopping_list_item(
-    item_id: int,
-    item_data: ShoppingListItemUpdate,
-    db: Session = Depends(get_db),
-) -> ShoppingListItemRead:
-    """Update an existing shopping list item globally."""
-    updated_item = crud_shopping.update_shopping_list_item(db, item_id, item_data)
-    if updated_item is None:
-        raise HTTPException(404, f"Shopping list item with ID {item_id} not found")
-    return ShoppingListItemRead.model_validate(updated_item, from_attributes=True)
-
-
-@items_router.delete(
-    "/{item_id}",
+@kitchen_router.delete(
+    "/{kitchen_id}/shopping-lists/{list_id}/products/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a shopping list item",
+    summary="Remove a product from a shopping list"
 )
-def delete_shopping_list_item(
-    item_id: int,
+def remove_product_from_list(
+        kitchen_id: int,
+        list_id: int,
+        product_id: int,
     db: Session = Depends(get_db),
-) -> None:
-    """Delete a shopping list item globally."""
-    success = crud_shopping.delete_shopping_list_item(db, item_id)
-    if not success:
-        raise HTTPException(404, f"Shopping list item with ID {item_id} not found")
+) -> Response:
+    """Remove a product assignment from a shopping list."""
+    # Verify list belongs to kitchen
+    shopping_list = crud_shopping.get_shopping_list_by_id(db, list_id)
+    if not shopping_list or shopping_list.kitchen_id != kitchen_id:
+        raise HTTPException(404, "Shopping list not found in this kitchen")
+
+    try:
+        crud_shopping.remove_product_from_list(db, list_id, product_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@items_router.get(
+# ================================================================== #
+# GLOBAL: Shopping Product Operations                               #
+# ================================================================== #
+
+@products_router.post(
     "/",
-    response_model=list[ShoppingListItemRead],
-    status_code=status.HTTP_200_OK,
-    summary="Search shopping list items globally",
+    response_model=ShoppingProductRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new global shopping product"
 )
-def search_shopping_list_items(
-    shopping_list_id: int | None = Query(None, gt=0),
-    is_auto_added: bool | None = Query(None),
-    added_by_user_id: int | None = Query(None, gt=0),
+def create_shopping_product(
+        product_data: ShoppingProductCreate,
+        db: Session = Depends(get_db)
+) -> ShoppingProductRead:
+    """Create a new global shopping product."""
+    try:
+        db_product = crud_shopping.create_shopping_product(db, product_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return ShoppingProductRead.model_validate(db_product, from_attributes=True)
+
+
+@products_router.get(
+    "/",
+    response_model=list[ShoppingProductRead],
+    status_code=status.HTTP_200_OK,
+    summary="Search global shopping products"
+)
+def search_shopping_products(
     food_item_id: int | None = Query(None, gt=0),
-    package_type: str | None = Query(None),
+        package_type: PackageType | None = Query(None),
     min_price: float | None = Query(None, ge=0),
     max_price: float | None = Query(None, ge=0),
+        unit: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-) -> list[ShoppingListItemRead]:
-    """Search shopping list items globally across all lists."""
-    if shopping_list_id:
-        # If specific list, use existing function
-        search_params = ShoppingListItemSearchParams(
-            is_auto_added=is_auto_added,
-            added_by_user_id=added_by_user_id,
-            food_item_id=food_item_id,
-            package_type=package_type,
-            min_price=min_price,
-            max_price=max_price,
-        )
-        items = crud_shopping.get_shopping_list_items(db, shopping_list_id, search_params, skip, limit)
-    else:
-        # Global search across all items (would need new CRUD function)
-        # For now, return empty list - implement as needed
-        items = []
-    
-    return [ShoppingListItemRead.model_validate(item, from_attributes=True) for item in items]
+) -> list[ShoppingProductRead]:
+    """Search global shopping products with optional filtering."""
+    search_params = ShoppingProductSearchParams(
+        food_item_id=food_item_id,
+        package_type=package_type,
+        min_price=min_price,
+        max_price=max_price,
+        unit=unit,
+    )
+
+    products = crud_shopping.get_all_shopping_products(db, search_params, skip, limit)
+    return [
+        ShoppingProductRead.model_validate(product, from_attributes=True)
+        for product in products
+    ]
 
 
-# ================================================================== #
-# ANALYTICS: Summary Operations                                      #
-# ================================================================== #
-
-@summary_router.get(
-    "/summary",
-    response_model=ShoppingListSummary,
+@products_router.get(
+    "/{product_id}",
+    response_model=ShoppingProductRead,
     status_code=status.HTTP_200_OK,
-    summary="Get shopping list statistics summary",
+    summary="Get a shopping product by ID"
 )
-def get_shopping_summary(
-    kitchen_id: int | None = Query(None, gt=0),
+def get_shopping_product(
+        product_id: int,
     db: Session = Depends(get_db)
-) -> ShoppingListSummary:
-    """Retrieve summary statistics for shopping lists."""
-    return crud_shopping.get_shopping_summary(db, kitchen_id)
+) -> ShoppingProductRead:
+    """Get a shopping product by ID."""
+    product = crud_shopping.get_shopping_product_by_id(db, product_id)
+    if product is None:
+        raise HTTPException(404, "Shopping product not found")
+
+    return ShoppingProductRead.model_validate(product, from_attributes=True)
+
+
+@products_router.put(
+    "/{product_id}",
+    response_model=ShoppingProductRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update a shopping product"
+)
+def update_shopping_product(
+        product_id: int,
+        product_data: ShoppingProductUpdate,
+        db: Session = Depends(get_db),
+) -> ShoppingProductRead:
+    """Update a shopping product."""
+    try:
+        updated_product = crud_shopping.update_shopping_product(
+            db, product_id, product_data
+        )
+    except ValueError as exc:
+        if "not found" in str(exc):
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        else:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return ShoppingProductRead.model_validate(updated_product, from_attributes=True)
+
+
+@products_router.delete(
+    "/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a shopping product"
+)
+def delete_shopping_product(
+        product_id: int,
+        db: Session = Depends(get_db),
+) -> Response:
+    """Delete a shopping product."""
+    try:
+        crud_shopping.delete_shopping_product(db, product_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
-# Export all routers                                                #
+# Export routers for backwards compatibility                        #
 # ================================================================== #
 
-# Main router for backwards compatibility and easy import
+# Main router for backwards compatibility
 router = kitchen_router
