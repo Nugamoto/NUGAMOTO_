@@ -1,9 +1,12 @@
 """CRUD operations for AI-related functionality."""
 
+from typing import List
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.ai import AIModelOutput
-from app.schemas.ai import AIModelOutputCreate
+from app.models.ai import AIModelOutput, OutputType, OutputFormat
+from app.schemas.ai import AIModelOutputCreate, AIOutputSearchParams, AIOutputSummary
 
 
 def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOutput:
@@ -17,7 +20,7 @@ def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOu
         The newly created AI model output.
 
     Example:
-        >>> output_data = AIModelOutputCreate(
+        >>> data = AIModelOutputCreate(
         ...     ai_service="openai-gpt4",
         ...     output_type=OutputType.RECIPE,
         ...     output_format=OutputFormat.MARKDOWN,
@@ -25,7 +28,7 @@ def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOu
         ...     content="# Tomato Pasta Recipe...",
         ...     metadata={"tokens": 150, "cost": 0.003}
         ... )
-        >>> result = create_ai_output(db, output_data)
+        >>> result = create_ai_output(db, data)
     """
     db_output = AIModelOutput(
         ai_service=output_data.ai_service,
@@ -42,3 +45,96 @@ def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOu
     db.refresh(db_output)
 
     return db_output
+
+
+def get_all_ai_outputs(
+        db: Session,
+        search_params: AIOutputSearchParams,
+        skip: int = 0,
+        limit: int = 100
+) -> List[AIModelOutput]:
+    """Retrieve all AI outputs with optional filtering and pagination.
+
+    Args:
+        db: Database session.
+        search_params: Search and filter parameters.
+        skip: Number of records to skip for pagination.
+        limit: Maximum number of records to return.
+
+    Returns:
+        A list of AI outputs matching the criteria, ordered by creation time (newest first).
+
+    Example:
+        >>> params = AIOutputSearchParams(
+        ...     output_type=OutputType.RECIPE,
+        ...     ai_service="openai-gpt4"
+        ... )
+        >>> outputs = get_all_ai_outputs(db, params, skip=0, limit=10)
+    """
+    query = select(AIModelOutput)
+
+    # Apply filters
+    if search_params.ai_service:
+        query = query.where(AIModelOutput.ai_service == search_params.ai_service)
+
+    if search_params.output_type:
+        query = query.where(AIModelOutput.output_type == search_params.output_type)
+
+    if search_params.output_format:
+        query = query.where(AIModelOutput.output_format == search_params.output_format)
+
+    if search_params.target_id:
+        query = query.where(AIModelOutput.target_id == search_params.target_id)
+
+    if search_params.prompt_contains:
+        query = query.where(AIModelOutput.prompt.ilike(f"%{search_params.prompt_contains}%"))
+
+    # Order by creation time (newest first) and apply pagination
+    query = query.order_by(AIModelOutput.created_at.desc()).offset(skip).limit(limit)
+
+    return list(db.scalars(query).all())
+
+
+def get_ai_output_summary(db: Session) -> AIOutputSummary:
+    """Get summary statistics for all AI outputs.
+
+    Args:
+        db: Database session.
+
+    Returns:
+        Summary statistics including counts by service, type, and format.
+
+    Example:
+        >>> summary = get_ai_output_summary(db)
+        >>> print(f"Total: {summary.total_outputs}")
+    """
+    # Total count
+    total_outputs = db.scalar(select(func.count(AIModelOutput.id))) or 0
+
+    # Count by AI service
+    service_counts = db.execute(
+        select(AIModelOutput.ai_service, func.count(AIModelOutput.id))
+        .group_by(AIModelOutput.ai_service)
+    ).all()
+    outputs_by_service = {service: count for service, count in service_counts}
+
+    # Count by output type
+    type_counts = db.execute(
+        select(AIModelOutput.output_type, func.count(AIModelOutput.id))
+        .group_by(AIModelOutput.output_type)
+    ).all()
+    outputs_by_type = {str(output_type): count for output_type, count in type_counts}
+
+    # Count by output format
+    format_counts = db.execute(
+        select(AIModelOutput.output_format, func.count(AIModelOutput.id))
+        .group_by(AIModelOutput.output_format)
+    ).all()
+    outputs_by_format = {str(output_format): count for output_format, count in format_counts}
+
+    return AIOutputSummary(
+        total_outputs=total_outputs,
+        outputs_by_service=outputs_by_service,
+        outputs_by_type=outputs_by_type,
+        outputs_by_format=outputs_by_format,
+    )
