@@ -1,4 +1,4 @@
-"""FastAPI router exposing the */recipes* endpoints."""
+"""FastAPI router exposing recipe endpoints."""
 
 from __future__ import annotations
 
@@ -24,6 +24,10 @@ from app.schemas.recipe import (
     RecipeReviewUpsert,
     RecipeRatingSummary,
 )
+
+# ================================================================== #
+# Router Architecture: Global (Recipes are universal)               #
+# ================================================================== #
 
 router = APIRouter(prefix="/recipes", tags=["Recipes"])
 
