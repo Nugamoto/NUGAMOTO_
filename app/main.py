@@ -15,7 +15,11 @@ from .api.v1 import user as user_router
 from .api.v1 import kitchen as kitchen_router
 from .api.v1 import inventory as inventory_router
 from .api.v1 import recipe as recipe_router
+from .api.v1 import ai as ai_router
+from .api.v1 import shopping as shopping_router
 app.include_router(user_router.router, prefix="/v1")
 app.include_router(kitchen_router.router, prefix="/v1")
 app.include_router(inventory_router.router, prefix="/v1")
 app.include_router(recipe_router.router, prefix="/v1")
+app.include_router(ai_router.router, prefix="/v1")
+app.include_router(shopping_router.router, prefix="/v1")
