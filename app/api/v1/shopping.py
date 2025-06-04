@@ -1,4 +1,4 @@
-"""FastAPI router exposing the /shopping-lists endpoints."""
+"""FastAPI router exposing the shopping list endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -64,15 +64,15 @@ def create_shopping_list(
 
 
 @router.get(
-    "/kitchens/{kitchen_id}/shopping-lists/",
+    "/kitchens/{kitchen_id}",
     response_model=list[ShoppingListRead],
     status_code=status.HTTP_200_OK,
     summary="Get all shopping lists for a kitchen",
 )
 def get_kitchen_shopping_lists(
         kitchen_id: int,
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+        skip: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=1000),
         db: Session = Depends(get_db),
 ) -> list[ShoppingListRead]:
     """Retrieve all shopping lists for a specific kitchen.
@@ -231,7 +231,7 @@ def delete_shopping_list(
 # ------------------------------------------------------------------ #
 
 @router.post(
-    "/{list_id}/items/",
+    "/{list_id}/items",
     response_model=ShoppingListItemRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add an item to a shopping list",
@@ -286,21 +286,21 @@ def add_shopping_list_item(
 
 
 @router.get(
-    "/{list_id}/items/",
+    "/{list_id}/items",
     response_model=list[ShoppingListItemRead],
     status_code=status.HTTP_200_OK,
     summary="Get items from a shopping list with optional filtering",
 )
 def get_shopping_list_items(
         list_id: int,
-        is_auto_added: bool | None = Query(None, description="Filter by auto-added status"),
-        added_by_user_id: int | None = Query(None, gt=0, description="Filter by user who added"),
-        food_item_id: int | None = Query(None, gt=0, description="Filter by food item"),
-        package_type: str | None = Query(None, description="Filter by package type"),
-        min_price: float | None = Query(None, ge=0, description="Minimum estimated price"),
-        max_price: float | None = Query(None, ge=0, description="Maximum estimated price"),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+        is_auto_added: bool | None = Query(None),
+        added_by_user_id: int | None = Query(None, gt=0),
+        food_item_id: int | None = Query(None, gt=0),
+        package_type: str | None = Query(None),
+        min_price: float | None = Query(None, ge=0),
+        max_price: float | None = Query(None, ge=0),
+        skip: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=1000),
         db: Session = Depends(get_db),
 ) -> list[ShoppingListItemRead]:
     """Retrieve items from a shopping list with optional filtering.
@@ -432,10 +432,6 @@ def delete_shopping_list_item(
         )
 
 
-# ------------------------------------------------------------------ #
-# Summary and Analytics Routes                                       #
-# ------------------------------------------------------------------ #
-
 @router.get(
     "/summary",
     response_model=ShoppingListSummary,
@@ -443,7 +439,7 @@ def delete_shopping_list_item(
     summary="Get shopping list statistics summary",
 )
 def get_shopping_summary(
-        kitchen_id: int | None = Query(None, gt=0, description="Optional kitchen filter"),
+        kitchen_id: int | None = Query(None, gt=0),
         db: Session = Depends(get_db)
 ) -> ShoppingListSummary:
     """Retrieve summary statistics for shopping lists.
