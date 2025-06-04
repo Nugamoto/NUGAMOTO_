@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime, UTC
 from typing import TYPE_CHECKING
 
+from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,6 +50,10 @@ class Recipe(Base):
 
     nutrition: Mapped[RecipeNutrition | None] = relationship(
         "RecipeNutrition", back_populates="recipe", cascade="all, delete-orphan"
+    )
+
+    reviews: Mapped[list[RecipeReview]] = relationship(
+        "RecipeReview", back_populates="recipe", cascade="all, delete-orphan"
     )
 
     # ------------------------------------------------------------------ #
@@ -207,4 +213,44 @@ class RecipeNutrition(Base):
         return (
             f"RecipeNutrition(recipe_id={self.recipe_id!r}, "
             f"kcal={self.kcal!r}, source={self.source!r})"
+        )
+
+
+class RecipeReview(Base):
+    """Represents a row in the ``recipe_reviews`` table.
+    
+    Users can rate and review recipes with a 1-5 star system.
+    Each user can only review each recipe once (composite primary key).
+    """
+
+    __tablename__ = "recipe_reviews"
+
+    # ------------------------------------------------------------------ #
+    # Columns                                                             #
+    # ------------------------------------------------------------------ #
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    recipe_id: Mapped[int] = mapped_column(
+        ForeignKey("recipes.id", ondelete="CASCADE"), primary_key=True
+    )
+    rating: Mapped[int] = mapped_column(nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    # ------------------------------------------------------------------ #
+    # Relationships                                                       #
+    # ------------------------------------------------------------------ #
+    user: Mapped[User] = relationship("User")
+    recipe: Mapped[Recipe] = relationship("Recipe")
+
+    # ------------------------------------------------------------------ #
+    # Dunder                                                               #
+    # ------------------------------------------------------------------ #
+    def __repr__(self) -> str:  # noqa: D401 – we want a short repr
+        return (
+            f"RecipeReview(user_id={self.user_id!r}, recipe_id={self.recipe_id!r}, "
+            f"rating={self.rating!r})"
         )

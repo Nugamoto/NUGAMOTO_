@@ -19,6 +19,10 @@ from app.schemas.recipe import (
     RecipeSummary,
     RecipeUpdate,
     RecipeWithDetails,
+    RecipeReviewRead,
+    RecipeReviewUpdate,
+    RecipeReviewUpsert,
+    RecipeRatingSummary,
 )
 
 router = APIRouter(prefix="/recipes", tags=["Recipes"])
@@ -418,3 +422,178 @@ def get_ai_generated_recipes(
         RecipeWithDetails.model_validate(recipe, from_attributes=True)
         for recipe in recipes
     ]
+
+
+# ------------------------------------------------------------------ #
+# Recipe Review Routes                                               #
+# ------------------------------------------------------------------ #
+
+@router.post(
+    "/{recipe_id}/reviews/",
+    response_model=RecipeReviewRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create or update a recipe review",
+)
+def create_or_update_recipe_review(
+        recipe_id: int,
+        review_data: RecipeReviewUpsert,
+        user_id: int = Query(..., gt=0, description="ID of the user creating the review"),
+        db: Session = Depends(get_db),
+) -> RecipeReviewRead:
+    """Create or update a recipe review (upsert operation).
+
+    If the user has already reviewed this recipe, the existing review
+    will be updated. Otherwise, a new review will be created.
+
+    Args:
+        recipe_id: Primary key of the recipe to review.
+        review_data: Validated review payload with rating and optional comment.
+        user_id: ID of the user creating/updating the review.
+        db: Injected database session.
+
+    Returns:
+        The created or updated review with user details.
+
+    Raises:
+        HTTPException:
+            * 404 if the recipe or user does not exist.
+            * 400 if validation fails.
+
+    Note:
+        This endpoint implements upsert behavior - if a review exists,
+        it will be updated with new values and timestamp.
+    """
+    try:
+        review = crud_recipe.create_or_update_recipe_review(
+            db, recipe_id, review_data, user_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return RecipeReviewRead.model_validate(review, from_attributes=True)
+
+
+@router.get(
+    "/{recipe_id}/reviews/",
+    response_model=list[RecipeReviewRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get all reviews for a recipe",
+)
+def get_recipe_reviews(
+        recipe_id: int,
+        skip: int = Query(0, ge=0, description="Number of records to skip"),
+        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+        db: Session = Depends(get_db),
+) -> list[RecipeReviewRead]:
+    """Retrieve all reviews for a recipe with pagination.
+
+    Returns reviews ordered by creation date (newest first).
+
+    Args:
+        recipe_id: Primary key of the recipe.
+        skip: Number of records to skip for pagination.
+        limit: Maximum number of records to return.
+        db: Injected database session.
+
+    Returns:
+        A list of reviews for the recipe with user details.
+    """
+    reviews = crud_recipe.get_recipe_reviews(db, recipe_id, skip, limit)
+    return [RecipeReviewRead.model_validate(review, from_attributes=True) for review in reviews]
+
+
+@router.get(
+    "/{recipe_id}/rating/",
+    response_model=RecipeRatingSummary,
+    status_code=status.HTTP_200_OK,
+    summary="Get recipe rating summary",
+)
+def get_recipe_rating_summary(
+        recipe_id: int,
+        db: Session = Depends(get_db),
+) -> RecipeRatingSummary:
+    """Get comprehensive rating statistics for a recipe.
+
+    Includes average rating, total review count, and rating distribution.
+
+    Args:
+        recipe_id: Primary key of the recipe.
+        db: Injected database session.
+
+    Returns:
+        Complete rating summary with average, count, and distribution.
+
+    Raises:
+        HTTPException: 404 if the recipe does not exist.
+    """
+    try:
+        summary = crud_recipe.get_recipe_rating_summary(db, recipe_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return summary
+
+
+@router.put(
+    "/{recipe_id}/reviews/{user_id}",
+    response_model=RecipeReviewRead,
+    status_code=status.HTTP_200_OK,
+    summary="Update a specific user's review",
+)
+def update_recipe_review(
+        recipe_id: int,
+        user_id: int,
+        review_data: RecipeReviewUpdate,
+        db: Session = Depends(get_db),
+) -> RecipeReviewRead:
+    """Update an existing recipe review by specific user.
+
+    Args:
+        recipe_id: Primary key of the recipe.
+        user_id: Primary key of the user who created the review.
+        review_data: Partial review payload for updates.
+        db: Injected database session.
+
+    Returns:
+        The updated review with user details.
+
+    Raises:
+        HTTPException: 404 if the review does not exist.
+    """
+    try:
+        review = crud_recipe.update_recipe_review(db, recipe_id, user_id, review_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return RecipeReviewRead.model_validate(review, from_attributes=True)
+
+
+@router.delete(
+    "/{recipe_id}/reviews/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a recipe review",
+)
+def delete_recipe_review(
+        recipe_id: int,
+        user_id: int,
+        db: Session = Depends(get_db),
+) -> Response:
+    """Delete a recipe review by specific user.
+
+    Args:
+        recipe_id: Primary key of the recipe.
+        user_id: Primary key of the user who created the review.
+        db: Injected database session.
+
+    Returns:
+        Response with 204 status code.
+
+    Raises:
+        HTTPException: 404 if the review does not exist.
+    """
+    try:
+        crud_recipe.delete_recipe_review(db, recipe_id, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

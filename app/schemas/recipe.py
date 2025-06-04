@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
 
@@ -324,3 +326,120 @@ class RecipeSummary(BaseModel):
     with_nutrition_count: int = Field(..., description="Number of recipes with nutrition data")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ------------------------------------------------------------------ #
+# RecipeReview Schemas                                               #
+# ------------------------------------------------------------------ #
+
+class _RecipeReviewBase(BaseModel):
+    """Fields shared by all recipe review-related schemas."""
+
+    rating: int = Field(..., ge=1, le=5, description="Rating from 1 to 5 stars")
+    comment: str | None = Field(default=None, max_length=1000)
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("rating")
+    def validate_rating(cls, v: int) -> int:
+        """Validate rating is within allowed range.
+        
+        Args:
+            v: The rating value to validate.
+            
+        Returns:
+            The validated rating.
+            
+        Raises:
+            ValueError: If rating is not between 1 and 5.
+        """
+        if not 1 <= v <= 5:
+            raise ValueError("Rating must be between 1 and 5")
+        return v
+
+    @field_validator("comment")
+    def validate_comment(cls, v: str | None) -> str | None:
+        """Normalize comment text.
+        
+        Args:
+            v: The comment text to validate.
+            
+        Returns:
+            The normalized comment text or None.
+        """
+        if v is None:
+            return v
+        return v.strip() if v.strip() else None
+
+
+class RecipeReviewRead(_RecipeReviewBase):
+    """Schema returned to the client."""
+
+    user_id: int
+    recipe_id: int
+    created_at: datetime
+    user: UserRead = Field(..., description="User who created the review")
+
+
+class RecipeReviewUpdate(_RecipeReviewBase):
+    """Schema for partial recipe review updates."""
+
+    rating: int | None = Field(default=None, ge=1, le=5, description="Rating from 1 to 5 stars")
+    comment: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("rating")
+    def validate_rating(cls, v: int | None) -> int | None:
+        """Validate rating is within allowed range.
+        
+        Args:
+            v: The rating value to validate.
+            
+        Returns:
+            The validated rating or None.
+            
+        Raises:
+            ValueError: If rating is not between 1 and 5.
+        """
+        if v is None:
+            return v
+        if not 1 <= v <= 5:
+            raise ValueError("Rating must be between 1 and 5")
+        return v
+
+
+class RecipeReviewUpsert(_RecipeReviewBase):
+    """Schema for creating or updating reviews (upsert operation)."""
+    pass
+
+
+# ------------------------------------------------------------------ #
+# Recipe Rating Summary Schemas                                      #
+# ------------------------------------------------------------------ #
+
+class RecipeRatingSummary(BaseModel):
+    """Summary of all ratings for a recipe."""
+
+    recipe_id: int = Field(..., description="Recipe ID")
+    total_reviews: int = Field(..., description="Total number of reviews")
+    average_rating: float | None = Field(..., description="Average rating (1-5)")
+    rating_distribution: dict[int, int] = Field(
+        ..., description="Distribution of ratings (rating -> count)"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("rating_distribution")
+    def validate_rating_distribution(cls, v: dict[int, int]) -> dict[int, int]:
+        """Ensure rating distribution has all rating levels.
+        
+        Args:
+            v: The rating distribution to validate.
+            
+        Returns:
+            The validated rating distribution with all levels 1-5.
+        """
+        # Ensure all rating levels (1-5) are present
+        for rating in range(1, 6):
+            if rating not in v:
+                v[rating] = 0
+        return v

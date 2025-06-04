@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, UTC
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.inventory import FoodItem
 from app.models.recipe import Recipe, RecipeIngredient, RecipeNutrition, RecipeStep
+from app.models.recipe import RecipeReview
 from app.models.user import User
 from app.schemas.recipe import (
     RecipeCreate,
@@ -15,6 +18,9 @@ from app.schemas.recipe import (
     RecipeUpdate,
     RecipeNutritionCreate,
     RecipeNutritionUpdate,
+    RecipeReviewUpdate,
+    RecipeReviewUpsert,
+    RecipeRatingSummary,
 )
 
 
@@ -485,3 +491,216 @@ def get_ai_generated_recipes(db: Session, limit: int = 50) -> list[Recipe]:
     )
 
     return list(db.scalars(stmt).all())
+
+
+# ------------------------------------------------------------------ #
+# Recipe Review CRUD                                                 #
+# ------------------------------------------------------------------ #
+
+def create_or_update_recipe_review(
+        db: Session, recipe_id: int, review_data: RecipeReviewUpsert, user_id: int
+) -> RecipeReview:
+    """Create or update a recipe review (upsert operation).
+
+    Args:
+        db: Database session.
+        recipe_id: Primary key of the recipe.
+        review_data: Validated review payload.
+        user_id: ID of the user creating/updating the review.
+
+    Returns:
+        The created or updated review instance.
+
+    Raises:
+        ValueError: If the recipe or user does not exist.
+    """
+    # Validate recipe exists
+    recipe = get_recipe_by_id(db, recipe_id)
+    if recipe is None:
+        raise ValueError("Recipe not found.")
+
+    # Validate user exists
+    user_stmt = select(User).where(User.id == user_id)
+    if db.scalar(user_stmt) is None:
+        raise ValueError("User not found.")
+
+    # Check if review already exists
+    existing_review = db.scalar(
+        select(RecipeReview).where(
+            RecipeReview.recipe_id == recipe_id,
+            RecipeReview.user_id == user_id
+        )
+    )
+
+    if existing_review:
+        # Update existing review
+        existing_review.rating = review_data.rating
+        existing_review.comment = review_data.comment
+        existing_review.created_at = datetime.now(UTC)  # Update timestamp
+
+        db.commit()
+        db.refresh(existing_review)
+        return existing_review
+    else:
+        # Create new review
+        new_review = RecipeReview(
+            user_id=user_id,
+            recipe_id=recipe_id,
+            rating=review_data.rating,
+            comment=review_data.comment,
+        )
+        db.add(new_review)
+        db.commit()
+        db.refresh(new_review)
+        return new_review
+
+
+def get_recipe_reviews(
+        db: Session, recipe_id: int, skip: int = 0, limit: int = 100
+) -> list[RecipeReview]:
+    """Get all reviews for a recipe with pagination.
+
+    Args:
+        db: Database session.
+        recipe_id: Primary key of the recipe.
+        skip: Number of records to skip for pagination.
+        limit: Maximum number of records to return.
+
+    Returns:
+        A list of reviews for the recipe, ordered by creation date (newest first).
+    """
+    stmt = (
+        select(RecipeReview)
+        .options(selectinload(RecipeReview.user))
+        .where(RecipeReview.recipe_id == recipe_id)
+        .order_by(RecipeReview.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    return list(db.scalars(stmt).all())
+
+
+def get_recipe_review_by_user(
+        db: Session, recipe_id: int, user_id: int
+) -> RecipeReview | None:
+    """Get a specific user's review for a recipe.
+
+    Args:
+        db: Database session.
+        recipe_id: Primary key of the recipe.
+        user_id: Primary key of the user.
+
+    Returns:
+        The user's review for the recipe, or None if not found.
+    """
+    stmt = (
+        select(RecipeReview)
+        .options(selectinload(RecipeReview.user))
+        .where(
+            RecipeReview.recipe_id == recipe_id,
+            RecipeReview.user_id == user_id
+        )
+    )
+    return db.scalar(stmt)
+
+
+def update_recipe_review(
+        db: Session, recipe_id: int, user_id: int, review_data: RecipeReviewUpdate
+) -> RecipeReview:
+    """Update an existing recipe review.
+
+    Args:
+        db: Database session.
+        recipe_id: Primary key of the recipe.
+        user_id: Primary key of the user.
+        review_data: Validated partial review payload.
+
+    Returns:
+        The updated review instance.
+
+    Raises:
+        ValueError: If the review does not exist.
+    """
+    review = get_recipe_review_by_user(db, recipe_id, user_id)
+    if review is None:
+        raise ValueError("Review not found.")
+
+    # Update fields
+    if review_data.rating is not None:
+        review.rating = review_data.rating
+    if review_data.comment is not None:
+        review.comment = review_data.comment
+
+    review.created_at = datetime.now(UTC)  # Update timestamp
+
+    db.commit()
+    db.refresh(review)
+    return review
+
+
+def delete_recipe_review(db: Session, recipe_id: int, user_id: int) -> None:
+    """Delete a recipe review.
+
+    Args:
+        db: Active database session.
+        recipe_id: Primary key of the recipe.
+        user_id: Primary key of the user.
+
+    Raises:
+        ValueError: If the review does not exist.
+    """
+    review = get_recipe_review_by_user(db, recipe_id, user_id)
+    if review is None:
+        raise ValueError("Review not found.")
+
+    db.delete(review)
+    db.commit()
+
+
+def get_recipe_rating_summary(db: Session, recipe_id: int) -> RecipeRatingSummary:
+    """Get rating summary statistics for a recipe.
+
+    Args:
+        db: Database session.
+        recipe_id: Primary key of the recipe.
+
+    Returns:
+        Rating summary including average, total count, and distribution.
+
+    Raises:
+        ValueError: If the recipe does not exist.
+    """
+    # Validate recipe exists
+    recipe = get_recipe_by_id(db, recipe_id)
+    if recipe is None:
+        raise ValueError("Recipe not found.")
+
+    # Get all reviews for the recipe
+    reviews_stmt = select(RecipeReview).where(RecipeReview.recipe_id == recipe_id)
+    reviews = list(db.scalars(reviews_stmt).all())
+
+    total_reviews = len(reviews)
+
+    if total_reviews == 0:
+        return RecipeRatingSummary(
+            recipe_id=recipe_id,
+            total_reviews=0,
+            average_rating=None,
+            rating_distribution={1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        )
+
+    # Calculate average rating
+    total_rating = sum(review.rating for review in reviews)
+    average_rating = round(total_rating / total_reviews, 2)
+
+    # Calculate rating distribution
+    rating_distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    for review in reviews:
+        rating_distribution[review.rating] += 1
+
+    return RecipeRatingSummary(
+        recipe_id=recipe_id,
+        total_reviews=total_reviews,
+        average_rating=average_rating,
+        rating_distribution=rating_distribution
+    )
