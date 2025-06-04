@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+from enum import Enum
+
 from sqlalchemy import ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.user import User
+
+
+class KitchenRole(str, Enum):
+    """Valid roles for users in kitchens."""
+
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
 
 
 class Kitchen(Base):
@@ -51,37 +61,13 @@ class UserKitchen(Base):
     kitchen_id: Mapped[int] = mapped_column(
         ForeignKey("kitchens.id"), primary_key=True
     )
-    role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
+    role: Mapped[KitchenRole] = mapped_column(nullable=False, default=KitchenRole.MEMBER)
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
     # ------------------------------------------------------------------ #
     user: Mapped[User] = relationship("User", back_populates="user_kitchens")
     kitchen: Mapped[Kitchen] = relationship("Kitchen", back_populates="user_kitchens")
-
-    # ------------------------------------------------------------------ #
-    # Validators                                                          #
-    # ------------------------------------------------------------------ #
-    @validates("role")
-    def _validate_role(self, _key: str, role: str) -> str:
-        """Validate that the role is one of the allowed values.
-
-        Args:
-            _key: The column key being validated (unused).
-            role: The role value to validate.
-
-        Returns:
-            The validated role.
-
-        Raises:
-            ValueError: If the role is not valid.
-        """
-        valid_roles = {"owner", "admin", "member"}
-        if role not in valid_roles:
-            raise ValueError(
-                f"Role must be one of: {', '.join(valid_roles)}. Got: {role}"
-            )
-        return role
 
     # ------------------------------------------------------------------ #
     # Dunder                                                               #

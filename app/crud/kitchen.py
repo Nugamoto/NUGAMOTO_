@@ -155,7 +155,7 @@ def add_user_to_kitchen(
     user_kitchen = UserKitchen(
         user_id=user_kitchen_data.user_id,
         kitchen_id=kitchen_id,
-        role=user_kitchen_data.role.value,  # Convert enum to string
+        role=user_kitchen_data.role,
     )
     db.add(user_kitchen)
     db.commit()
@@ -190,7 +190,7 @@ def update_user_role_in_kitchen(
         raise ValueError("User is not a member of this kitchen.")
 
     # Update the role
-    user_kitchen.role = role_data.role.value  # Convert enum to string
+    user_kitchen.role = role_data.role
     db.commit()
     db.refresh(user_kitchen)
     return user_kitchen
