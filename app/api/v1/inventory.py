@@ -1,8 +1,6 @@
-"""FastAPI router exposing inventory endpoints."""
+"""FastAPI router exposing inventory endpoints with hybrid architecture."""
 
 from __future__ import annotations
-
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
@@ -195,7 +193,7 @@ def create_food_item(
     summary="Get all food items",
 )
 def get_all_food_items(
-        category: Optional[str] = None,
+        category: str | None = None,
         db: Session = Depends(get_db)
 ) -> list[FoodItemRead]:
     """Retrieve all food items, optionally filtered by category."""
