@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.ai import AIModelOutput, OutputType, OutputFormat
+from app.models.ai import AIModelOutput, OutputFormat, OutputType
 from app.schemas.ai import AIModelOutputCreate, AIOutputSearchParams, AIOutputSummary
 
 
@@ -19,22 +19,24 @@ def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOu
 
     Example:
         >>> data = AIModelOutputCreate(
-        ...     ai_service="openai-gpt4",
+        ...     user_id=123,
+        ...     model_version="gpt-4",
         ...     output_type=OutputType.RECIPE,
         ...     output_format=OutputFormat.MARKDOWN,
-        ...     prompt="Generate a pasta recipe with tomatoes",
-        ...     content="# Tomato Pasta Recipe...",
-        ...     metadata={"tokens": 150, "cost": 0.003}
+        ...     prompt_used="Generate a pasta recipe with tomatoes",
+        ...     raw_output="# Tomato Pasta Recipe...",
+        ...     extra_data={"tokens": 150, "cost": 0.003}
         ... )
         >>> result = create_ai_output(db, data)
     """
     db_output = AIModelOutput(
-        ai_service=output_data.ai_service,
+        user_id=output_data.user_id,
+        model_version=output_data.model_version,
         output_type=output_data.output_type,
         output_format=output_data.output_format,
-        prompt=output_data.prompt,
-        content=output_data.content,
-        metadata=output_data.metadata,
+        prompt_used=output_data.prompt_used,
+        raw_output=output_data.raw_output,
+        extra_data=output_data.extra_data,  # ← GEÄNDERT!
         target_id=output_data.target_id,
     )
 
@@ -58,7 +60,7 @@ def get_ai_output_by_id(db: Session, output_id: int) -> AIModelOutput | None:
     Example:
         >>> output = get_ai_output_by_id(db, 123)
         >>> if output:
-        ...     print(f"Found output: {output.ai_service}")
+        ...     print(f"Found output for user: {output.user_id}")
     """
     return db.scalar(select(AIModelOutput).where(AIModelOutput.id == output_id))
 
@@ -107,16 +109,20 @@ def get_all_ai_outputs(
 
     Example:
         >>> params = AIOutputSearchParams(
+        ...     user_id=123,
         ...     output_type=OutputType.RECIPE,
-        ...     ai_service="openai-gpt4"
+        ...     model_version="gpt-4"
         ... )
         >>> outputs = get_all_ai_outputs(db, params, skip=0, limit=10)
     """
     query = select(AIModelOutput)
 
     # Apply filters
-    if search_params.ai_service:
-        query = query.where(AIModelOutput.ai_service == search_params.ai_service)
+    if search_params.user_id:
+        query = query.where(AIModelOutput.user_id == search_params.user_id)
+
+    if search_params.model_version:
+        query = query.where(AIModelOutput.model_version == search_params.model_version)
 
     if search_params.output_type:
         query = query.where(AIModelOutput.output_type == search_params.output_type)
@@ -128,7 +134,7 @@ def get_all_ai_outputs(
         query = query.where(AIModelOutput.target_id == search_params.target_id)
 
     if search_params.prompt_contains:
-        query = query.where(AIModelOutput.prompt.ilike(f"%{search_params.prompt_contains}%"))
+        query = query.where(AIModelOutput.prompt_used.ilike(f"%{search_params.prompt_contains}%"))
 
     # Order by creation time (newest first) and apply pagination
     query = query.order_by(AIModelOutput.created_at.desc()).offset(skip).limit(limit)
@@ -143,7 +149,7 @@ def get_ai_output_summary(db: Session) -> AIOutputSummary:
         db: Database session.
 
     Returns:
-        Summary statistics including counts by service, type, and format.
+        Summary statistics including counts by user, model, type, and format.
 
     Example:
         >>> summary = get_ai_output_summary(db)
@@ -152,12 +158,19 @@ def get_ai_output_summary(db: Session) -> AIOutputSummary:
     # Total count
     total_outputs = db.scalar(select(func.count(AIModelOutput.id))) or 0
 
-    # Count by AI service
-    service_counts = db.execute(
-        select(AIModelOutput.ai_service, func.count(AIModelOutput.id))
-        .group_by(AIModelOutput.ai_service)
+    # Count by user
+    user_counts = db.execute(
+        select(AIModelOutput.user_id, func.count(AIModelOutput.id))
+        .group_by(AIModelOutput.user_id)
     ).all()
-    outputs_by_service = {service: count for service, count in service_counts}
+    outputs_by_user = {str(user_id): count for user_id, count in user_counts}
+
+    # Count by model version
+    model_counts = db.execute(
+        select(AIModelOutput.model_version, func.count(AIModelOutput.id))
+        .group_by(AIModelOutput.model_version)
+    ).all()
+    outputs_by_model = {str(model or "unknown"): count for model, count in model_counts}
 
     # Count by output type
     type_counts = db.execute(
@@ -171,11 +184,12 @@ def get_ai_output_summary(db: Session) -> AIOutputSummary:
         select(AIModelOutput.output_format, func.count(AIModelOutput.id))
         .group_by(AIModelOutput.output_format)
     ).all()
-    outputs_by_format = {str(output_format): count for output_format, count in format_counts}
+    outputs_by_format = {str(output_format or "unknown"): count for output_format, count in format_counts}
 
     return AIOutputSummary(
         total_outputs=total_outputs,
-        outputs_by_service=outputs_by_service,
+        outputs_by_user=outputs_by_user,
+        outputs_by_model=outputs_by_model,
         outputs_by_type=outputs_by_type,
         outputs_by_format=outputs_by_format,
     )
