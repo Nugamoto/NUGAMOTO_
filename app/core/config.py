@@ -17,7 +17,9 @@ def find_project_root():
 # Set the project root as the working directory for loading .env
 PROJECT_ROOT = find_project_root()
 
+
 class Settings(BaseSettings):
+    expiring_items_threshold_days: int = 3
     DATABASE_URL: str = "sqlite:///./nugamoto.sqlite"
     OPENAI_API_KEY: str = "dummy-key"
 

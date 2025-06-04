@@ -8,6 +8,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.models.inventory import FoodItem, InventoryItem, StorageLocation
 from app.models.kitchen import Kitchen
 from app.schemas.inventory import (
@@ -21,6 +22,8 @@ from app.schemas.inventory import (
     StorageLocationWithInventory,
 )
 
+# Import settings at module level
+EXPIRING_ITEMS_THRESHOLD_DAYS = settings.expiring_items_threshold_days
 
 # ------------------------------------------------------------------ #
 # FoodItem CRUD                                                      #
@@ -583,7 +586,7 @@ def get_low_stock_items(db: Session, kitchen_id: int) -> list[InventoryItem]:
 
 
 def get_expiring_items(
-        db: Session, kitchen_id: int, days: int = 3
+        db: Session, kitchen_id: int, days: int = EXPIRING_ITEMS_THRESHOLD_DAYS
 ) -> list[InventoryItem]:
     """Return all inventory items that expire within the specified number of days.
 
@@ -592,7 +595,7 @@ def get_expiring_items(
     Args:
         db: Database session.
         kitchen_id: Primary key of the kitchen.
-        days: Number of days to look ahead (default: 3).
+        days: Number of days to look ahead (default: from settings).
 
     Returns:
         A list of inventory items that expire within the specified timeframe.

@@ -172,7 +172,7 @@ class InventoryItemRead(_InventoryItemBase):
     # Computed properties
     is_low_stock: bool = Field(..., description="True if quantity is below min_quantity")
     is_expired: bool = Field(..., description="True if expiration_date is in the past")
-    expires_soon: bool = Field(..., description="True if expiration_date is within 3 days")
+    expires_soon: bool = Field(..., description="True if expiration_date is within configured threshold days")
 
 
 class InventoryItemUpdate(_InventoryItemBase):
@@ -220,6 +220,6 @@ class KitchenInventorySummary(BaseModel):
     total_items: int = Field(..., description="Total number of inventory items")
     low_stock_items: int = Field(..., description="Number of items below min_quantity")
     expired_items: int = Field(..., description="Number of expired items")
-    expires_soon_items: int = Field(..., description="Number of items expiring within 3 days")
+    expires_soon_items: int = Field(..., description="Number of items expiring within configured threshold days")
 
     model_config = ConfigDict(from_attributes=True)

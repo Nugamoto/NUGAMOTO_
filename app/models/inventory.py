@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Date, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.config import settings
 from app.db.base import Base
+
+# Import settings at module level (füge das oben hinzu)
+EXPIRING_ITEMS_THRESHOLD_DAYS = settings.expiring_items_threshold_days
 
 if TYPE_CHECKING:
     from app.models.kitchen import Kitchen
@@ -172,11 +176,11 @@ class InventoryItem(Base):
         return self.expiration_date < datetime.date.today()
 
     @property
-    def expires_soon(self, days: int = 3) -> bool:
+    def expires_soon(self, days: int = EXPIRING_ITEMS_THRESHOLD_DAYS) -> bool:
         """Check if this item expires within the specified number of days.
 
         Args:
-            days: Number of days to check ahead (default: 3).
+            days: Number of days to check ahead (default: from settings).
 
         Returns:
             True if expiration_date is within the specified days, False otherwise.
