@@ -1,12 +1,12 @@
-"""FastAPI router exposing the */users* endpoints."""
+"""FastAPI router exposing the users endpoints."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.crud import user as crud_user
 from app.core.dependencies import get_db
+from app.crud import user as crud_user
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["Users"])

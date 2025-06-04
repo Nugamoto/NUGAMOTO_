@@ -1,4 +1,4 @@
-"""FastAPI router exposing the */kitchens* endpoints."""
+"""FastAPI router exposing the kitchens endpoints."""
 
 from __future__ import annotations
 

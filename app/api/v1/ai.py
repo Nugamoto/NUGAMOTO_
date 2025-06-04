@@ -1,4 +1,4 @@
-"""FastAPI router exposing the /ai endpoints."""
+"""FastAPI router exposing the ai endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
