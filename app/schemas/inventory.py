@@ -17,7 +17,7 @@ class _FoodItemBase(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     category: str | None = Field(default=None, max_length=100)
-    unit: str = Field(default="piece", min_length=1, max_length=20)
+    base_unit_id: int = Field(..., gt=0, description="ID of the base unit for this food item")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,6 +42,10 @@ class FoodItemRead(_FoodItemBase):
     """Schema returned to the client."""
 
     id: int
+    base_unit_name: str | None = Field(
+        default=None,
+        description="Name of the base unit (populated from related unit)"
+    )
 
 
 class FoodItemUpdate(_FoodItemBase):
@@ -49,7 +53,7 @@ class FoodItemUpdate(_FoodItemBase):
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     category: str | None = Field(default=None, max_length=100)
-    unit: str | None = Field(default=None, min_length=1, max_length=20)
+    base_unit_id: int | None = Field(default=None, gt=0)
 
     @field_validator("name")
     def validate_name(cls, v: str | None) -> str | None:
@@ -130,8 +134,14 @@ class _InventoryItemBase(BaseModel):
 
     food_item_id: int = Field(..., gt=0)
     storage_location_id: int = Field(..., gt=0)
-    quantity: float = Field(..., ge=0.0)
-    min_quantity: float | None = Field(default=None, ge=0.0)
+    quantity: float = Field(
+        ..., ge=0.0,
+        description="Quantity in the food item's base unit"
+    )
+    min_quantity: float | None = Field(
+        default=None, ge=0.0,
+        description="Minimum quantity threshold in base unit"
+    )
     expiration_date: datetime.date | None = Field(default=None)
 
     model_config = ConfigDict(from_attributes=True)
@@ -155,7 +165,11 @@ class _InventoryItemBase(BaseModel):
 
 
 class InventoryItemCreate(_InventoryItemBase):
-    """Schema used on **create** (request body)."""
+    """Schema used on **create** (request body).
+    
+    Note: Quantities are expected to be provided in the food item's base unit.
+    Future versions may support unit conversion from alternative input units.
+    """
     pass
 
 
@@ -164,6 +178,7 @@ class InventoryItemRead(_InventoryItemBase):
 
     id: int
     kitchen_id: int
+    last_updated: datetime.datetime
 
     # Include related objects for convenience
     food_item: FoodItemRead
@@ -174,14 +189,26 @@ class InventoryItemRead(_InventoryItemBase):
     is_expired: bool = Field(..., description="True if expiration_date is in the past")
     expires_soon: bool = Field(..., description="True if expiration_date is within configured threshold days")
 
+    # Optional unit information for display
+    base_unit_name: str | None = Field(
+        default=None,
+        description="Name of the base unit for this item (from food_item.base_unit)"
+    )
+
 
 class InventoryItemUpdate(_InventoryItemBase):
     """Schema for partial inventory item updates (PATCH operations)."""
 
     food_item_id: int | None = Field(default=None, gt=0)
     storage_location_id: int | None = Field(default=None, gt=0)
-    quantity: float | None = Field(default=None, ge=0.0)
-    min_quantity: float | None = Field(default=None, ge=0.0)
+    quantity: float | None = Field(
+        default=None, ge=0.0,
+        description="Quantity in the food item's base unit"
+    )
+    min_quantity: float | None = Field(
+        default=None, ge=0.0,
+        description="Minimum quantity threshold in base unit"
+    )
     expiration_date: datetime.date | None = Field(default=None)
 
     @field_validator("expiration_date")
@@ -221,5 +248,29 @@ class KitchenInventorySummary(BaseModel):
     low_stock_items: int = Field(..., description="Number of items below min_quantity")
     expired_items: int = Field(..., description="Number of expired items")
     expires_soon_items: int = Field(..., description="Number of items expiring within configured threshold days")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ------------------------------------------------------------------ #
+# Unit Conversion Support (Future)                                   #
+# ------------------------------------------------------------------ #
+
+class InventoryItemCreateWithConversion(BaseModel):
+    """Future schema for creating inventory items with unit conversion support.
+    
+    This schema would allow users to input quantities in alternative units
+    that would then be converted to the base unit before storage.
+    """
+
+    food_item_id: int = Field(..., gt=0)
+    storage_location_id: int = Field(..., gt=0)
+    quantity: float = Field(..., ge=0.0, description="Quantity in the specified input unit")
+    input_unit_id: int | None = Field(
+        default=None, gt=0,
+        description="Unit ID for input quantity (if different from base unit)"
+    )
+    min_quantity: float | None = Field(default=None, ge=0.0)
+    expiration_date: datetime.date | None = Field(default=None)
 
     model_config = ConfigDict(from_attributes=True)

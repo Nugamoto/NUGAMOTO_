@@ -5,13 +5,13 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, String, UniqueConstraint, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import settings
 from app.db.base import Base
 
-# Import settings at module level (füge das oben hinzu)
+# Import settings at module level
 EXPIRING_ITEMS_THRESHOLD_DAYS = settings.expiring_items_threshold_days
 
 if TYPE_CHECKING:
@@ -23,6 +23,9 @@ class FoodItem(Base):
 
     Food items are global entities that can be used across all kitchens.
     They represent basic food categories like "Tomato", "Rice", etc.
+    
+    In v2.0, each food item has a base_unit_id that defines the standard
+    measurement unit for storing quantities (e.g., grams, ml, pieces).
     """
 
     __tablename__ = "food_items"
@@ -33,7 +36,10 @@ class FoodItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     category: Mapped[str | None] = mapped_column(String(100))
-    unit: Mapped[str] = mapped_column(String(20), nullable=False, default="piece")
+    base_unit_id: Mapped[int] = mapped_column(
+        ForeignKey("units.id"), nullable=False,
+        comment="Reference to the base unit for this food item"
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
@@ -42,13 +48,16 @@ class FoodItem(Base):
         "InventoryItem", back_populates="food_item"
     )
 
+    # Note: base_unit relationship would be added when units table is implemented
+    # base_unit: Mapped[Unit] = relationship("Unit", foreign_keys=[base_unit_id])
+
     # ------------------------------------------------------------------ #
     # Dunder                                                               #
     # ------------------------------------------------------------------ #
     def __repr__(self) -> str:  # noqa: D401 – we want a short repr
         return (
             f"FoodItem(id={self.id!r}, name={self.name!r}, "
-            f"category={self.category!r}, unit={self.unit!r})"
+            f"category={self.category!r}, base_unit_id={self.base_unit_id!r})"
         )
 
 
@@ -102,6 +111,10 @@ class InventoryItem(Base):
     with quantity and expiration information. This is where the actual inventory
     data is stored.
 
+    In v2.0, quantities are always stored in the base unit defined by 
+    food_item.base_unit_id. No unit field is needed here as the unit
+    is determined by the food item's base unit.
+
     Note: min_quantity can be used later by AI services to automatically
     generate shopping lists when items run low.
     """
@@ -121,9 +134,19 @@ class InventoryItem(Base):
     storage_location_id: Mapped[int] = mapped_column(
         ForeignKey("storage_locations.id", ondelete="CASCADE"), nullable=False
     )
-    quantity: Mapped[float] = mapped_column(nullable=False, default=0.0)
-    min_quantity: Mapped[float | None] = mapped_column(default=None)
+    quantity: Mapped[float] = mapped_column(
+        nullable=False, default=0.0,
+        comment="Quantity in the food item's base unit"
+    )
+    min_quantity: Mapped[float | None] = mapped_column(
+        default=None,
+        comment="Minimum quantity threshold in base unit"
+    )
     expiration_date: Mapped[datetime.date | None] = mapped_column(Date, default=None)
+    last_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
