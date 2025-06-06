@@ -1,13 +1,13 @@
-"""Pydantic schemas for shopping system."""
+"""Pydantic schemas for shopping system v2.0."""
 
 from __future__ import annotations
 
-from datetime import datetime
+import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
 
-from app.core.enums import PackageType, ShoppingListType
+from app.core.enums import ShoppingListType
 
 
 # ================================================================== #
@@ -34,7 +34,7 @@ class ShoppingListRead(_ShoppingListBase):
 
     id: int
     kitchen_id: int
-    created_at: datetime
+    created_at: datetime.datetime
 
 
 class ShoppingListUpdate(BaseModel):
@@ -47,19 +47,44 @@ class ShoppingListUpdate(BaseModel):
 
 
 # ================================================================== #
-# Shopping Product Schemas                                           #
+# Shopping Product Schemas (v2.0)                                   #
 # ================================================================== #
 
 class _ShoppingProductBase(BaseModel):
     """Fields shared by all shopping product schemas."""
 
-    food_item_id: int = Field(..., gt=0)
-    unit: str = Field(..., min_length=1, max_length=20)
-    quantity: float = Field(..., gt=0)
-    package_type: PackageType
-    estimated_price: float | None = Field(default=None, ge=0)
+    food_item_id: int = Field(..., gt=0, description="Reference to food item")
+    package_unit_id: int = Field(..., gt=0, description="Unit for the package")
+    package_quantity: float = Field(
+        ..., gt=0,
+        description="Quantity per package in package_unit"
+    )
+    quantity_in_base_unit: float = Field(
+        ..., gt=0,
+        description="Equivalent quantity in food item's base unit"
+    )
+    package_type: str = Field(
+        ..., min_length=1, max_length=100,
+        description="Descriptive package type (e.g., '500 g pack')"
+    )
+    estimated_price: float | None = Field(
+        default=None, ge=0,
+        description="Estimated price for this package"
+    )
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("package_type")
+    def validate_package_type(cls, v: str) -> str:
+        """Normalize package type format.
+        
+        Args:
+            v: The package type value to validate.
+            
+        Returns:
+            The normalized package type.
+        """
+        return v.strip()
 
 
 class ShoppingProductCreate(_ShoppingProductBase):
@@ -71,33 +96,73 @@ class ShoppingProductRead(_ShoppingProductBase):
     """Schema returned to the client."""
 
     id: int
-    created_at: datetime
+    created_at: datetime.datetime
+    last_updated: datetime.datetime | None
 
-    # Optional nested food item details
-    food_item: dict | None = None
+    # Optional nested details
+    food_item_name: str | None = Field(
+        default=None, 
+        description="Name of the associated food item"
+    )
+    package_unit_name: str | None = Field(
+        default=None,
+        description="Name of the package unit"
+    )
+    base_unit_name: str | None = Field(
+        default=None,
+        description="Name of the food item's base unit"
+    )
+    unit_price: float | None = Field(
+        default=None,
+        description="Price per base unit if available"
+    )
 
 
 class ShoppingProductUpdate(BaseModel):
     """Schema for updating shopping product."""
 
-    unit: str | None = Field(default=None, min_length=1, max_length=20)
-    quantity: float | None = Field(default=None, gt=0)
-    package_type: PackageType | None = None
+    package_unit_id: int | None = Field(default=None, gt=0)
+    package_quantity: float | None = Field(default=None, gt=0)
+    quantity_in_base_unit: float | None = Field(default=None, gt=0)
+    package_type: str | None = Field(default=None, min_length=1, max_length=100)
     estimated_price: float | None = Field(default=None, ge=0)
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("package_type")
+    def validate_package_type(cls, v: str | None) -> str | None:
+        """Normalize package type format.
+        
+        Args:
+            v: The package type value to validate.
+            
+        Returns:
+            The normalized package type or None.
+        """
+        if v is None:
+            return v
+        return v.strip()
+
 
 # ================================================================== #
-# Shopping Product Assignment Schemas                               #
+# Shopping Product Assignment Schemas (v2.0)                        #
 # ================================================================== #
 
 class _ShoppingProductAssignmentBase(BaseModel):
     """Fields shared by assignment schemas."""
 
-    added_by_user_id: int | None = Field(default=None, gt=0)
-    is_auto_added: bool = False
-    note: str | None = Field(default=None, max_length=500)
+    added_by_user_id: int | None = Field(
+        default=None, gt=0,
+        description="User who added this item (None for system-generated)"
+    )
+    is_auto_added: bool = Field(
+        default=False,
+        description="True if added automatically by AI/system"
+    )
+    note: str | None = Field(
+        default=None, max_length=500,
+        description="User note about this specific assignment"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -113,7 +178,8 @@ class ShoppingProductAssignmentRead(_ShoppingProductAssignmentBase):
 
     shopping_list_id: int
     shopping_product_id: int
-    created_at: datetime
+    created_at: datetime.datetime
+    last_updated: datetime.datetime | None
 
     # Nested product details
     shopping_product: ShoppingProductRead
@@ -122,23 +188,26 @@ class ShoppingProductAssignmentRead(_ShoppingProductAssignmentBase):
 class ShoppingProductAssignmentUpdate(BaseModel):
     """Schema for updating assignment."""
 
-    note: str | None = Field(default=None, max_length=500)
+    note: str | None = Field(
+        default=None, max_length=500,
+        description="Updated note for this assignment"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
 
 # ================================================================== #
-# Search Parameters                                                 #
+# Search and Filter Parameters                                       #
 # ================================================================== #
 
 class ShoppingProductSearchParams(BaseModel):
     """Parameters for filtering shopping products."""
 
-    food_item_id: int | None = None
-    package_type: PackageType | None = None
-    min_price: float | None = None
-    max_price: float | None = None
-    unit: str | None = None
+    food_item_id: int | None = Field(default=None, gt=0)
+    package_unit_id: int | None = Field(default=None, gt=0)
+    min_price: float | None = Field(default=None, ge=0)
+    max_price: float | None = Field(default=None, ge=0)
+    package_type: str | None = Field(default=None, min_length=1)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -147,8 +216,58 @@ class ShoppingProductAssignmentSearchParams(BaseModel):
     """Parameters for filtering product assignments."""
 
     is_auto_added: bool | None = None
-    added_by_user_id: int | None = None
-    food_item_id: int | None = None
-    package_type: PackageType | None = None
+    added_by_user_id: int | None = Field(default=None, gt=0)
+    food_item_id: int | None = Field(default=None, gt=0)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ================================================================== #
+# Convenience Schemas                                                #
+# ================================================================== #
+
+class ShoppingListWithProducts(ShoppingListRead):
+    """Shopping list with all assigned products."""
+
+    product_assignments: list[ShoppingProductAssignmentRead] = Field(
+        default_factory=list,
+        description="All products assigned to this list"
+    )
+    total_products: int = Field(
+        default=0,
+        description="Total number of products on this list"
+    )
+    estimated_total: float | None = Field(
+        default=None,
+        description="Estimated total cost if prices are available"
+    )
+
+
+class ShoppingProductCreateWithAssignment(ShoppingProductCreate):
+    """Create a product and immediately assign it to a list."""
+
+    # Assignment fields
+    added_by_user_id: int | None = Field(default=None, gt=0)
+    is_auto_added: bool = Field(default=False)
+    note: str | None = Field(default=None, max_length=500)
+
+
+# ================================================================== #
+# Unit Conversion Support (Future)                                   #
+# ================================================================== #
+
+class ShoppingProductCreateWithConversion(BaseModel):
+    """Future schema for creating products with automatic unit conversion.
+    
+    This would allow users to input package details in any unit and
+    automatically calculate the quantity_in_base_unit.
+    """
+    
+    food_item_id: int = Field(..., gt=0)
+    package_unit_id: int = Field(..., gt=0)
+    package_quantity: float = Field(..., gt=0)
+    # quantity_in_base_unit would be calculated automatically
+    package_type: str = Field(..., min_length=1, max_length=100)
+    estimated_price: float | None = Field(default=None, ge=0)
 
     model_config = ConfigDict(from_attributes=True)

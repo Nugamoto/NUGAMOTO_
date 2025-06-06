@@ -1,8 +1,8 @@
-"""SQLAlchemy ORM models for shopping system."""
+"""SQLAlchemy ORM models for shopping system v2.0."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -10,7 +10,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import PackageType, ShoppingListType
+from app.core.enums import ShoppingListType
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -34,14 +34,15 @@ class ShoppingList(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     kitchen_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("kitchens.id"),
+        ForeignKey("kitchens.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[ShoppingListType] = mapped_column(nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
@@ -65,9 +66,10 @@ class ShoppingList(Base):
 
 
 class ShoppingProduct(Base):
-    """Global shopping product catalog.
+    """Global shopping product catalog (v2.0).
     
     Represents a purchasable product that can be assigned to multiple shopping lists.
+    Each product defines a specific package with its unit, quantity, and base unit conversion.
     """
 
     __tablename__ = "shopping_products"
@@ -78,22 +80,54 @@ class ShoppingProduct(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     food_item_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("food_items.id"),
+        ForeignKey("food_items.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
+        comment="Reference to the base food item"
     )
-    unit: Mapped[str] = mapped_column(String(20), nullable=False)
-    quantity: Mapped[float] = mapped_column(Float, nullable=False)
-    package_type: Mapped[PackageType] = mapped_column(nullable=False)
-    estimated_price: Mapped[float | None] = mapped_column(Float)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    package_unit_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("units.id"),
+        nullable=False,
+        index=True,
+        comment="Unit used for the package (e.g., 'pack', 'bottle', 'kg')"
+    )
+    package_quantity: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        comment="Quantity per package in package_unit (e.g., 500 for '500g pack')"
+    )
+    quantity_in_base_unit: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        comment="Equivalent quantity in food item's base unit for inventory calculations"
+    )
+    package_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        comment="Descriptive package type (e.g., '500 g pack', '1 kg bag')"
+    )
+    estimated_price: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Estimated price for this package"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    last_updated: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
     # ------------------------------------------------------------------ #
     food_item: Mapped[FoodItem] = relationship("FoodItem")
+    # package_unit: Mapped[Unit] = relationship("Unit", foreign_keys=[package_unit_id])
     assignments: Mapped[list[ShoppingProductAssignment]] = relationship(
         "ShoppingProductAssignment",
         back_populates="shopping_product",
@@ -101,21 +135,36 @@ class ShoppingProduct(Base):
     )
 
     # ------------------------------------------------------------------ #
+    # Properties                                                          #
+    # ------------------------------------------------------------------ #
+    @property
+    def unit_price(self) -> float | None:
+        """Calculate price per base unit if price is available.
+        
+        Returns:
+            Price per base unit (e.g., price per gram) or None if no price set.
+        """
+        if self.estimated_price is None or self.quantity_in_base_unit <= 0:
+            return None
+        return self.estimated_price / self.quantity_in_base_unit
+
+    # ------------------------------------------------------------------ #
     # Dunder                                                               #
     # ------------------------------------------------------------------ #
     def __repr__(self) -> str:  # noqa: D401 – we want a short repr
         return (
             f"ShoppingProduct(id={self.id!r}, food_item_id={self.food_item_id!r}, "
-            f"quantity={self.quantity!r}, unit={self.unit!r}, "
+            f"package_quantity={self.package_quantity!r}, "
             f"package_type={self.package_type!r})"
         )
 
 
 class ShoppingProductAssignment(Base):
-    """Assignment of a shopping product to a specific shopping list.
+    """Assignment of a shopping product to a specific shopping list (v2.0).
     
     This is the join table that connects shopping lists with products,
     allowing the same product to be on multiple lists with different contexts.
+    Uses composite primary key for optimal performance.
     """
 
     __tablename__ = "shopping_product_assignments"
@@ -125,13 +174,13 @@ class ShoppingProductAssignment(Base):
     # ------------------------------------------------------------------ #
     shopping_list_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("shopping_lists.id"),
+        ForeignKey("shopping_lists.id", ondelete="CASCADE"),
         primary_key=True,
         index=True
     )
     shopping_product_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("shopping_products.id"),
+        ForeignKey("shopping_products.id", ondelete="CASCADE"),
         primary_key=True,
         index=True
     )
@@ -141,14 +190,31 @@ class ShoppingProductAssignment(Base):
     # ------------------------------------------------------------------ #
     added_by_user_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("users.id"),
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
+        comment="User who added this item (NULL for system-generated)"
     )
-    is_auto_added: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    note: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    is_auto_added: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="True if added automatically by AI/system"
+    )
+    note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="User note about this specific assignment"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    last_updated: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #

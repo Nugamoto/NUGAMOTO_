@@ -1,6 +1,8 @@
-"""CRUD operations for shopping system."""
+"""CRUD operations for shopping system v2.0."""
 
 from __future__ import annotations
+
+import datetime
 
 from sqlalchemy import select, and_
 from sqlalchemy.orm import Session, joinedload
@@ -20,6 +22,7 @@ from app.schemas.shopping import (
     ShoppingProductAssignmentUpdate,
     ShoppingProductSearchParams,
     ShoppingProductAssignmentSearchParams,
+    ShoppingListWithProducts
 )
 
 
@@ -28,7 +31,23 @@ from app.schemas.shopping import (
 # ================================================================== #
 
 def create_shopping_list(db: Session, list_data: ShoppingListCreate) -> ShoppingList:
-    """Create a new shopping list."""
+    """Create a new shopping list.
+
+    Args:
+        db: Database session.
+        list_data: Validated shopping list data.
+
+    Returns:
+        The newly created shopping list.
+
+    Example:
+        >>> data = ShoppingListCreate(
+        ...     kitchen_id=1,
+        ...     name="Weekly Shopping",
+        ...     type=ShoppingListType.SUPERMARKET
+        ... )
+        >>> result = create_shopping_list(db, data)
+    """
     db_list = ShoppingList(
         kitchen_id=list_data.kitchen_id,
         name=list_data.name,
@@ -42,60 +61,170 @@ def create_shopping_list(db: Session, list_data: ShoppingListCreate) -> Shopping
 
 
 def get_shopping_list_by_id(db: Session, list_id: int) -> ShoppingList | None:
-    """Get a shopping list by ID."""
-    stmt = select(ShoppingList).where(ShoppingList.id == list_id)
-    return db.scalar(stmt)
+    """Get a shopping list by ID.
+
+    Args:
+        db: Database session.
+        list_id: The unique identifier of the shopping list.
+
+    Returns:
+        The shopping list if found, None otherwise.
+    """
+    return db.scalar(select(ShoppingList).where(ShoppingList.id == list_id))
 
 
 def get_kitchen_shopping_lists(db: Session, kitchen_id: int) -> list[ShoppingList]:
-    """Get all shopping lists for a kitchen."""
-    stmt = select(ShoppingList).where(ShoppingList.kitchen_id == kitchen_id)
-    return list(db.scalars(stmt).all())
+    """Get all shopping lists for a kitchen.
+
+    Args:
+        db: Database session.
+        kitchen_id: The ID of the kitchen.
+
+    Returns:
+        A list of shopping lists ordered by creation date.
+    """
+    query = (
+        select(ShoppingList)
+        .where(ShoppingList.kitchen_id == kitchen_id)
+        .order_by(ShoppingList.created_at.desc())
+    )
+    return list(db.scalars(query).all())
 
 
 def update_shopping_list(
         db: Session,
         list_id: int,
         list_data: ShoppingListUpdate
-) -> ShoppingList:
-    """Update a shopping list."""
+) -> ShoppingList | None:
+    """Update a shopping list.
+
+    Args:
+        db: Database session.
+        list_id: The unique identifier of the shopping list.
+        list_data: Validated update data.
+
+    Returns:
+        The updated shopping list if found, None otherwise.
+    """
     shopping_list = get_shopping_list_by_id(db, list_id)
     if shopping_list is None:
-        raise ValueError("Shopping list not found")
+        return None
 
-    if list_data.name is not None:
-        shopping_list.name = list_data.name
-    if list_data.type is not None:
-        shopping_list.type = list_data.type
+    # Update only provided fields
+    update_data = list_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(shopping_list, field, value)
 
     db.commit()
     db.refresh(shopping_list)
     return shopping_list
 
 
-def delete_shopping_list(db: Session, list_id: int) -> None:
-    """Delete a shopping list."""
+def delete_shopping_list(db: Session, list_id: int) -> bool:
+    """Delete a shopping list.
+
+    Args:
+        db: Database session.
+        list_id: The unique identifier of the shopping list.
+
+    Returns:
+        True if the shopping list was deleted, False if it wasn't found.
+
+    Note:
+        This will also delete all product assignments due to cascade.
+    """
     shopping_list = get_shopping_list_by_id(db, list_id)
     if shopping_list is None:
-        raise ValueError("Shopping list not found")
+        return False
 
     db.delete(shopping_list)
     db.commit()
+    return True
+
+
+def get_shopping_list_with_products(
+        db: Session,
+        list_id: int
+) -> ShoppingListWithProducts | None:
+    """Get a shopping list with all assigned products and calculated totals.
+
+    Args:
+        db: Database session.
+        list_id: The unique identifier of the shopping list.
+
+    Returns:
+        Shopping list with products and totals, or None if not found.
+    """
+    shopping_list = get_shopping_list_by_id(db, list_id)
+    if shopping_list is None:
+        return None
+
+    # Get all assignments for this list
+    assignments = get_shopping_list_product_assignments(db, list_id, limit=1000)
+
+    # Calculate totals
+    total_products = len(assignments)
+    estimated_total = None
+
+    if assignments:
+        prices = [
+            assignment.shopping_product.estimated_price
+            for assignment in assignments
+            if assignment.shopping_product.estimated_price is not None
+        ]
+        if prices:
+            estimated_total = sum(prices)
+
+    return ShoppingListWithProducts(
+        id=shopping_list.id,
+        kitchen_id=shopping_list.kitchen_id,
+        name=shopping_list.name,
+        type=shopping_list.type,
+        created_at=shopping_list.created_at,
+        product_assignments=assignments,
+        total_products=total_products,
+        estimated_total=estimated_total
+    )
 
 
 # ================================================================== #
-# Shopping Product CRUD                                             #
+# Shopping Product CRUD (v2.0)                                      #
 # ================================================================== #
 
 def create_shopping_product(
         db: Session,
         product_data: ShoppingProductCreate
 ) -> ShoppingProduct:
-    """Create a new global shopping product."""
+    """Create a new global shopping product.
+
+    Args:
+        db: Database session.
+        product_data: Validated shopping product data.
+
+    Returns:
+        The newly created shopping product.
+
+    Raises:
+        ValueError: If food_item or units don't exist.
+
+    Example:
+        >>> data = ShoppingProductCreate(
+        ...     food_item_id=1,
+        ...     package_unit_id=2,  # "pack"
+        ...     package_quantity=1.0,
+        ...     quantity_in_base_unit=500.0,  # 500g equivalent
+        ...     package_type="500 g pack",
+        ...     estimated_price=2.99
+        ... )
+        >>> result = create_shopping_product(db, data)
+    """
+    # TODO: Add validation that food_item_id and package_unit_id exist
+    
     db_product = ShoppingProduct(
         food_item_id=product_data.food_item_id,
-        unit=product_data.unit,
-        quantity=product_data.quantity,
+        package_unit_id=product_data.package_unit_id,
+        package_quantity=product_data.package_quantity,
+        quantity_in_base_unit=product_data.quantity_in_base_unit,
         package_type=product_data.package_type,
         estimated_price=product_data.estimated_price,
     )
@@ -107,13 +236,20 @@ def create_shopping_product(
 
 
 def get_shopping_product_by_id(db: Session, product_id: int) -> ShoppingProduct | None:
-    """Get a shopping product by ID with food item details."""
-    stmt = (
+    """Get a shopping product by ID with related objects.
+
+    Args:
+        db: Database session.
+        product_id: The unique identifier of the shopping product.
+
+    Returns:
+        The shopping product with related food_item if found.
+    """
+    return db.scalar(
         select(ShoppingProduct)
         .options(joinedload(ShoppingProduct.food_item))
         .where(ShoppingProduct.id == product_id)
     )
-    return db.scalar(stmt)
 
 
 def get_all_shopping_products(
@@ -122,65 +258,97 @@ def get_all_shopping_products(
         skip: int = 0,
         limit: int = 100
 ) -> list[ShoppingProduct]:
-    """Get all shopping products with optional filtering."""
-    stmt: Select = (
+    """Get all shopping products with optional filtering.
+
+    Args:
+        db: Database session.
+        search_params: Optional search parameters.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+
+    Returns:
+        A list of shopping products with related objects.
+    """
+    query: Select = (
         select(ShoppingProduct)
         .options(joinedload(ShoppingProduct.food_item))
+        .order_by(ShoppingProduct.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
 
     if search_params:
         if search_params.food_item_id is not None:
-            stmt = stmt.where(ShoppingProduct.food_item_id == search_params.food_item_id)
-        if search_params.package_type is not None:
-            stmt = stmt.where(ShoppingProduct.package_type == search_params.package_type)
+            query = query.where(ShoppingProduct.food_item_id == search_params.food_item_id)
+        if search_params.package_unit_id is not None:
+            query = query.where(ShoppingProduct.package_unit_id == search_params.package_unit_id)
         if search_params.min_price is not None:
-            stmt = stmt.where(ShoppingProduct.estimated_price >= search_params.min_price)
+            query = query.where(ShoppingProduct.estimated_price >= search_params.min_price)
         if search_params.max_price is not None:
-            stmt = stmt.where(ShoppingProduct.estimated_price <= search_params.max_price)
-        if search_params.unit is not None:
-            stmt = stmt.where(ShoppingProduct.unit == search_params.unit)
+            query = query.where(ShoppingProduct.estimated_price <= search_params.max_price)
+        if search_params.package_type is not None:
+            query = query.where(ShoppingProduct.package_type.ilike(f"%{search_params.package_type}%"))
 
-    return list(db.scalars(stmt).all())
+    return list(db.scalars(query).all())
 
 
 def update_shopping_product(
         db: Session,
         product_id: int,
         product_data: ShoppingProductUpdate
-) -> ShoppingProduct:
-    """Update a shopping product."""
+) -> ShoppingProduct | None:
+    """Update a shopping product.
+
+    Args:
+        db: Database session.
+        product_id: The unique identifier of the shopping product.
+        product_data: Validated update data.
+
+    Returns:
+        The updated shopping product if found, None otherwise.
+    """
     product = get_shopping_product_by_id(db, product_id)
     if product is None:
-        raise ValueError("Shopping product not found")
+        return None
 
-    if product_data.unit is not None:
-        product.unit = product_data.unit
-    if product_data.quantity is not None:
-        product.quantity = product_data.quantity
-    if product_data.package_type is not None:
-        product.package_type = product_data.package_type
-    if product_data.estimated_price is not None:
-        product.estimated_price = product_data.estimated_price
+    # Update only provided fields
+    update_data = product_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(product, field, value)
+
+    # Update timestamp
+    product.last_updated = datetime.datetime.now(datetime.timezone.utc)
 
     db.commit()
     db.refresh(product)
     return product
 
 
-def delete_shopping_product(db: Session, product_id: int) -> None:
-    """Delete a shopping product."""
+def delete_shopping_product(db: Session, product_id: int) -> bool:
+    """Delete a shopping product.
+
+    Args:
+        db: Database session.
+        product_id: The unique identifier of the shopping product.
+
+    Returns:
+        True if the shopping product was deleted, False if it wasn't found.
+
+    Note:
+        This will fail if the product is assigned to any shopping lists
+        due to foreign key constraints.
+    """
     product = get_shopping_product_by_id(db, product_id)
     if product is None:
-        raise ValueError("Shopping product not found")
+        return False
 
     db.delete(product)
     db.commit()
+    return True
 
 
 # ================================================================== #
-# Shopping Product Assignment CRUD                                  #
+# Shopping Product Assignment CRUD (v2.0)                          #
 # ================================================================== #
 
 def assign_product_to_list(
@@ -188,11 +356,29 @@ def assign_product_to_list(
         list_id: int,
         assignment_data: ShoppingProductAssignmentCreate
 ) -> ShoppingProductAssignment:
-    """Assign a shopping product to a shopping list."""
+    """Assign a shopping product to a shopping list.
+
+    Args:
+        db: Database session.
+        list_id: The ID of the shopping list.
+        assignment_data: Validated assignment data.
+
+    Returns:
+        The newly created assignment.
+
+    Raises:
+        ValueError: If assignment already exists or referenced objects don't exist.
+
+    Example:
+        >>> data = ShoppingProductAssignmentCreate(
+        ...     shopping_product_id=1,
+        ...     added_by_user_id=123,
+        ...     note="Need this for dinner"
+        ... )
+        >>> result = assign_product_to_list(db, 1, data)
+    """
     # Check if assignment already exists
-    existing = get_product_assignment(
-        db, list_id, assignment_data.shopping_product_id
-    )
+    existing = get_product_assignment(db, list_id, assignment_data.shopping_product_id)
     if existing:
         raise ValueError("Product already assigned to this list")
 
@@ -223,8 +409,17 @@ def get_product_assignment(
         list_id: int,
         product_id: int
 ) -> ShoppingProductAssignment | None:
-    """Get a specific product assignment."""
-    stmt = (
+    """Get a specific product assignment.
+
+    Args:
+        db: Database session.
+        list_id: The ID of the shopping list.
+        product_id: The ID of the shopping product.
+
+    Returns:
+        The assignment if found, None otherwise.
+    """
+    return db.scalar(
         select(ShoppingProductAssignment)
         .options(
             joinedload(ShoppingProductAssignment.shopping_product)
@@ -237,7 +432,6 @@ def get_product_assignment(
             )
         )
     )
-    return db.scalar(stmt)
 
 
 def get_shopping_list_product_assignments(
@@ -247,37 +441,45 @@ def get_shopping_list_product_assignments(
         skip: int = 0,
         limit: int = 100
 ) -> list[ShoppingProductAssignment]:
-    """Get all product assignments for a shopping list."""
-    stmt: Select = (
+    """Get all product assignments for a shopping list.
+
+    Args:
+        db: Database session.
+        list_id: The ID of the shopping list.
+        search_params: Optional search parameters.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+
+    Returns:
+        A list of assignments with related objects.
+    """
+    query: Select = (
         select(ShoppingProductAssignment)
         .options(
             joinedload(ShoppingProductAssignment.shopping_product)
             .joinedload(ShoppingProduct.food_item)
         )
         .where(ShoppingProductAssignment.shopping_list_id == list_id)
+        .order_by(ShoppingProductAssignment.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
 
     if search_params:
         if search_params.is_auto_added is not None:
-            stmt = stmt.where(
+            query = query.where(
                 ShoppingProductAssignment.is_auto_added == search_params.is_auto_added
             )
         if search_params.added_by_user_id is not None:
-            stmt = stmt.where(
+            query = query.where(
                 ShoppingProductAssignment.added_by_user_id == search_params.added_by_user_id
             )
         if search_params.food_item_id is not None:
-            stmt = stmt.join(ShoppingProduct).where(
+            query = query.join(ShoppingProduct).where(
                 ShoppingProduct.food_item_id == search_params.food_item_id
             )
-        if search_params.package_type is not None:
-            stmt = stmt.join(ShoppingProduct).where(
-                ShoppingProduct.package_type == search_params.package_type
-            )
 
-    return list(db.scalars(stmt).all())
+    return list(db.scalars(query).all())
 
 
 def update_product_assignment(
@@ -285,25 +487,151 @@ def update_product_assignment(
         list_id: int,
         product_id: int,
         assignment_data: ShoppingProductAssignmentUpdate
-) -> ShoppingProductAssignment:
-    """Update a product assignment."""
+) -> ShoppingProductAssignment | None:
+    """Update a product assignment.
+
+    Args:
+        db: Database session.
+        list_id: The ID of the shopping list.
+        product_id: The ID of the shopping product.
+        assignment_data: Validated update data.
+
+    Returns:
+        The updated assignment if found, None otherwise.
+    """
     assignment = get_product_assignment(db, list_id, product_id)
     if assignment is None:
-        raise ValueError("Product assignment not found")
+        return None
 
-    if assignment_data.note is not None:
-        assignment.note = assignment_data.note
+    # Update only provided fields
+    update_data = assignment_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(assignment, field, value)
+
+    # Update timestamp
+    assignment.last_updated = datetime.datetime.now(datetime.timezone.utc)
 
     db.commit()
     db.refresh(assignment)
     return assignment
 
 
-def remove_product_from_list(db: Session, list_id: int, product_id: int) -> None:
-    """Remove a product assignment from a shopping list."""
+def remove_product_from_list(db: Session, list_id: int, product_id: int) -> bool:
+    """Remove a product assignment from a shopping list.
+
+    Args:
+        db: Database session.
+        list_id: The ID of the shopping list.
+        product_id: The ID of the shopping product.
+
+    Returns:
+        True if the assignment was removed, False if it wasn't found.
+    """
     assignment = get_product_assignment(db, list_id, product_id)
     if assignment is None:
-        raise ValueError("Product assignment not found")
+        return False
 
     db.delete(assignment)
     db.commit()
+    return True
+
+
+# ================================================================== #
+# Bulk Operations and Utilities                                     #
+# ================================================================== #
+
+def get_products_for_food_item(
+        db: Session,
+        food_item_id: int,
+        skip: int = 0,
+        limit: int = 100
+) -> list[ShoppingProduct]:
+    """Get all shopping products for a specific food item.
+
+    Args:
+        db: Database session.
+        food_item_id: The ID of the food item.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+
+    Returns:
+        A list of shopping products for the food item.
+    """
+    query = (
+        select(ShoppingProduct)
+        .options(joinedload(ShoppingProduct.food_item))
+        .where(ShoppingProduct.food_item_id == food_item_id)
+        .order_by(ShoppingProduct.package_quantity)
+        .offset(skip)
+        .limit(limit)
+    )
+    return list(db.scalars(query).all())
+
+
+def create_product_and_assign_to_list(
+        db: Session,
+        list_id: int,
+        product_data: ShoppingProductCreate,
+        assignment_data: ShoppingProductAssignmentCreate
+) -> tuple[ShoppingProduct, ShoppingProductAssignment]:
+    """Create a new shopping product and immediately assign it to a list.
+
+    Args:
+        db: Database session.
+        list_id: The ID of the shopping list.
+        product_data: Validated product data.
+        assignment_data: Validated assignment data.
+
+    Returns:
+        A tuple of (created_product, created_assignment).
+
+    Note:
+        This is a convenience function that combines two operations in one transaction.
+    """
+    # Create the product first
+    product = create_shopping_product(db, product_data)
+
+    # Update assignment data with the new product ID
+    assignment_data.shopping_product_id = product.id
+
+    # Create the assignment
+    assignment = assign_product_to_list(db, list_id, assignment_data)
+
+    return product, assignment
+
+
+# ================================================================== #
+# Unit Conversion Support (Future Implementation)                    #
+# ================================================================== #
+
+def calculate_quantity_in_base_unit(
+        db: Session,
+        food_item_id: int,
+        package_quantity: float,
+        package_unit_id: int
+) -> float:
+    """Calculate equivalent quantity in food item's base unit.
+    
+    This function is a placeholder for future implementation when
+    unit conversion tables are available.
+    
+    Args:
+        db: Database session.
+        food_item_id: ID of the food item.
+        package_quantity: Quantity in package unit.
+        package_unit_id: ID of the package unit.
+        
+    Returns:
+        Equivalent quantity in base unit.
+        
+    Note:
+        Currently returns the original quantity unchanged.
+        Future implementation will look up conversion factors.
+    """
+    # TODO: Implement actual unit conversion logic
+    # 1. Get food_item.base_unit_id
+    # 2. Check if package_unit_id == base_unit_id (no conversion needed)
+    # 3. Look up conversion factor in unit_conversions table
+    # 4. Apply conversion: base_quantity = package_quantity * conversion_factor
+
+    return package_quantity  # Placeholder - no conversion yet
