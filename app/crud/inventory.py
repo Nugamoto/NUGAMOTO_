@@ -4,171 +4,26 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import select, and_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, select
+from sqlalchemy.orm import Session, selectinload
 
-from app.core.config import settings
-from app.models.inventory import FoodItem, StorageLocation, InventoryItem
+from app.models.food import FoodItem
+from app.models.inventory import (
+    EXPIRING_ITEMS_THRESHOLD_DAYS,
+    InventoryItem,
+    StorageLocation
+)
 from app.schemas.inventory import (
-    FoodItemCreate, FoodItemUpdate,
-    StorageLocationCreate, StorageLocationUpdate,
-    InventoryItemCreate, InventoryItemUpdate,
-    KitchenInventorySummary, StorageLocationWithInventory
+    InventoryItemCreate,
+    InventoryItemUpdate,
+    StorageLocationCreate,
+    StorageLocationUpdate
 )
 
-# Import settings at module level
-EXPIRING_ITEMS_THRESHOLD_DAYS = settings.expiring_items_threshold_days
 
-
-# ------------------------------------------------------------------ #
-# FoodItem CRUD                                                      #
-# ------------------------------------------------------------------ #
-
-def create_food_item(db: Session, food_item_data: FoodItemCreate) -> FoodItem:
-    """Create a new food item.
-
-    Args:
-        db: Database session.
-        food_item_data: Validated food item data.
-
-    Returns:
-        The newly created food item.
-
-    Raises:
-        ValueError: If base_unit_id does not exist.
-
-    Example:
-        >>> data = FoodItemCreate(
-        ...     name="Tomato",
-        ...     category="Vegetables",
-        ...     base_unit_id=1  # grams
-        ... )
-        >>> result = create_food_item(db, data)
-    """
-    # TODO: Add validation that base_unit_id exists in units table
-    # For now, we assume the base_unit_id is valid
-
-    db_food_item = FoodItem(
-        name=food_item_data.name,
-        category=food_item_data.category,
-        base_unit_id=food_item_data.base_unit_id,
-    )
-
-    db.add(db_food_item)
-    db.commit()
-    db.refresh(db_food_item)
-
-    return db_food_item
-
-
-def get_food_item_by_id(db: Session, food_item_id: int) -> FoodItem | None:
-    """Retrieve a food item by its ID.
-
-    Args:
-        db: Database session.
-        food_item_id: The unique identifier of the food item.
-
-    Returns:
-        The food item if found, None otherwise.
-
-    Example:
-        >>> food_item = get_food_item_by_id(db, 123)
-        >>> if food_item:
-        ...     print(f"Found: {food_item.name} (base unit: {food_item.base_unit_id})")
-    """
-    return db.scalar(select(FoodItem).where(FoodItem.id == food_item_id))
-
-
-def get_food_item_by_name(db: Session, name: str) -> FoodItem | None:
-    """Retrieve a food item by its name (case-insensitive).
-
-    Args:
-        db: Database session.
-        name: The name of the food item.
-
-    Returns:
-        The food item if found, None otherwise.
-    """
-    return db.scalar(select(FoodItem).where(FoodItem.name.ilike(name)))
-
-
-def get_all_food_items(db: Session, skip: int = 0, limit: int = 100) -> list[FoodItem]:
-    """Retrieve all food items with pagination.
-
-    Args:
-        db: Database session.
-        skip: Number of records to skip.
-        limit: Maximum number of records to return.
-
-    Returns:
-        A list of food items ordered by name.
-    """
-    query = select(FoodItem).order_by(FoodItem.name).offset(skip).limit(limit)
-    return list(db.scalars(query).all())
-
-
-def update_food_item(
-        db: Session,
-        food_item_id: int,
-        food_item_data: FoodItemUpdate
-) -> FoodItem | None:
-    """Update an existing food item.
-
-    Args:
-        db: Database session.
-        food_item_id: The unique identifier of the food item.
-        food_item_data: Validated update data.
-
-    Returns:
-        The updated food item if found, None otherwise.
-
-    Example:
-        >>> data = FoodItemUpdate(name="Cherry Tomato", base_unit_id=2)
-        >>> result = update_food_item(db, 123, data)
-    """
-    db_food_item = db.scalar(select(FoodItem).where(FoodItem.id == food_item_id))
-
-    if db_food_item is None:
-        return None
-
-    # Update only provided fields
-    update_data = food_item_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(db_food_item, field, value)
-
-    db.commit()
-    db.refresh(db_food_item)
-
-    return db_food_item
-
-
-def delete_food_item(db: Session, food_item_id: int) -> bool:
-    """Delete a food item by its ID.
-
-    Args:
-        db: Database session.
-        food_item_id: The unique identifier of the food item.
-
-    Returns:
-        True if the food item was deleted, False if it wasn't found.
-
-    Note:
-        This will fail if the food item is referenced by inventory items
-        due to foreign key constraints.
-    """
-    db_food_item = db.scalar(select(FoodItem).where(FoodItem.id == food_item_id))
-
-    if db_food_item is None:
-        return False
-
-    db.delete(db_food_item)
-    db.commit()
-    return True
-
-
-# ------------------------------------------------------------------ #
-# StorageLocation CRUD                                               #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# StorageLocation CRUD Operations                                    #
+# ================================================================== #
 
 def create_storage_location(
         db: Session,
@@ -176,22 +31,21 @@ def create_storage_location(
         storage_data: StorageLocationCreate
 ) -> StorageLocation:
     """Create a new storage location for a kitchen.
-
+    
     Args:
-        db: Database session.
-        kitchen_id: The ID of the kitchen this storage location belongs to.
-        storage_data: Validated storage location data.
-
+        db: Database session
+        kitchen_id: Kitchen ID
+        storage_data: Storage location creation data
+        
     Returns:
-        The newly created storage location.
-
-    Example:
-        >>> data = StorageLocationCreate(name="Refrigerator")
-        >>> result = create_storage_location(db, 123, data)
+        Created storage location instance
+        
+    Raises:
+        IntegrityError: If storage location name already exists in kitchen
     """
     db_storage = StorageLocation(
         kitchen_id=kitchen_id,
-        name=storage_data.name,
+        name=storage_data.name
     )
 
     db.add(db_storage)
@@ -201,61 +55,64 @@ def create_storage_location(
     return db_storage
 
 
-def get_storage_location_by_id(db: Session, storage_id: int) -> StorageLocation | None:
-    """Retrieve a storage location by its ID.
-
+def get_storage_location_by_id(
+        db: Session,
+        storage_location_id: int
+) -> StorageLocation | None:
+    """Get storage location by ID.
+    
     Args:
-        db: Database session.
-        storage_id: The unique identifier of the storage location.
-
+        db: Database session
+        storage_location_id: Storage location ID to fetch
+        
     Returns:
-        The storage location if found, None otherwise.
+        Storage location instance or None if not found
     """
-    return db.scalar(select(StorageLocation).where(StorageLocation.id == storage_id))
+    return db.scalar(
+        select(StorageLocation)
+        .where(StorageLocation.id == storage_location_id)
+    )
 
 
 def get_kitchen_storage_locations(
         db: Session,
         kitchen_id: int
 ) -> list[StorageLocation]:
-    """Retrieve all storage locations for a specific kitchen.
-
+    """Get all storage locations for a kitchen.
+    
     Args:
-        db: Database session.
-        kitchen_id: The ID of the kitchen.
-
+        db: Database session
+        kitchen_id: Kitchen ID
+        
     Returns:
-        A list of storage locations ordered by name.
+        List of storage location instances
     """
-    query = (
+    return list(db.scalars(
         select(StorageLocation)
         .where(StorageLocation.kitchen_id == kitchen_id)
         .order_by(StorageLocation.name)
-    )
-    return list(db.scalars(query).all())
+    ).all())
 
 
 def update_storage_location(
         db: Session,
-        storage_id: int,
+        storage_location_id: int,
         storage_data: StorageLocationUpdate
 ) -> StorageLocation | None:
     """Update an existing storage location.
-
+    
     Args:
-        db: Database session.
-        storage_id: The unique identifier of the storage location.
-        storage_data: Validated update data.
-
+        db: Database session
+        storage_location_id: Storage location ID to update
+        storage_data: Updated storage location data
+        
     Returns:
-        The updated storage location if found, None otherwise.
+        Updated storage location instance or None if not found
     """
-    db_storage = db.scalar(select(StorageLocation).where(StorageLocation.id == storage_id))
-
-    if db_storage is None:
+    db_storage = get_storage_location_by_id(db, storage_location_id)
+    if not db_storage:
         return None
 
-    # Update only provided fields
     update_data = storage_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_storage, field, value)
@@ -266,72 +123,55 @@ def update_storage_location(
     return db_storage
 
 
-def delete_storage_location(db: Session, storage_id: int) -> bool:
-    """Delete a storage location by its ID.
-
+def delete_storage_location(db: Session, storage_location_id: int) -> bool:
+    """Delete a storage location.
+    
     Args:
-        db: Database session.
-        storage_id: The unique identifier of the storage location.
-
+        db: Database session
+        storage_location_id: Storage location ID to delete
+        
     Returns:
-        True if the storage location was deleted, False if it wasn't found.
-
-    Note:
-        This will fail if the storage location contains inventory items
-        due to foreign key constraints.
+        True if deleted, False if not found
     """
-    db_storage = db.scalar(select(StorageLocation).where(StorageLocation.id == storage_id))
-
-    if db_storage is None:
+    db_storage = get_storage_location_by_id(db, storage_location_id)
+    if not db_storage:
         return False
 
     db.delete(db_storage)
     db.commit()
+
     return True
 
 
-# ------------------------------------------------------------------ #
-# InventoryItem CRUD                                                 #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# InventoryItem CRUD Operations                                      #
+# ================================================================== #
 
 def create_or_update_inventory_item(
         db: Session,
         kitchen_id: int,
         inventory_data: InventoryItemCreate
 ) -> InventoryItem:
-    """Create a new inventory item or update existing one if combination exists.
-
+    """Create a new inventory item or update existing one.
+    
+    If an inventory item for the same food item and storage location already
+    exists, the quantities will be combined and other fields updated.
+    
     Args:
-        db: Database session.
-        kitchen_id: The ID of the kitchen.
-        inventory_data: Validated inventory item data.
-
+        db: Database session
+        kitchen_id: Kitchen ID
+        inventory_data: Inventory item creation data
+        
     Returns:
-        The created or updated inventory item.
-
+        Created or updated inventory item instance
+        
     Raises:
-        ValueError: If food_item does not exist or has no base_unit_id.
-
-    Example:
-        >>> data = InventoryItemCreate(
-        ...     food_item_id=1,
-        ...     storage_location_id=2,
-        ...     quantity=500.0,  # 500 grams (base unit)
-        ...     min_quantity=100.0
-        ... )
-        >>> result = create_or_update_inventory_item(db, 123, data)
+        ValueError: If food_item_id or storage_location_id don't exist
     """
-    # Validate that food_item exists and has base_unit_id
-    food_item = get_food_item_by_id(db, inventory_data.food_item_id)
-    if food_item is None:
-        raise ValueError(f"Food item with ID {inventory_data.food_item_id} not found")
-
-    if food_item.base_unit_id is None:
-        raise ValueError(f"Food item {food_item.name} has no base unit defined")
-
-    # Check if inventory item already exists for this combination
+    # Check if item already exists
     existing_item = db.scalar(
-        select(InventoryItem).where(
+        select(InventoryItem)
+        .where(
             and_(
                 InventoryItem.kitchen_id == kitchen_id,
                 InventoryItem.food_item_id == inventory_data.food_item_id,
@@ -341,28 +181,30 @@ def create_or_update_inventory_item(
     )
 
     if existing_item:
-        # Update existing item (add to existing quantity)
+        # Update existing item - combine quantities
         existing_item.quantity += inventory_data.quantity
+
+        # Update other fields if provided
         if inventory_data.min_quantity is not None:
             existing_item.min_quantity = inventory_data.min_quantity
         if inventory_data.expiration_date is not None:
             existing_item.expiration_date = inventory_data.expiration_date
+
         existing_item.last_updated = datetime.datetime.now(datetime.timezone.utc)
         
         db.commit()
         db.refresh(existing_item)
+
         return existing_item
     else:
-        # Create new inventory item
-        # Note: Quantity is stored in base unit as provided
+        # Create new item
         db_inventory = InventoryItem(
             kitchen_id=kitchen_id,
             food_item_id=inventory_data.food_item_id,
             storage_location_id=inventory_data.storage_location_id,
-            quantity=inventory_data.quantity,  # Already in base unit
+            quantity=inventory_data.quantity,
             min_quantity=inventory_data.min_quantity,
-            expiration_date=inventory_data.expiration_date,
-            last_updated=datetime.datetime.now(datetime.timezone.utc),
+            expiration_date=inventory_data.expiration_date
         )
 
         db.add(db_inventory)
@@ -372,153 +214,116 @@ def create_or_update_inventory_item(
         return db_inventory
 
 
-def get_inventory_item_by_id(db: Session, inventory_id: int) -> InventoryItem | None:
-    """Retrieve an inventory item by its ID with related objects.
-
+def get_inventory_item_by_id(db: Session, inventory_item_id: int) -> InventoryItem | None:
+    """Get inventory item by ID with related data.
+    
     Args:
-        db: Database session.
-        inventory_id: The unique identifier of the inventory item.
-
+        db: Database session
+        inventory_item_id: Inventory item ID to fetch
+        
     Returns:
-        The inventory item with related food_item and storage_location if found.
+        Inventory item instance with related data or None if not found
     """
     return db.scalar(
         select(InventoryItem)
         .options(
-            joinedload(InventoryItem.food_item),
-            joinedload(InventoryItem.storage_location)
+            selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
+            selectinload(InventoryItem.storage_location)
         )
-        .where(InventoryItem.id == inventory_id)
+        .where(InventoryItem.id == inventory_item_id)
     )
 
 
 def get_kitchen_inventory(
         db: Session,
         kitchen_id: int,
-        skip: int = 0,
-        limit: int = 100
+        food_item_id: int | None = None,
+        storage_location_id: int | None = None
 ) -> list[InventoryItem]:
-    """Retrieve all inventory items for a specific kitchen.
-
+    """Get inventory items for a kitchen with optional filtering.
+    
     Args:
-        db: Database session.
-        kitchen_id: The ID of the kitchen.
-        skip: Number of records to skip.
-        limit: Maximum number of records to return.
-
+        db: Database session
+        kitchen_id: Kitchen ID
+        food_item_id: Optional food item filter
+        storage_location_id: Optional storage location filter
+        
     Returns:
-        A list of inventory items with related objects.
+        List of inventory item instances with related data
     """
     query = (
         select(InventoryItem)
         .options(
-            joinedload(InventoryItem.food_item),
-            joinedload(InventoryItem.storage_location)
+            selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
+            selectinload(InventoryItem.storage_location)
         )
         .where(InventoryItem.kitchen_id == kitchen_id)
-        .order_by(InventoryItem.food_item.has(FoodItem.name))
-        .offset(skip)
-        .limit(limit)
+        .order_by(InventoryItem.food_item_id, InventoryItem.storage_location_id)
     )
+
+    if food_item_id is not None:
+        query = query.where(InventoryItem.food_item_id == food_item_id)
+
+    if storage_location_id is not None:
+        query = query.where(InventoryItem.storage_location_id == storage_location_id)
+    
     return list(db.scalars(query).all())
 
 
 def get_kitchen_inventory_grouped_by_storage(
         db: Session,
         kitchen_id: int
-) -> KitchenInventorySummary:
-    """Retrieve kitchen inventory grouped by storage location with summary stats.
-
+) -> dict[StorageLocation, list[InventoryItem]]:
+    """Get kitchen inventory grouped by storage location.
+    
     Args:
-        db: Database session.
-        kitchen_id: The ID of the kitchen.
-
+        db: Database session
+        kitchen_id: Kitchen ID
+        
     Returns:
-        Complete inventory summary with items grouped by storage location.
+        Dictionary mapping storage locations to their inventory items
     """
     # Get all storage locations for the kitchen
     storage_locations = get_kitchen_storage_locations(db, kitchen_id)
 
-    # Get all inventory items for the kitchen
-    inventory_items = get_kitchen_inventory(db, kitchen_id, limit=1000)  # Large limit
+    result = {}
 
-    # Group items by storage location
-    storage_with_inventory = []
-    total_items = len(inventory_items)
-    low_stock_items = 0
-    expired_items = 0
-    expires_soon_items = 0
+    for storage in storage_locations:
+        # Get inventory items for this storage location
+        items = get_kitchen_inventory(
+            db=db,
+            kitchen_id=kitchen_id,
+            storage_location_id=storage.id
+        )
+        result[storage] = items
 
-    for storage_location in storage_locations:
-        # Filter items for this storage location
-        location_items = [
-            item for item in inventory_items
-            if item.storage_location_id == storage_location.id
-        ]
-
-        # Count items for summary
-        for item in location_items:
-            if item.is_low_stock:
-                low_stock_items += 1
-            if item.is_expired:
-                expired_items += 1
-            if item.expires_soon:
-                expires_soon_items += 1
-
-        storage_with_inventory.append(StorageLocationWithInventory(
-            id=storage_location.id,
-            kitchen_id=storage_location.kitchen_id,
-            name=storage_location.name,
-            inventory_items=location_items
-        ))
-    
-    return KitchenInventorySummary(
-        kitchen_id=kitchen_id,
-        storage_locations=storage_with_inventory,
-        total_items=total_items,
-        low_stock_items=low_stock_items,
-        expired_items=expired_items,
-        expires_soon_items=expires_soon_items
-    )
+    return result
 
 
 def update_inventory_item(
         db: Session,
-        inventory_id: int,
+        inventory_item_id: int,
         inventory_data: InventoryItemUpdate
 ) -> InventoryItem | None:
     """Update an existing inventory item.
-
+    
     Args:
-        db: Database session.
-        inventory_id: The unique identifier of the inventory item.
-        inventory_data: Validated update data.
-
+        db: Database session
+        inventory_item_id: Inventory item ID to update
+        inventory_data: Updated inventory item data
+        
     Returns:
-        The updated inventory item if found, None otherwise.
-
-    Note:
-        When updating quantity, the new value should be in base units.
+        Updated inventory item instance or None if not found
     """
-    db_inventory = get_inventory_item_by_id(db, inventory_id)
-
-    if db_inventory is None:
+    db_inventory = get_inventory_item_by_id(db, inventory_item_id)
+    if not db_inventory:
         return None
 
-    # Validate food_item if being updated
-    if inventory_data.food_item_id is not None:
-        food_item = get_food_item_by_id(db, inventory_data.food_item_id)
-        if food_item is None:
-            raise ValueError(f"Food item with ID {inventory_data.food_item_id} not found")
-        if food_item.base_unit_id is None:
-            raise ValueError(f"Food item {food_item.name} has no base unit defined")
-
-    # Update only provided fields
     update_data = inventory_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_inventory, field, value)
 
-    # Update timestamp
+    # Always update the timestamp
     db_inventory.last_updated = datetime.datetime.now(datetime.timezone.utc)
 
     db.commit()
@@ -527,126 +332,152 @@ def update_inventory_item(
     return db_inventory
 
 
-def delete_inventory_item(db: Session, inventory_id: int) -> bool:
-    """Delete an inventory item by its ID.
-
+def delete_inventory_item(db: Session, inventory_item_id: int) -> bool:
+    """Delete an inventory item.
+    
     Args:
-        db: Database session.
-        inventory_id: The unique identifier of the inventory item.
-
+        db: Database session
+        inventory_item_id: Inventory item ID to delete
+        
     Returns:
-        True if the inventory item was deleted, False if it wasn't found.
+        True if deleted, False if not found
     """
-    db_inventory = get_inventory_item_by_id(db, inventory_id)
-
-    if db_inventory is None:
+    db_inventory = get_inventory_item_by_id(db, inventory_item_id)
+    if not db_inventory:
         return False
 
     db.delete(db_inventory)
     db.commit()
+
     return True
 
+
+# ================================================================== #
+# Inventory Analysis Operations                                      #
+# ================================================================== #
 
 def get_low_stock_items(
         db: Session,
         kitchen_id: int
 ) -> list[InventoryItem]:
-    """Retrieve all inventory items that are below their minimum quantity.
-
+    """Get all inventory items that are below their minimum quantity threshold.
+    
     Args:
-        db: Database session.
-        kitchen_id: The ID of the kitchen.
-
+        db: Database session
+        kitchen_id: Kitchen ID
+        
     Returns:
-        A list of inventory items that are low in stock.
+        List of low stock inventory items with related data
     """
-    query = (
+    return list(db.scalars(
         select(InventoryItem)
         .options(
-            joinedload(InventoryItem.food_item),
-            joinedload(InventoryItem.storage_location)
+            selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
+            selectinload(InventoryItem.storage_location)
         )
         .where(
             and_(
                 InventoryItem.kitchen_id == kitchen_id,
-                InventoryItem.min_quantity.isnot(None),
+                InventoryItem.min_quantity.is_not(None),
                 InventoryItem.quantity < InventoryItem.min_quantity
             )
         )
-        .order_by(InventoryItem.food_item.has(FoodItem.name))
-    )
-    return list(db.scalars(query).all())
+        .order_by(InventoryItem.food_item_id)
+    ).all())
 
 
 def get_expiring_items(
         db: Session,
         kitchen_id: int,
-        days: int = EXPIRING_ITEMS_THRESHOLD_DAYS
+        threshold_days: int = EXPIRING_ITEMS_THRESHOLD_DAYS
 ) -> list[InventoryItem]:
-    """Retrieve all inventory items that expire within the specified number of days.
-
+    """Get all inventory items that expire within the specified threshold.
+    
     Args:
-        db: Database session.
-        kitchen_id: The ID of the kitchen.
-        days: Number of days to check ahead.
-
+        db: Database session
+        kitchen_id: Kitchen ID
+        threshold_days: Number of days to consider as "expiring soon"
+        
     Returns:
-        A list of inventory items that expire soon or have already expired.
+        List of expiring inventory items with related data, ordered by expiration date
     """
-    threshold_date = datetime.date.today() + datetime.timedelta(days=days)
+    threshold_date = datetime.date.today() + datetime.timedelta(days=threshold_days)
 
-    query = (
+    return list(db.scalars(
         select(InventoryItem)
         .options(
-            joinedload(InventoryItem.food_item),
-            joinedload(InventoryItem.storage_location)
+            selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
+            selectinload(InventoryItem.storage_location)
         )
         .where(
             and_(
                 InventoryItem.kitchen_id == kitchen_id,
-                InventoryItem.expiration_date.isnot(None),
+                InventoryItem.expiration_date.is_not(None),
                 InventoryItem.expiration_date <= threshold_date
             )
         )
         .order_by(InventoryItem.expiration_date)
-    )
-    return list(db.scalars(query).all())
+    ).all())
 
 
-# ------------------------------------------------------------------ #
-# Unit Conversion Support (Future Implementation)                    #
-# ------------------------------------------------------------------ #
+def get_expired_items(db: Session, kitchen_id: int) -> list[InventoryItem]:
+    """Get all inventory items that have already expired.
+    
+    Args:
+        db: Database session
+        kitchen_id: Kitchen ID
+        
+    Returns:
+        List of expired inventory items with related data
+    """
+    today = datetime.date.today()
+
+    return list(db.scalars(
+        select(InventoryItem)
+        .options(
+            selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
+            selectinload(InventoryItem.storage_location)
+        )
+        .where(
+            and_(
+                InventoryItem.kitchen_id == kitchen_id,
+                InventoryItem.expiration_date.is_not(None),
+                InventoryItem.expiration_date < today
+            )
+        )
+        .order_by(InventoryItem.expiration_date)
+    ).all())
+
+
+# ================================================================== #
+# Unit Conversion Helper (Future)                                    #
+# ================================================================== #
 
 def convert_quantity_to_base_unit(
         db: Session,
         food_item_id: int,
         quantity: float,
-        from_unit_id: int
+        input_unit_id: int
 ) -> float:
-    """Convert quantity from specified unit to base unit.
+    """Convert a quantity from input unit to the food item's base unit.
     
-    This function is a placeholder for future implementation when
-    unit conversion tables are available.
+    This is a placeholder for future unit conversion functionality.
+    Currently returns the quantity unchanged.
     
     Args:
-        db: Database session.
-        food_item_id: ID of the food item.
-        quantity: Quantity in the source unit.
-        from_unit_id: ID of the source unit.
+        db: Database session
+        food_item_id: Food item ID
+        quantity: Quantity in input unit
+        input_unit_id: Input unit ID
         
     Returns:
-        Quantity converted to base unit.
+        Quantity converted to base unit
         
-    Note:
-        Currently returns the original quantity unchanged.
-        Future implementation will look up conversion factors from:
-        - unit_conversions table (for standard unit conversions)
-        - food_item_unit_conversions table (for food-specific conversions)
+    Raises:
+        NotImplementedError: Unit conversion is not yet implemented
     """
-    # TODO: Implement actual unit conversion logic
-    # 1. Get food_item.base_unit_id
-    # 2. Check if from_unit_id == base_unit_id (no conversion needed)
-    # 3. Look up conversion factor in unit_conversions or food_item_unit_conversions
-    # 4. Apply conversion: base_quantity = quantity * conversion_factor
+    # TODO: Implement unit conversion using food-specific conversions
+    # and fallback to generic unit conversions
 
-    return quantity  # Placeholder - no conversion yet
+    # For now, assume quantity is already in base unit
+    return quantity

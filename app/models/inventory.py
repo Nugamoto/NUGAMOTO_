@@ -5,67 +5,26 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, String, UniqueConstraint, DateTime
+from sqlalchemy import (
+    Date, DateTime, Float, ForeignKey, String, UniqueConstraint
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.config import settings
 from app.db.base import Base
-
-# Import settings at module level
-EXPIRING_ITEMS_THRESHOLD_DAYS = settings.expiring_items_threshold_days
+from app.models.food import FoodItem
 
 if TYPE_CHECKING:
     from app.models.kitchen import Kitchen
 
-
-class FoodItem(Base):
-    """Represents a row in the ``food_items`` table.
-
-    Food items are global entities that can be used across all kitchens.
-    They represent basic food categories like "Tomato", "Rice", etc.
-    
-    In v2.0, each food item has a base_unit_id that defines the standard
-    measurement unit for storing quantities (e.g., grams, ml, pieces).
-    """
-
-    __tablename__ = "food_items"
-
-    # ------------------------------------------------------------------ #
-    # Columns                                                             #
-    # ------------------------------------------------------------------ #
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    category: Mapped[str | None] = mapped_column(String(100))
-    base_unit_id: Mapped[int] = mapped_column(
-        ForeignKey("units.id"), nullable=False,
-        comment="Reference to the base unit for this food item"
-    )
-
-    # ------------------------------------------------------------------ #
-    # Relationships                                                       #
-    # ------------------------------------------------------------------ #
-    inventory_items: Mapped[list[InventoryItem]] = relationship(
-        "InventoryItem", back_populates="food_item"
-    )
-
-    # Note: base_unit relationship would be added when units table is implemented
-    # base_unit: Mapped[Unit] = relationship("Unit", foreign_keys=[base_unit_id])
-
-    # ------------------------------------------------------------------ #
-    # Dunder                                                               #
-    # ------------------------------------------------------------------ #
-    def __repr__(self) -> str:  # noqa: D401 – we want a short repr
-        return (
-            f"FoodItem(id={self.id!r}, name={self.name!r}, "
-            f"category={self.category!r}, base_unit_id={self.base_unit_id!r})"
-        )
+# Threshold for considering items as "expiring soon" (in days)
+EXPIRING_ITEMS_THRESHOLD_DAYS = 7
 
 
 class StorageLocation(Base):
     """Represents a row in the ``storage_locations`` table.
 
-    Storage locations are kitchen-specific places where food can be stored,
-    such as "Fridge", "Pantry", "Freezer", etc.
+    Storage locations are specific areas within a kitchen where
+    inventory items can be stored (e.g., "Refrigerator", "Pantry", "Freezer").
     """
 
     __tablename__ = "storage_locations"
@@ -75,23 +34,37 @@ class StorageLocation(Base):
     # ------------------------------------------------------------------ #
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     kitchen_id: Mapped[int] = mapped_column(
-        ForeignKey("kitchens.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("kitchens.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
     )
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        comment="Name of the storage location (e.g., 'Refrigerator', 'Pantry')"
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
     # ------------------------------------------------------------------ #
-    kitchen: Mapped[Kitchen] = relationship("Kitchen")
+    kitchen: Mapped[Kitchen] = relationship(
+        "Kitchen",
+        back_populates="storage_locations"
+    )
     inventory_items: Mapped[list[InventoryItem]] = relationship(
-        "InventoryItem", back_populates="storage_location"
+        "InventoryItem",
+        back_populates="storage_location",
+        cascade="all, delete-orphan"
     )
 
     # ------------------------------------------------------------------ #
-    # Constraints                                                         #
+    # Table Constraints                                                   #
     # ------------------------------------------------------------------ #
     __table_args__ = (
-        UniqueConstraint("kitchen_id", "name", name="uq_kitchen_storage_name"),
+        UniqueConstraint(
+            'kitchen_id', 'name',
+            name='uq_storage_location_kitchen_name'
+        ),
     )
 
     # ------------------------------------------------------------------ #
@@ -107,16 +80,9 @@ class StorageLocation(Base):
 class InventoryItem(Base):
     """Represents a row in the ``inventory_items`` table.
 
-    Inventory items link kitchens, food items, and storage locations together
-    with quantity and expiration information. This is where the actual inventory
-    data is stored.
-
-    In v2.0, quantities are always stored in the base unit defined by 
-    food_item.base_unit_id. No unit field is needed here as the unit
-    is determined by the food item's base unit.
-
-    Note: min_quantity can be used later by AI services to automatically
-    generate shopping lists when items run low.
+    Inventory items track specific food items within a kitchen's storage locations.
+    Each item has a quantity stored in the food item's base unit and optional
+    minimum quantity thresholds and expiration dates.
     """
 
     __tablename__ = "inventory_items"
@@ -126,92 +92,110 @@ class InventoryItem(Base):
     # ------------------------------------------------------------------ #
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     kitchen_id: Mapped[int] = mapped_column(
-        ForeignKey("kitchens.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("kitchens.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
     )
     food_item_id: Mapped[int] = mapped_column(
-        ForeignKey("food_items.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("food_items.id"),
+        nullable=False,
+        index=True,
+        comment="Reference to the food item being stored"
     )
     storage_location_id: Mapped[int] = mapped_column(
-        ForeignKey("storage_locations.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("storage_locations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Where this item is stored within the kitchen"
     )
     quantity: Mapped[float] = mapped_column(
-        nullable=False, default=0.0,
-        comment="Quantity in the food item's base unit"
+        Float,
+        nullable=False,
+        default=0.0,
+        comment="Current quantity in the food item's base unit"
     )
     min_quantity: Mapped[float | None] = mapped_column(
-        default=None,
-        comment="Minimum quantity threshold in base unit"
+        Float,
+        nullable=True,
+        comment="Minimum quantity threshold for low stock alerts"
     )
-    expiration_date: Mapped[datetime.date | None] = mapped_column(Date, default=None)
+    expiration_date: Mapped[datetime.date | None] = mapped_column(
+        Date,
+        nullable=True,
+        comment="Expiration date of this specific inventory item"
+    )
     last_updated: Mapped[datetime.datetime] = mapped_column(
-        DateTime, nullable=False,
-        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
     # ------------------------------------------------------------------ #
-    kitchen: Mapped[Kitchen] = relationship("Kitchen")
-    food_item: Mapped[FoodItem] = relationship("FoodItem", back_populates="inventory_items")
+    kitchen: Mapped[Kitchen] = relationship(
+        "Kitchen",
+        back_populates="inventory_items"
+    )
+    food_item: Mapped[FoodItem] = relationship(
+        "FoodItem",
+        back_populates="inventory_items"
+    )
     storage_location: Mapped[StorageLocation] = relationship(
-        "StorageLocation", back_populates="inventory_items"
+        "StorageLocation",
+        back_populates="inventory_items"
     )
 
     # ------------------------------------------------------------------ #
-    # Constraints                                                         #
+    # Table Constraints                                                   #
     # ------------------------------------------------------------------ #
     __table_args__ = (
         UniqueConstraint(
-            "kitchen_id", "food_item_id", "storage_location_id",
-            name="uq_kitchen_food_storage"
+            'kitchen_id', 'food_item_id', 'storage_location_id',
+            name='uq_inventory_item_kitchen_food_storage'
         ),
     )
 
     # ------------------------------------------------------------------ #
-    # Properties                                                          #
+    # Business Logic Methods                                              #
     # ------------------------------------------------------------------ #
-    @property
     def is_low_stock(self) -> bool:
-        """Check if this item is below minimum quantity threshold.
-
+        """Check if this inventory item is below its minimum quantity threshold.
+        
         Returns:
             True if quantity is below min_quantity, False otherwise.
-            Returns False if min_quantity is not set.
-
-        Note:
-            This property can be used by AI services to identify items
-            that should be added to shopping lists.
+            If min_quantity is not set, returns False.
         """
         if self.min_quantity is None:
             return False
         return self.quantity < self.min_quantity
 
-    @property
     def is_expired(self) -> bool:
-        """Check if this item has expired.
-
+        """Check if this inventory item has expired.
+        
         Returns:
             True if expiration_date is in the past, False otherwise.
-            Returns False if expiration_date is not set.
+            If expiration_date is not set, returns False.
         """
         if self.expiration_date is None:
             return False
         return self.expiration_date < datetime.date.today()
 
-    @property
-    def expires_soon(self, days: int = EXPIRING_ITEMS_THRESHOLD_DAYS) -> bool:
-        """Check if this item expires within the specified number of days.
-
+    def expires_soon(self, threshold_days: int = EXPIRING_ITEMS_THRESHOLD_DAYS) -> bool:
+        """Check if this inventory item will expire within the specified threshold.
+        
         Args:
-            days: Number of days to check ahead (default: from settings).
-
+            threshold_days: Number of days to consider as "expiring soon"
+            
         Returns:
-            True if expiration_date is within the specified days, False otherwise.
-            Returns False if expiration_date is not set.
+            True if expiration_date is within threshold_days from today, False otherwise.
+            If expiration_date is not set, returns False.
         """
         if self.expiration_date is None:
             return False
-        threshold_date = datetime.date.today() + datetime.timedelta(days=days)
+
+        threshold_date = datetime.date.today() + datetime.timedelta(days=threshold_days)
         return self.expiration_date <= threshold_date
 
     # ------------------------------------------------------------------ #
@@ -220,5 +204,6 @@ class InventoryItem(Base):
     def __repr__(self) -> str:  # noqa: D401 – we want a short repr
         return (
             f"InventoryItem(id={self.id!r}, kitchen_id={self.kitchen_id!r}, "
-            f"food_item_id={self.food_item_id!r}, quantity={self.quantity!r})"
+            f"food_item_id={self.food_item_id!r}, quantity={self.quantity!r}, "
+            f"storage_location_id={self.storage_location_id!r})"
         )
