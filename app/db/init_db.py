@@ -21,6 +21,8 @@ from app.models import inventory  # noqa: F401  – ensures Inventory model is r
 from app.models import recipe  # noqa: F401  – ensures Recipe model is registered
 from app.models import ai  # noqa: F401  – ensures AIModelOutput model is registered
 from app.models import shopping  # noqa: F401  – ensures ShoppingList model is registered
+from app.models import core  # noqa: F401  – ensures Unit models are registered
+from app.models import food  # noqa: F401  – ensures FoodItem models are registered
 
 
 def init_db(*, reset: bool = False) -> None:
