@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.crud import ai as crud_ai
-from app.models.ai import OutputType, OutputFormat
+from app.models.ai import OutputType, OutputFormat, AIOutputTargetType
 from app.schemas.ai import (
     AIModelOutputCreate,
     AIModelOutputRead,
@@ -31,7 +31,7 @@ def create_ai_output(
     This endpoint is used to log AI-generated content for tracking,
     analytics, and future reference. Supports all types of AI outputs
     including recipes, nutrition tips, coaching messages, shopping suggestions,
-    and general content.
+    and general content with polymorphic targeting to any entity type.
 
     Args:
         output_data: Validated AI output payload.
@@ -49,18 +49,21 @@ def create_ai_output(
             "output_format": "markdown",
             "prompt_used": "Generate a healthy pasta recipe",
             "raw_output": "# Healthy Veggie Pasta\\n\\n...",
+            "target_type": "Recipe",
+            "target_id": 456,
             "extra_data": {
                 "tokens": 250,
                 "cost": 0.005,
                 "temperature": 0.7
-            },
-            "target_id": 456
+            }
         }
         ```
 
     Note:
         This endpoint is primarily used by AI services internally,
         but can also be used for manual logging or testing purposes.
+        The target_type and target_id fields enable polymorphic associations
+        with any entity in the system.
     """
     db_output = crud_ai.create_ai_output(db, output_data)
     return AIModelOutputRead.model_validate(db_output, from_attributes=True)
@@ -90,7 +93,7 @@ def get_ai_output(
 
     Example:
         ```
-        GET /ai/outputs/123
+        GET /v1/ai/outputs/123
         ```
 
     Note:
@@ -128,7 +131,7 @@ def delete_ai_output(
 
     Example:
         ```
-        DELETE /ai/outputs/123
+        DELETE /v1/ai/outputs/123
         ```
 
     Note:
@@ -156,6 +159,7 @@ def get_all_ai_outputs(
         model_version: str | None = Query(None, description="Filter by AI model version"),
         output_type: OutputType | None = Query(None, description="Filter by output type"),
         output_format: OutputFormat | None = Query(None, description="Filter by output format"),
+        target_type: AIOutputTargetType | None = Query(None, description="Filter by target entity type"),
         target_id: int | None = Query(None, gt=0, description="Filter by target entity ID"),
         prompt_contains: str | None = Query(None, description="Filter by text in prompt"),
         skip: int = Query(0, ge=0, description="Number of records to skip"),
@@ -164,14 +168,15 @@ def get_all_ai_outputs(
 ) -> list[AIModelOutputRead]:
     """Retrieve all AI outputs with optional search and filtering.
 
-    Supports pagination and various filter criteria. Results are ordered
-    by creation time (newest first) for better usability.
+    Supports pagination and various filter criteria including polymorphic target filtering.
+    Results are ordered by creation time (newest first) for better usability.
 
     Args:
         user_id: Optional filter for specific user.
         model_version: Optional filter for AI model version (gpt-4, claude-3, etc.).
         output_type: Optional filter for output type (recipe, nutrition_tip, etc.).
         output_format: Optional filter for output format (json, markdown, plain_text).
+        target_type: Optional filter for target entity type (Recipe, ShoppingList, etc.).
         target_id: Optional filter for linked entity ID.
         prompt_contains: Optional text search within prompts (case-insensitive).
         skip: Number of records to skip for pagination.
@@ -183,23 +188,67 @@ def get_all_ai_outputs(
 
     Example:
         ```
-        GET /ai/outputs/?user_id=123&output_type=recipe&model_version=gpt-4&limit=20
+        GET /v1/ai/outputs/?user_id=123&target_type=Recipe&output_type=recipe&limit=20
         ```
 
     Note:
         This endpoint is useful for analytics, debugging AI outputs,
-        and building AI output management interfaces.
+        and building AI output management interfaces. The target_type
+        filter enables querying all AI outputs related to specific entity types.
     """
     search_params = AIOutputSearchParams(
         user_id=user_id,
         model_version=model_version,
         output_type=output_type,
         output_format=output_format,
+        target_type=target_type,
         target_id=target_id,
         prompt_contains=prompt_contains,
     )
 
     outputs = crud_ai.get_all_ai_outputs(db, search_params, skip, limit)
+    return [AIModelOutputRead.model_validate(output, from_attributes=True) for output in outputs]
+
+
+@router.get(
+    "/outputs/targets/{target_type}/{target_id}",
+    response_model=list[AIModelOutputRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get all AI outputs for a specific target entity",
+)
+def get_ai_outputs_by_target(
+        target_type: AIOutputTargetType,
+        target_id: int,
+        skip: int = Query(0, ge=0, description="Number of records to skip"),
+        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+        db: Session = Depends(get_db),
+) -> list[AIModelOutputRead]:
+    """Retrieve all AI outputs associated with a specific target entity.
+
+    This endpoint provides a convenient way to fetch all AI-generated content
+    related to a particular entity (e.g., all AI outputs for a specific recipe).
+
+    Args:
+        target_type: Type of the target entity.
+        target_id: ID of the target entity.
+        skip: Number of records to skip for pagination.
+        limit: Maximum number of records to return.
+        db: Injected database session.
+
+    Returns:
+        A list of AI outputs for the specified target entity.
+
+    Example:
+        ```
+        GET /v1/ai/outputs/targets/Recipe/456
+        ```
+
+    Note:
+        This endpoint is particularly useful for displaying AI-generated
+        content related to specific entities in the UI, such as showing
+        all AI-generated tips or suggestions for a particular recipe.
+    """
+    outputs = crud_ai.get_ai_outputs_by_target(db, target_type, target_id, skip, limit)
     return [AIModelOutputRead.model_validate(output, from_attributes=True) for output in outputs]
 
 
@@ -213,7 +262,7 @@ def get_ai_output_summary(db: Session = Depends(get_db)) -> AIOutputSummary:
     """Retrieve summary statistics for all AI outputs.
 
     Provides overview statistics including total counts and breakdowns
-    by user, AI model, output type, and format. Useful for analytics dashboards.
+    by user, AI model, output type, format, and target type. Useful for analytics dashboards.
 
     Args:
         db: Injected database session.
@@ -244,6 +293,12 @@ def get_ai_output_summary(db: Session = Depends(get_db)) -> AIOutputSummary:
                 "markdown": 700,
                 "json": 400,
                 "plain_text": 150
+            },
+            "outputs_by_target_type": {
+                "Recipe": 600,
+                "ShoppingList": 300,
+                "InventoryItem": 200,
+                "User": 150
             }
         }
         ```
@@ -251,5 +306,7 @@ def get_ai_output_summary(db: Session = Depends(get_db)) -> AIOutputSummary:
     Note:
         This endpoint is particularly useful for monitoring AI usage patterns,
         user behavior analysis, and making decisions about AI service allocation.
+        The target type breakdown shows which entity types are most frequently
+        enhanced with AI-generated content.
     """
     return crud_ai.get_ai_output_summary(db)

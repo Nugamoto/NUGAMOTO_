@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from app.models.ai import OutputType, OutputFormat
+from app.models.ai import OutputType, OutputFormat, AIOutputTargetType
 
 
 class _AIModelOutputBase(BaseModel):
@@ -30,10 +30,14 @@ class _AIModelOutputBase(BaseModel):
         default=None,
         description="Additional metadata (tokens, cost, model info, etc.)"
     )
+    target_type: AIOutputTargetType = Field(
+        ...,
+        description="Type of target entity this AI output relates to"
+    )
     target_id: int | None = Field(
         default=None,
         gt=0,
-        description="Optional ID linking to related entity (recipe, user, etc.)"
+        description="Optional ID of the target entity (recipe, shopping list, etc.)"
     )
 
     model_config = ConfigDict(from_attributes=True)
@@ -72,6 +76,10 @@ class AIOutputSearchParams(BaseModel):
         default=None,
         description="Filter by output format"
     )
+    target_type: AIOutputTargetType | None = Field(
+        default=None,
+        description="Filter by target entity type"
+    )
     target_id: int | None = Field(
         default=None,
         gt=0,
@@ -94,5 +102,6 @@ class AIOutputSummary(BaseModel):
     outputs_by_model: dict[str, int] = Field(..., description="Count by AI model")
     outputs_by_type: dict[str, int] = Field(..., description="Count by output type")
     outputs_by_format: dict[str, int] = Field(..., description="Count by output format")
+    outputs_by_target_type: dict[str, int] = Field(..., description="Count by target type")
 
     model_config = ConfigDict(from_attributes=True)
