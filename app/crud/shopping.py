@@ -8,6 +8,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import Select
 
+from app.core.enums import ShoppingListType
 from app.models.shopping import (
     ShoppingList,
     ShoppingProduct,
@@ -24,6 +25,7 @@ from app.schemas.shopping import (
     ShoppingProductAssignmentSearchParams,
     ShoppingListWithProducts
 )
+from app.schemas.shopping import ShoppingProductAssignmentRead
 
 
 # ================================================================== #
@@ -181,7 +183,10 @@ def get_shopping_list_with_products(
         name=shopping_list.name,
         type=shopping_list.type,
         created_at=shopping_list.created_at,
-        product_assignments=assignments,
+        product_assignments=[
+            ShoppingProductAssignmentRead.model_validate(assignment, from_attributes=True)
+            for assignment in assignments
+        ],
         total_products=total_products,
         estimated_total=estimated_total
     )
@@ -607,31 +612,88 @@ def create_product_and_assign_to_list(
 def calculate_quantity_in_base_unit(
         db: Session,
         food_item_id: int,
-        package_quantity: float,
-        package_unit_id: int
+        package_unit_id: int,
+        package_quantity: float
 ) -> float:
     """Calculate equivalent quantity in food item's base unit.
-    
-    This function is a placeholder for future implementation when
-    unit conversion tables are available.
-    
-    Args:
-        db: Database session.
-        food_item_id: ID of the food item.
-        package_quantity: Quantity in package unit.
-        package_unit_id: ID of the package unit.
-        
-    Returns:
-        Equivalent quantity in base unit.
-        
-    Note:
-        Currently returns the original quantity unchanged.
-        Future implementation will look up conversion factors.
-    """
-    # TODO: Implement actual unit conversion logic
-    # 1. Get food_item.base_unit_id
-    # 2. Check if package_unit_id == base_unit_id (no conversion needed)
-    # 3. Look up conversion factor in unit_conversions table
-    # 4. Apply conversion: base_quantity = package_quantity * conversion_factor
 
-    return package_quantity  # Placeholder - no conversion yet
+    This function converts package quantities to the food item's base unit
+    using conversion priorities:
+    1. If package unit equals base unit, return quantity unchanged
+    2. Look for food-specific conversions in food_item_unit_conversions
+    3. Fallback to generic unit conversions
+    4. Raise ValueError if no conversion path exists
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        package_unit_id: Package unit ID
+        package_quantity: Quantity in package unit
+
+    Returns:
+        Equivalent quantity in food item's base unit
+
+    Raises:
+        ValueError: If food item not found or no conversion path exists
+
+    Example:
+        >>> # Convert 1 pack (500g) to base unit (grams)
+        >>> result = calculate_quantity_in_base_unit(db, 1, 2, 1.0)
+        >>> # Returns: 500.0
+    """
+    # Import here to avoid circular imports
+    from app.models.food import FoodItem
+    from app.models.core import Unit
+    from app.crud import food as crud_food
+    from app.crud import core as crud_core
+
+    # 1. Get the food item with base_unit_id
+    food_item = db.scalar(
+        db.query(FoodItem).filter(FoodItem.id == food_item_id)
+    )
+    if not food_item:
+        raise ValueError(f"Food item with ID {food_item_id} not found")
+
+    base_unit_id = food_item.base_unit_id
+
+    # 2. If package unit equals base unit, return quantity unchanged
+    if package_unit_id == base_unit_id:
+        return package_quantity
+
+    # 3. Check food-specific conversions first (higher priority)
+    food_conversion_factor = crud_food.get_conversion_for_food_item(
+        db=db,
+        food_item_id=food_item_id,
+        from_unit_id=package_unit_id,
+        to_unit_id=base_unit_id
+    )
+
+    if food_conversion_factor is not None:
+        return package_quantity * food_conversion_factor
+
+    # 4. Fallback to generic unit conversions
+    generic_conversion_factor = crud_core.get_conversion_factor(
+        db=db,
+        from_unit_id=package_unit_id,
+        to_unit_id=base_unit_id
+    )
+
+    if generic_conversion_factor is not None:
+        return package_quantity * generic_conversion_factor
+
+    # 5. No conversion path found
+    # Get unit names for better error message
+    package_unit = db.scalar(
+        db.query(Unit).filter(Unit.id == package_unit_id)
+    )
+    base_unit = db.scalar(
+        db.query(Unit).filter(Unit.id == base_unit_id)
+    )
+
+    package_unit_name = package_unit.name if package_unit else f"ID {package_unit_id}"
+    base_unit_name = base_unit.name if base_unit else f"ID {base_unit_id}"
+
+    raise ValueError(
+        f"No conversion path found from '{package_unit_name}' to '{base_unit_name}' "
+        f"for food item '{food_item.name}' (ID {food_item_id})"
+    )

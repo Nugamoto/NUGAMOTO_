@@ -9,7 +9,6 @@ from app.schemas.shopping import (
     ShoppingListCreate, ShoppingListRead, ShoppingListUpdate,
     ShoppingProductCreate, ShoppingProductRead, ShoppingProductUpdate,
     ShoppingProductAssignmentCreate, ShoppingProductAssignmentRead,
-    ShoppingProductAssignmentUpdate,
     ShoppingProductSearchParams, ShoppingProductAssignmentSearchParams,
     ShoppingListWithProducts
 )
@@ -60,8 +59,34 @@ def create_shopping_product(
         - package_unit_id: Reference to units table (e.g., "pack", "bottle")
         - quantity_in_base_unit: Equivalent amount in food item's base unit
         - This allows for proper inventory calculations and comparisons
+        - If quantity_in_base_unit is not provided, it will be calculated automatically
     """
     try:
+        # If quantity_in_base_unit is not provided, calculate it dynamically
+        if product_data.quantity_in_base_unit is None:
+            try:
+                calculated_quantity = crud_shopping.calculate_quantity_in_base_unit(
+                    db=db,
+                    food_item_id=product_data.food_item_id,
+                    package_unit_id=product_data.package_unit_id,
+                    package_quantity=product_data.package_quantity
+                )
+                # Create new product data with calculated quantity
+                from app.schemas.shopping import ShoppingProductCreate
+                product_data = ShoppingProductCreate(
+                    food_item_id=product_data.food_item_id,
+                    package_unit_id=product_data.package_unit_id,
+                    package_quantity=product_data.package_quantity,
+                    quantity_in_base_unit=calculated_quantity,
+                    package_type=product_data.package_type,
+                    estimated_price=product_data.estimated_price
+                )
+            except ValueError as conversion_error:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unit conversion failed: {str(conversion_error)}"
+                )
+        
         db_product = crud_shopping.create_shopping_product(db, product_data)
         return ShoppingProductRead.model_validate(db_product, from_attributes=True)
     except ValueError as e:
@@ -415,20 +440,3 @@ def get_shopping_list_products(
         ShoppingProductAssignmentRead.model_validate(assignment, from_attributes=True)
         for assignment in assignments
     ]
-
-
-@kitchen_router.patch(
-    "/{kitchen_id}/shopping-lists/{list_id}/products/{product_id}",
-    response_model=ShoppingProductAssignmentRead,
-    status_code=status.HTTP_200_OK,
-    summary="Update a product assignment",
-)
-def update_product_assignment(
-        kitchen_id: int,
-        list_id: int,
-        product_id: int,
-        assignment_data: ShoppingProductAssignmentUpdate,
-        db: Session = Depends(get_db),
-) -> ShoppingProductAssignmentRead:
-    """Update an existing product assignment (currently only note field)."""
-    # Verify the list belongs to the kitchen
