@@ -461,8 +461,11 @@ def convert_quantity_to_base_unit(
 ) -> float:
     """Convert a quantity from input unit to the food item's base unit.
     
-    This is a placeholder for future unit conversion functionality.
-    Currently returns the quantity unchanged.
+    Conversion priority:
+    1. If input unit equals base unit, return quantity unchanged
+    2. Look for food-specific conversions in food_item_unit_conversions
+    3. Fallback to generic unit conversions
+    4. Raise ValueError if no conversion path exists
     
     Args:
         db: Database session
@@ -474,10 +477,120 @@ def convert_quantity_to_base_unit(
         Quantity converted to base unit
         
     Raises:
-        NotImplementedError: Unit conversion is not yet implemented
+        ValueError: If food item not found or no conversion path exists
     """
-    # TODO: Implement unit conversion using food-specific conversions
-    # and fallback to generic unit conversions
+    # Import here to avoid circular imports
+    from app.crud import food as crud_food
+    from app.crud import core as crud_core
 
-    # For now, assume quantity is already in base unit
-    return quantity
+    # 1. Get the food item with base_unit_id
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise ValueError(f"Food item with ID {food_item_id} not found")
+
+    base_unit_id = food_item.base_unit_id
+
+    # 2. If input unit equals base unit, return quantity unchanged
+    if input_unit_id == base_unit_id:
+        return quantity
+
+    # 3. Check food-specific conversions first (higher priority)
+    food_conversion_factor = crud_food.get_conversion_for_food_item(
+        db=db,
+        food_item_id=food_item_id,
+        from_unit_id=input_unit_id,
+        to_unit_id=base_unit_id
+    )
+
+    if food_conversion_factor is not None:
+        return quantity * food_conversion_factor
+
+    # 4. Fallback to generic unit conversions
+    generic_conversion_factor = crud_core.get_conversion_factor(
+        db=db,
+        from_unit_id=input_unit_id,
+        to_unit_id=base_unit_id
+    )
+
+    if generic_conversion_factor is not None:
+        return quantity * generic_conversion_factor
+
+    # 5. No conversion path found
+    # Get unit names for better error message
+    input_unit = crud_core.get_unit_by_id(db=db, unit_id=input_unit_id)
+    base_unit = crud_core.get_unit_by_id(db=db, unit_id=base_unit_id)
+
+    input_unit_name = input_unit.name if input_unit else f"ID {input_unit_id}"
+    base_unit_name = base_unit.name if base_unit else f"ID {base_unit_id}"
+
+    raise ValueError(
+        f"No conversion path found from '{input_unit_name}' to '{base_unit_name}' "
+        f"for food item '{food_item.name}' (ID {food_item_id})"
+    )
+
+
+def _get_food_specific_conversion_factor(
+        db: Session,
+        food_item_id: int,
+        from_unit_id: int,
+        to_unit_id: int
+) -> float | None:
+    """Get food-specific conversion factor.
+    
+    Internal helper function to check food_item_unit_conversions table.
+    
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        from_unit_id: Source unit ID
+        to_unit_id: Target unit ID
+        
+    Returns:
+        Conversion factor or None if not found
+    """
+    from app.models.food import FoodItemUnitConversion
+
+    conversion = db.scalar(
+        select(FoodItemUnitConversion.factor)
+        .where(
+            and_(
+                FoodItemUnitConversion.food_item_id == food_item_id,
+                FoodItemUnitConversion.from_unit_id == from_unit_id,
+                FoodItemUnitConversion.to_unit_id == to_unit_id
+            )
+        )
+    )
+
+    return conversion
+
+
+def _get_generic_conversion_factor(
+        db: Session,
+        from_unit_id: int,
+        to_unit_id: int
+) -> float | None:
+    """Get generic conversion factor between units.
+    
+    Internal helper function to check unit_conversions table.
+    
+    Args:
+        db: Database session
+        from_unit_id: Source unit ID
+        to_unit_id: Target unit ID
+        
+    Returns:
+        Conversion factor or None if not found
+    """
+    from app.models.core import UnitConversion
+
+    conversion = db.scalar(
+        select(UnitConversion.factor)
+        .where(
+            and_(
+                UnitConversion.from_unit_id == from_unit_id,
+                UnitConversion.to_unit_id == to_unit_id
+            )
+        )
+    )
+
+    return conversion
