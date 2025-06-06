@@ -1,32 +1,61 @@
-"""Pydantic schemas for recipe input / output."""
+"""Pydantic schemas for recipe system v2.0."""
 
 from __future__ import annotations
 
-from datetime import datetime
+import datetime
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
 
-from app.schemas.inventory import FoodItemRead
-from app.schemas.user import UserRead
 
-
-# ------------------------------------------------------------------ #
-# RecipeIngredient Schemas                                           #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# Recipe Ingredient Schemas (v2.0)                                  #
+# ================================================================== #
 
 class _RecipeIngredientBase(BaseModel):
-    """Fields shared by all recipe ingredient-related schemas."""
+    """Fields shared by all recipe ingredient schemas."""
 
-    food_item_id: int = Field(..., gt=0)
-    amount: float = Field(..., gt=0.0)
-    unit: str = Field(..., min_length=1, max_length=20)
+    food_item_id: int = Field(..., gt=0, description="Reference to food item")
+    amount_in_base_unit: float = Field(
+        ..., gt=0,
+        description="Amount in the food item's base unit (e.g., grams)"
+    )
+    original_unit_id: int | None = Field(
+        default=None, gt=0,
+        description="Unit as originally entered by user"
+    )
+    original_amount: float | None = Field(
+        default=None, gt=0,
+        description="Amount as originally entered by user"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("original_amount")
+    def validate_original_amount_with_unit(cls, v: float | None, info) -> float | None:
+        """Validate that original_amount is provided if original_unit_id is set.
+        
+        Args:
+            v: The original amount value.
+            info: Validation context with access to other fields.
+            
+        Returns:
+            The validated original amount.
+            
+        Raises:
+            ValueError: If original_unit_id is set but original_amount is not.
+        """
+        values = info.data if hasattr(info, 'data') else {}
+        original_unit_id = values.get('original_unit_id')
+
+        if original_unit_id is not None and v is None:
+            raise ValueError("original_amount is required when original_unit_id is provided")
+
+        return v
+
 
 class RecipeIngredientCreate(_RecipeIngredientBase):
-    """Schema used on **create** (request body)."""
+    """Schema for creating a recipe ingredient."""
     pass
 
 
@@ -34,44 +63,88 @@ class RecipeIngredientRead(_RecipeIngredientBase):
     """Schema returned to the client."""
 
     recipe_id: int
-    food_item: FoodItemRead
+    created_at: datetime.datetime
+    last_updated: datetime.datetime | None
+
+    # Optional nested details for display
+    food_item_name: str | None = Field(
+        default=None,
+        description="Name of the associated food item"
+    )
+    base_unit_name: str | None = Field(
+        default=None,
+        description="Name of the food item's base unit"
+    )
+    original_unit_name: str | None = Field(
+        default=None,
+        description="Name of the original unit if available"
+    )
+    display_amount: float | None = Field(
+        default=None,
+        description="Amount to display (original or base)"
+    )
+    display_unit: str | None = Field(
+        default=None,
+        description="Unit to display (original or base)"
+    )
 
 
-class RecipeIngredientUpdate(_RecipeIngredientBase):
-    """Schema for partial recipe ingredient updates."""
+class RecipeIngredientUpdate(BaseModel):
+    """Schema for updating recipe ingredient."""
 
-    food_item_id: int | None = Field(default=None, gt=0)
-    amount: float | None = Field(default=None, gt=0.0)
-    unit: str | None = Field(default=None, min_length=1, max_length=20)
+    amount_in_base_unit: float | None = Field(default=None, gt=0)
+    original_unit_id: int | None = Field(default=None, gt=0)
+    original_amount: float | None = Field(default=None, gt=0)
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("original_amount")
+    def validate_original_amount_with_unit(cls, v: float | None, info) -> float | None:
+        """Validate that original_amount is provided if original_unit_id is set."""
+        values = info.data if hasattr(info, 'data') else {}
+        original_unit_id = values.get('original_unit_id')
+
+        if original_unit_id is not None and v is None:
+            raise ValueError("original_amount is required when original_unit_id is provided")
+
+        return v
 
 
-# ------------------------------------------------------------------ #
-# RecipeStep Schemas                                                 #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# Recipe Step Schemas                                                #
+# ================================================================== #
 
 class _RecipeStepBase(BaseModel):
-    """Fields shared by all recipe step-related schemas."""
+    """Fields shared by all recipe step schemas."""
 
-    step_number: int = Field(..., gt=0)
-    instruction: str = Field(..., min_length=1)
+    step_number: int = Field(..., gt=0, description="Step order in the recipe")
+    instruction: str = Field(..., min_length=10, max_length=2000)
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class RecipeStepCreate(_RecipeStepBase):
-    """Schema used on **create** (request body)."""
+    """Schema for creating a recipe step."""
 
     @field_validator("instruction")
     def validate_instruction(cls, v: str) -> str:
-        """Normalize instruction text.
-
+        """Validate and clean instruction text.
+        
         Args:
             v: The instruction text to validate.
-
+            
         Returns:
-            The normalized instruction text.
+            The cleaned instruction text.
         """
-        return v.strip()
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Instruction cannot be empty")
+
+        # Ensure it ends with proper punctuation
+        if not cleaned.endswith(('.', '!', '?')):
+            cleaned += '.'
+
+        return cleaned
 
 
 class RecipeStepRead(_RecipeStepBase):
@@ -79,68 +152,79 @@ class RecipeStepRead(_RecipeStepBase):
 
     id: int
     recipe_id: int
+    created_at: datetime.datetime
 
 
-class RecipeStepUpdate(_RecipeStepBase):
-    """Schema for partial recipe step updates."""
+class RecipeStepUpdate(BaseModel):
+    """Schema for updating recipe step."""
 
     step_number: int | None = Field(default=None, gt=0)
-    instruction: str | None = Field(default=None, min_length=1)
+    instruction: str | None = Field(default=None, min_length=10, max_length=2000)
+
+    model_config = ConfigDict(from_attributes=True)
 
     @field_validator("instruction")
     def validate_instruction(cls, v: str | None) -> str | None:
-        """Normalize instruction text.
-
-        Args:
-            v: The instruction text to validate.
-
-        Returns:
-            The normalized instruction text or None.
-        """
+        """Validate and clean instruction text."""
         if v is None:
             return v
-        return v.strip()
+
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Instruction cannot be empty")
+
+        # Ensure it ends with proper punctuation
+        if not cleaned.endswith(('.', '!', '?')):
+            cleaned += '.'
+
+        return cleaned
 
 
-# ------------------------------------------------------------------ #
-# RecipeNutrition Schemas                                            #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# Recipe Nutrition Schemas                                           #
+# ================================================================== #
 
 class _RecipeNutritionBase(BaseModel):
-    """Fields shared by all recipe nutrition-related schemas."""
+    """Fields shared by all recipe nutrition schemas."""
 
-    kcal: float | None = Field(default=None, ge=0.0)
-    protein_g: float | None = Field(default=None, ge=0.0)
-    fat_g: float | None = Field(default=None, ge=0.0)
-    carbs_g: float | None = Field(default=None, ge=0.0)
-    fiber_g: float | None = Field(default=None, ge=0.0)
-    source: str = Field(default="calculated", max_length=50)
+    kcal: float | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)
+    carbs_g: float | None = Field(default=None, ge=0)
+    fiber_g: float | None = Field(default=None, ge=0)
+    source: str | None = Field(default=None, max_length=50)
 
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("source")
-    def validate_source(cls, v: str) -> str:
-        """Validate nutrition source.
-
+    def validate_source(cls, v: str | None) -> str | None:
+        """Validate nutrition data source.
+        
         Args:
             v: The source value to validate.
-
+            
         Returns:
-            The validated source.
-
-        Raises:
-            ValueError: If the source is not valid.
+            The normalized source or None.
         """
-        valid_sources = {"calculated", "user", "openfoodfacts", "usda"}
-        if v not in valid_sources:
+        if v is None:
+            return v
+
+        cleaned = v.strip().upper()
+        valid_sources = {
+            "MANUAL", "CALCULATED", "USDA", "AI_ESTIMATED",
+            "NUTRITION_LABEL", "DATABASE"
+        }
+
+        if cleaned not in valid_sources:
             raise ValueError(
-                f"Source must be one of: {', '.join(valid_sources)}. Got: {v}"
+                f"Source must be one of: {', '.join(valid_sources)}"
             )
-        return v
+
+        return cleaned
 
 
 class RecipeNutritionCreate(_RecipeNutritionBase):
-    """Schema used on **create** (request body)."""
+    """Schema for creating recipe nutrition."""
     pass
 
 
@@ -148,49 +232,53 @@ class RecipeNutritionRead(_RecipeNutritionBase):
     """Schema returned to the client."""
 
     recipe_id: int
-    has_complete_macros: bool = Field(..., description="True if protein, fat, and carbs are all present")
-    calculated_kcal: float | None = Field(..., description="Calories calculated from macros")
+    created_at: datetime.datetime
+    has_complete_macros: bool = Field(
+        description="True if protein, fat, and carbs are all available"
+    )
+    calculated_kcal: float | None = Field(
+        description="Calories calculated from macronutrients"
+    )
 
 
-class RecipeNutritionUpdate(_RecipeNutritionBase):
-    """Schema for partial recipe nutrition updates."""
+class RecipeNutritionUpdate(BaseModel):
+    """Schema for updating recipe nutrition."""
 
-    kcal: float | None = Field(default=None, ge=0.0)
-    protein_g: float | None = Field(default=None, ge=0.0)
-    fat_g: float | None = Field(default=None, ge=0.0)
-    carbs_g: float | None = Field(default=None, ge=0.0)
-    fiber_g: float | None = Field(default=None, ge=0.0)
+    kcal: float | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)
+    carbs_g: float | None = Field(default=None, ge=0)
+    fiber_g: float | None = Field(default=None, ge=0)
     source: str | None = Field(default=None, max_length=50)
+
+    model_config = ConfigDict(from_attributes=True)
 
     @field_validator("source")
     def validate_source(cls, v: str | None) -> str | None:
-        """Validate nutrition source.
-
-        Args:
-            v: The source value to validate.
-
-        Returns:
-            The validated source or None.
-
-        Raises:
-            ValueError: If the source is not valid.
-        """
+        """Validate nutrition data source."""
         if v is None:
             return v
-        valid_sources = {"calculated", "user", "openfoodfacts", "usda"}
-        if v not in valid_sources:
+
+        cleaned = v.strip().upper()
+        valid_sources = {
+            "MANUAL", "CALCULATED", "USDA", "AI_ESTIMATED",
+            "NUTRITION_LABEL", "DATABASE"
+        }
+
+        if cleaned not in valid_sources:
             raise ValueError(
-                f"Source must be one of: {', '.join(valid_sources)}. Got: {v}"
+                f"Source must be one of: {', '.join(valid_sources)}"
             )
-        return v
+
+        return cleaned
 
 
-# ------------------------------------------------------------------ #
+# ================================================================== #
 # Recipe Schemas                                                     #
-# ------------------------------------------------------------------ #
+# ================================================================== #
 
 class _RecipeBase(BaseModel):
-    """Fields shared by all recipe-related schemas."""
+    """Fields shared by all recipe schemas."""
 
     title: str = Field(..., min_length=1, max_length=255)
     is_ai_generated: bool = Field(default=False)
@@ -200,15 +288,20 @@ class _RecipeBase(BaseModel):
 
     @field_validator("title")
     def validate_title(cls, v: str) -> str:
-        """Normalize recipe title.
-
+        """Validate and normalize recipe title.
+        
         Args:
             v: The title to validate.
-
+            
         Returns:
             The normalized title.
         """
-        return v.strip().title()
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Title cannot be empty")
+
+        # Capitalize first letter
+        return cleaned[0].upper() + cleaned[1:] if len(cleaned) > 1 else cleaned.upper()
 
 
 class RecipeCreate(_RecipeBase):
@@ -267,50 +360,52 @@ class RecipeRead(_RecipeBase):
     """Schema returned to the client."""
 
     id: int
-    created_by_user: UserRead | None = Field(default=None)
+    created_at: datetime.datetime
+    created_by_user: dict | None = None
 
 
 class RecipeWithDetails(RecipeRead):
-    """Recipe schema that includes all related data."""
+    """Recipe with all related data for detailed view."""
 
     ingredients: list[RecipeIngredientRead] = Field(default_factory=list)
     steps: list[RecipeStepRead] = Field(default_factory=list)
-    nutrition: RecipeNutritionRead | None = Field(default=None)
+    nutrition: RecipeNutritionRead | None = None
 
 
-class RecipeUpdate(_RecipeBase):
-    """Schema for partial recipe updates (PATCH operations)."""
+class RecipeUpdate(BaseModel):
+    """Schema for updating recipe."""
 
     title: str | None = Field(default=None, min_length=1, max_length=255)
     is_ai_generated: bool | None = Field(default=None)
     created_by_user_id: int | None = Field(default=None, gt=0)
 
+    model_config = ConfigDict(from_attributes=True)
+
     @field_validator("title")
     def validate_title(cls, v: str | None) -> str | None:
-        """Normalize recipe title.
-
-        Args:
-            v: The title to validate.
-
-        Returns:
-            The normalized title or None.
-        """
+        """Validate and normalize recipe title."""
         if v is None:
             return v
-        return v.strip().title()
+
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Title cannot be empty")
+
+        # Capitalize first letter
+        return cleaned[0].upper() + cleaned[1:] if len(cleaned) > 1 else cleaned.upper()
 
 
-# ------------------------------------------------------------------ #
-# Search and Filter Schemas                                          #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# Search and Filter Parameters                                       #
+# ================================================================== #
 
 class RecipeSearchParams(BaseModel):
-    """Parameters for recipe search and filtering."""
+    """Parameters for filtering recipes."""
 
     title_contains: str | None = Field(default=None, min_length=1)
-    is_ai_generated: bool | None = Field(default=None)
+    is_ai_generated: bool | None = None
     created_by_user_id: int | None = Field(default=None, gt=0)
-    has_nutrition: bool | None = Field(default=None)
+    has_nutrition: bool | None = None
     max_kcal: float | None = Field(default=None, gt=0)
     min_protein_g: float | None = Field(default=None, ge=0)
 
@@ -320,20 +415,20 @@ class RecipeSearchParams(BaseModel):
 class RecipeSummary(BaseModel):
     """Summary statistics for recipes."""
 
-    total_recipes: int = Field(..., description="Total number of recipes")
-    ai_generated_count: int = Field(..., description="Number of AI-generated recipes")
-    manual_count: int = Field(..., description="Number of manually created recipes")
-    with_nutrition_count: int = Field(..., description="Number of recipes with nutrition data")
+    total_recipes: int = Field(ge=0)
+    ai_generated_count: int = Field(ge=0)
+    manual_count: int = Field(ge=0)
+    with_nutrition_count: int = Field(ge=0)
 
     model_config = ConfigDict(from_attributes=True)
 
 
-# ------------------------------------------------------------------ #
-# RecipeReview Schemas                                               #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# Recipe Review Schemas                                              #
+# ================================================================== #
 
 class _RecipeReviewBase(BaseModel):
-    """Fields shared by all recipe review-related schemas."""
+    """Fields shared by all recipe review schemas."""
 
     rating: int = Field(..., ge=1, le=5, description="Rating from 1 to 5 stars")
     comment: str | None = Field(default=None, max_length=1000)
@@ -342,7 +437,7 @@ class _RecipeReviewBase(BaseModel):
 
     @field_validator("rating")
     def validate_rating(cls, v: int) -> int:
-        """Validate rating is within allowed range.
+        """Validate rating is between 1 and 5.
         
         Args:
             v: The rating value to validate.
@@ -359,17 +454,19 @@ class _RecipeReviewBase(BaseModel):
 
     @field_validator("comment")
     def validate_comment(cls, v: str | None) -> str | None:
-        """Normalize comment text.
+        """Validate and clean comment text.
         
         Args:
-            v: The comment text to validate.
+            v: The comment to validate.
             
         Returns:
-            The normalized comment text or None.
+            The cleaned comment or None.
         """
         if v is None:
             return v
-        return v.strip() if v.strip() else None
+
+        cleaned = v.strip()
+        return cleaned if cleaned else None
 
 
 class RecipeReviewRead(_RecipeReviewBase):
@@ -377,69 +474,102 @@ class RecipeReviewRead(_RecipeReviewBase):
 
     user_id: int
     recipe_id: int
-    created_at: datetime
-    user: UserRead = Field(..., description="User who created the review")
+    created_at: datetime.datetime
+    user: dict | None = None
 
 
-class RecipeReviewUpdate(_RecipeReviewBase):
-    """Schema for partial recipe review updates."""
+class RecipeReviewUpdate(BaseModel):
+    """Schema for updating recipe review."""
 
-    rating: int | None = Field(default=None, ge=1, le=5, description="Rating from 1 to 5 stars")
+    rating: int | None = Field(default=None, ge=1, le=5)
     comment: str | None = Field(default=None, max_length=1000)
+
+    model_config = ConfigDict(from_attributes=True)
 
     @field_validator("rating")
     def validate_rating(cls, v: int | None) -> int | None:
-        """Validate rating is within allowed range.
-        
-        Args:
-            v: The rating value to validate.
-            
-        Returns:
-            The validated rating or None.
-            
-        Raises:
-            ValueError: If rating is not between 1 and 5.
-        """
-        if v is None:
-            return v
-        if not 1 <= v <= 5:
+        """Validate rating is between 1 and 5."""
+        if v is not None and not 1 <= v <= 5:
             raise ValueError("Rating must be between 1 and 5")
         return v
 
 
 class RecipeReviewUpsert(_RecipeReviewBase):
-    """Schema for creating or updating reviews (upsert operation)."""
+    """Schema for creating or updating review (upsert operation)."""
     pass
 
 
-# ------------------------------------------------------------------ #
-# Recipe Rating Summary Schemas                                      #
-# ------------------------------------------------------------------ #
+# ================================================================== #
+# Rating Summary Schemas                                             #
+# ================================================================== #
 
 class RecipeRatingSummary(BaseModel):
-    """Summary of all ratings for a recipe."""
+    """Summary of ratings for a recipe."""
 
-    recipe_id: int = Field(..., description="Recipe ID")
-    total_reviews: int = Field(..., description="Total number of reviews")
-    average_rating: float | None = Field(..., description="Average rating (1-5)")
-    rating_distribution: dict[int, int] = Field(
-        ..., description="Distribution of ratings (rating -> count)"
+    recipe_id: int
+    total_reviews: int = Field(ge=0)
+    average_rating: float | None = Field(ge=1.0, le=5.0)
+    rating_distribution: dict[str, int] = Field(
+        description="Count of each rating (1-5 stars)"
     )
 
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("rating_distribution")
-    def validate_rating_distribution(cls, v: dict[int, int]) -> dict[int, int]:
-        """Ensure rating distribution has all rating levels.
+    def validate_rating_distribution(cls, v: dict[str, int]) -> dict[str, int]:
+        """Validate rating distribution has correct keys and values.
         
         Args:
             v: The rating distribution to validate.
             
         Returns:
-            The validated rating distribution with all levels 1-5.
+            The validated rating distribution.
         """
-        # Ensure all rating levels (1-5) are present
-        for rating in range(1, 6):
-            if rating not in v:
-                v[rating] = 0
+        expected_keys = {"1", "2", "3", "4", "5"}
+        if not expected_keys.issubset(v.keys()):
+            raise ValueError("Rating distribution must include all ratings 1-5")
+
+        for rating, count in v.items():
+            if count < 0:
+                raise ValueError("Rating counts cannot be negative")
+        
         return v
+
+
+# ================================================================== #
+# Convenience Schemas                                                #
+# ================================================================== #
+
+class RecipeIngredientCreateWithConversion(BaseModel):
+    """Future schema for creating ingredients with automatic unit conversion.
+    
+    This would allow users to input ingredients in any unit and
+    automatically calculate the amount_in_base_unit.
+    """
+
+    food_item_id: int = Field(..., gt=0)
+    amount: float = Field(..., gt=0)
+    unit_id: int = Field(..., gt=0)
+    # amount_in_base_unit would be calculated automatically
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeScalingRequest(BaseModel):
+    """Request to scale a recipe for different serving sizes."""
+
+    recipe_id: int = Field(..., gt=0)
+    original_servings: int = Field(..., gt=0)
+    target_servings: int = Field(..., gt=0)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeScalingResponse(BaseModel):
+    """Response with scaled recipe ingredients."""
+
+    recipe: RecipeRead
+    scaled_ingredients: list[RecipeIngredientRead]
+    scaling_factor: float = Field(gt=0)
+
+    model_config = ConfigDict(from_attributes=True)
