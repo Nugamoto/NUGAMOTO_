@@ -36,7 +36,6 @@ class _FoodItemBase(BaseModel):
     )
 
     @field_validator('name')
-    @classmethod
     def validate_name(cls, v: str) -> str:
         """Validate and normalize food item name."""
         if not v or v.isspace():
@@ -51,7 +50,6 @@ class _FoodItemBase(BaseModel):
         return v
 
     @field_validator('category')
-    @classmethod
     def validate_category(cls, v: str | None) -> str | None:
         """Validate and normalize category."""
         if v is None:
@@ -112,7 +110,6 @@ class FoodItemUpdate(BaseModel):
     )
 
     @field_validator('name')
-    @classmethod
     def validate_name(cls, v: str | None) -> str | None:
         """Validate and normalize food item name."""
         if v is None:
@@ -129,7 +126,6 @@ class FoodItemUpdate(BaseModel):
         return v
 
     @field_validator('category')
-    @classmethod
     def validate_category(cls, v: str | None) -> str | None:
         """Validate and normalize category."""
         if v is None:
@@ -172,7 +168,6 @@ class _FoodItemUnitConversionBase(BaseModel):
     )
 
     @field_validator('to_unit_id')
-    @classmethod
     def validate_different_units(cls, v: int, info) -> int:
         """Ensure from_unit_id and to_unit_id are different."""
         if 'from_unit_id' in info.data and info.data['from_unit_id'] == v:
