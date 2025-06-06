@@ -36,7 +36,6 @@ class _UnitBase(BaseModel):
     )
 
     @field_validator('name')
-    @classmethod
     def validate_name(cls, v: str) -> str:
         """Validate unit name."""
         if not v or v.isspace():
@@ -92,7 +91,6 @@ class _UnitConversionBase(BaseModel):
     )
 
     @field_validator('to_unit_id')
-    @classmethod
     def validate_different_units(cls, v: int, info) -> int:
         """Ensure from_unit_id and to_unit_id are different."""
         if 'from_unit_id' in info.data and info.data['from_unit_id'] == v:
