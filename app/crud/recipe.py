@@ -8,7 +8,8 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import Select
 
-from app.models.inventory import FoodItem, Unit
+from app.models.core import Unit
+from app.models.food import FoodItem
 from app.models.recipe import (
     Recipe,
     RecipeIngredient,
