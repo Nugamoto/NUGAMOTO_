@@ -18,8 +18,8 @@ app = FastAPI(
 )
 
 # Core system routes
-app.include_router(core_router.router, prefix="/v1", tags=["Core"])
-app.include_router(food_router.router, prefix="/v1", tags=["Food"])
+app.include_router(core_router.router, prefix="/v1")
+app.include_router(food_router.router, prefix="/v1")
 
 # User routes
 app.include_router(user_router.router, prefix="/v1")
