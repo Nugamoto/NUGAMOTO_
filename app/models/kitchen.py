@@ -2,21 +2,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
-
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.enums import KitchenRole
 from app.db.base import Base
 from app.models.user import User
-
-
-class KitchenRole(str, Enum):
-    """Valid roles for users in kitchens."""
-
-    OWNER = "owner"
-    ADMIN = "admin"
-    MEMBER = "member"
 
 
 class Kitchen(Base):
