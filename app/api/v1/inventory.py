@@ -23,9 +23,9 @@ from app.schemas.inventory import (
     StorageLocationWithInventory
 )
 
-kitchen_router = APIRouter()
-storage_router = APIRouter()
-inventory_items_router = APIRouter()
+kitchen_router = APIRouter(prefix="/kitchen", tags=["Kitchen Inventory"])
+storage_router = APIRouter(prefix="/storage-locations", tags=["Storage Locations"])
+inventory_items_router = APIRouter(prefix="/inventory", tags=["Inventory Items"])
 
 
 # ================================================================== #
@@ -33,7 +33,7 @@ inventory_items_router = APIRouter()
 # ================================================================== #
 
 @storage_router.post(
-    "/kitchens/{kitchen_id}/storage-locations/",
+    "/{kitchen_id}/storage-locations/",
     response_model=StorageLocationRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new storage location",
@@ -73,7 +73,7 @@ def create_storage_location(
 
 
 @kitchen_router.get(
-    "/kitchens/{kitchen_id}/storage-locations/",
+    "/{kitchen_id}/storage-locations/",
     response_model=list[StorageLocationRead],
     summary="Get all storage locations for a kitchen",
 )
@@ -102,7 +102,7 @@ def get_kitchen_storage_locations(
 
 
 @storage_router.get(
-    "/storage-locations/{storage_location_id}",
+    "/{storage_location_id}",
     response_model=StorageLocationRead,
     summary="Get a storage location by ID",
 )
@@ -137,7 +137,7 @@ def get_storage_location(
 
 
 @storage_router.patch(
-    "/storage-locations/{storage_location_id}",
+    "/{storage_location_id}",
     response_model=StorageLocationRead,
     summary="Update a storage location",
 )
@@ -175,7 +175,7 @@ def update_storage_location(
 
 
 @storage_router.delete(
-    "/storage-locations/{storage_location_id}",
+    "/{storage_location_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a storage location",
 )
@@ -209,8 +209,8 @@ def delete_storage_location(
 # Inventory Item Endpoints                                           #
 # ================================================================== #
 
-@inventory_items_router.post(
-    "/kitchens/{kitchen_id}/inventory-items/",
+@kitchen_router.post(
+    "/{kitchen_id}/inventory-items/",
     response_model=InventoryItemRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add an inventory item",
@@ -276,7 +276,7 @@ def add_inventory_item(
 
 
 @kitchen_router.get(
-    "/kitchens/{kitchen_id}/inventory/",
+    "/{kitchen_id}/inventory/",
     response_model=list[InventoryItemRead],
     summary="Get kitchen inventory",
 )
@@ -309,7 +309,7 @@ def get_kitchen_inventory(
 
 
 @kitchen_router.get(
-    "/kitchens/{kitchen_id}/inventory/summary/",
+    "/{kitchen_id}/inventory/summary/",
     response_model=KitchenInventorySummary,
     summary="Get kitchen inventory summary",
 )
@@ -370,7 +370,7 @@ def get_kitchen_inventory_summary(
 
 
 @kitchen_router.get(
-    "/kitchens/{kitchen_id}/inventory/low-stock/",
+    "/{kitchen_id}/inventory/low-stock/",
     response_model=list[InventoryItemRead],
     summary="Get low stock items",
 )
@@ -397,7 +397,7 @@ def get_low_stock_items(
 
 
 @kitchen_router.get(
-    "/kitchens/{kitchen_id}/inventory/expiring/",
+    "/{kitchen_id}/inventory/expiring/",
     response_model=list[InventoryItemRead],
     summary="Get expiring items",
 )
