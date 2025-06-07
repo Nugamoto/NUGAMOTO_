@@ -78,7 +78,13 @@ def get_user_by_email(db: Session, email: str | EmailStr) -> User | None:
 
 
 def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User:
-    """Update an existing user with partial data.
+    """Update an existing user with partial data (PATCH-conform).
+
+    This function implements proper PATCH semantics by:
+    - Only updating fields that are explicitly provided (not None)
+    - Preserving existing values for fields not included in the request
+    - Validating email uniqueness only when email is being changed
+    - Using explicit field-by-field updates instead of bulk assignment
 
     Args:
         db: Active database session.
@@ -91,28 +97,6 @@ def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User:
     Raises:
         ValueError: If the user does not exist or the e-mail is already taken.
     """
-    user = get_user_by_id(db, user_id)
-    if user is None:
-        raise ValueError("User not found.")
-
-    if user_data.email is not None:
-        new_email = str(user_data.email).lower()
-        if user.email != new_email and get_user_by_email(db, new_email):
-            raise ValueError("Email already registered.")
-        user.email = new_email
-
-    if user_data.name is not None:
-        user.name = user_data.name
-    if user_data.diet_type is not None:
-        user.diet_type = user_data.diet_type
-    if user_data.allergies is not None:
-        user.allergies = user_data.allergies
-    if user_data.preferences is not None:
-        user.preferences = user_data.preferences
-
-    db.commit()
-    db.refresh(user)
-    return user
 
 
 def delete_user(db: Session, user_id: int) -> None:

@@ -69,31 +69,44 @@ def read_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
     return UserRead.model_validate(user, from_attributes=True)
 
 
-@router.put(
+@router.patch(
     "/{user_id}",
     response_model=UserRead,
     status_code=status.HTTP_200_OK,
-    summary="Update an existing user",
+    summary="Update an existing user (partial)",
 )
 def update_user(
     user_id: int,
         user_data: UserUpdate,
     db: Session = Depends(get_db),
 ) -> UserRead:
-    """Replace an existing user (full update).
+    """Update an existing user with partial data (PATCH operation).
+
+    This endpoint allows partial updates of user data. Only the fields provided
+    in the request body will be updated. All fields in the UserUpdate schema
+    are optional, enabling granular updates.
 
     Args:
         user_id: Primary key of the user to update.
-        user_data: Complete user payload.
+        user_data: Partial user data containing only fields to be updated.
         db: Injected database session.
 
     Returns:
-        The updated user.
+        The updated user with all current field values.
 
     Raises:
         HTTPException:
             * 404 – if the user does not exist.
-            * 400 – if the e-mail address is already taken.
+            * 400 – if the e-mail address is already taken by another user.
+
+    Example:
+        ```json
+        {
+            "name": "Updated Name",
+            "diet_type": "vegetarian"
+        }
+        ```
+        Only the specified fields will be updated, other fields remain unchanged.
     """
     try:
         updated_user = crud_user.update_user(db, user_id, user_data)
