@@ -14,7 +14,7 @@ from app.schemas.shopping import (
 )
 
 # Create sub-routers for better organization
-kitchen_router = APIRouter(prefix="/kitchens", tags=["Kitchen Shopping"])
+kitchen_router = APIRouter(prefix="/kitchens", tags=["Shopping Lists"])
 products_router = APIRouter(prefix="/shopping-products", tags=["Shopping Products"])
 
 # ================================================================== #
