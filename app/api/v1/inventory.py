@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -187,7 +187,7 @@ def delete_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
         storage_location_id: int
-) -> None:
+) -> Response:
     """Delete a storage location.
     
     Args:
@@ -206,6 +206,7 @@ def delete_storage_location(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Storage location with ID {storage_location_id} not found"
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
@@ -535,7 +536,7 @@ def delete_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
         inventory_id: int
-) -> None:
+) -> Response:
     """Delete an inventory item.
     
     Args:
@@ -554,6 +555,7 @@ def delete_inventory_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inventory item with ID {inventory_id} not found"
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
