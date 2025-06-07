@@ -6,7 +6,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.core import Unit, UnitConversion, UnitType
-from app.schemas.core import UnitCreate, UnitConversionCreate
+from app.schemas.core import UnitCreate, UnitConversionCreate, UnitUpdate, UnitConversionUpdate
 
 
 # ================================================================== #
@@ -104,13 +104,96 @@ def get_units_by_type(db: Session, unit_type: UnitType) -> list[Unit]:
     ).all())
 
 
+def update_unit(db: Session, unit_id: int, unit_data: UnitUpdate) -> Unit | None:
+    """Update an existing unit with partial data.
+
+    Args:
+        db: Database session.
+        unit_id: The unique identifier of the unit to update.
+        unit_data: Partial unit data to update (only non-None fields are updated).
+
+    Returns:
+        Updated unit instance if found, None otherwise.
+
+    Raises:
+        IntegrityError: If updated name conflicts with existing unit (handled by caller).
+    """
+    unit = get_unit_by_id(db, unit_id)
+    if not unit:
+        return None
+
+    # Update only the fields that are not None
+    update_data = unit_data.model_dump(exclude_unset=True)
+    
+    for field, value in update_data.items():
+        setattr(unit, field, value)
+
+    db.commit()
+    db.refresh(unit)
+
+    return unit
+
+
+def delete_unit(db: Session, unit_id: int) -> bool:
+    """Delete a unit from the system.
+
+    Args:
+        db: Database session.
+        unit_id: The unique identifier of the unit to delete.
+
+    Returns:
+        True if unit was found and deleted, False if unit was not found.
+
+    Note:
+        This function checks for existing conversions and prevents deletion
+        if any conversions reference this unit.
+    """
+    unit = get_unit_by_id(db, unit_id)
+    if not unit:
+        return False
+
+    # Check if there are any conversions using this unit
+    conversions_from = get_conversions_from_unit(db, unit_id)
+    conversions_to = get_conversions_to_unit(db, unit_id)
+    
+    if conversions_from or conversions_to:
+        # Unit has dependent conversions, cannot delete
+        return False
+
+    db.delete(unit)
+    db.commit()
+
+    return True
+
+
+def has_unit_conversions(db: Session, unit_id: int) -> bool:
+    """Check if a unit has any associated conversions.
+
+    Args:
+        db: Database session.
+        unit_id: The unique identifier of the unit to check.
+
+    Returns:
+        True if unit has conversions (as source or target), False otherwise.
+    """
+    conversions_count = db.scalar(
+        select(db.func.count(UnitConversion.from_unit_id))
+        .where(
+            (UnitConversion.from_unit_id == unit_id) |
+            (UnitConversion.to_unit_id == unit_id)
+        )
+    )
+    
+    return conversions_count > 0
+
+
 # ================================================================== #
 # Unit Conversion CRUD Operations                                    #
 # ================================================================== #
 
 def create_unit_conversion(
-        db: Session,
-        conversion_data: UnitConversionCreate
+    db: Session,
+    conversion_data: UnitConversionCreate
 ) -> UnitConversion:
     """Create a new unit conversion relationship.
 
@@ -138,9 +221,9 @@ def create_unit_conversion(
 
 
 def get_unit_conversion(
-        db: Session,
-        from_unit_id: int,
-        to_unit_id: int
+    db: Session,
+    from_unit_id: int,
+    to_unit_id: int
 ) -> UnitConversion | None:
     """Retrieve a specific unit conversion relationship.
 
@@ -168,9 +251,9 @@ def get_unit_conversion(
 
 
 def get_conversion_factor(
-        db: Session,
-        from_unit_id: int,
-        to_unit_id: int
+    db: Session,
+    from_unit_id: int,
+    to_unit_id: int
 ) -> float | None:
     """Get the conversion factor between two units.
 
@@ -250,15 +333,78 @@ def get_all_unit_conversions(db: Session) -> list[UnitConversion]:
     ).all())
 
 
+def update_unit_conversion(
+    db: Session,
+    from_unit_id: int,
+    to_unit_id: int,
+    conversion_data: UnitConversionUpdate
+) -> UnitConversion | None:
+    """Update an existing unit conversion relationship.
+
+    Args:
+        db: Database session.
+        from_unit_id: Source unit identifier.
+        to_unit_id: Target unit identifier.
+        conversion_data: Updated conversion data (factor).
+
+    Returns:
+        Updated unit conversion instance if found, None otherwise.
+    """
+    conversion = get_unit_conversion(db, from_unit_id, to_unit_id)
+    if not conversion:
+        return None
+
+    # Update the factor
+    conversion.factor = conversion_data.factor
+
+    db.commit()
+    db.refresh(conversion)
+
+    return conversion
+
+
+def delete_unit_conversion(
+    db: Session,
+    from_unit_id: int,
+    to_unit_id: int
+) -> bool:
+    """Delete a unit conversion relationship.
+
+    Args:
+        db: Database session.
+        from_unit_id: Source unit identifier.
+        to_unit_id: Target unit identifier.
+
+    Returns:
+        True if conversion was found and deleted, False if conversion was not found.
+    """
+    conversion = db.scalar(
+        select(UnitConversion).where(
+            and_(
+                UnitConversion.from_unit_id == from_unit_id,
+                UnitConversion.to_unit_id == to_unit_id
+            )
+        )
+    )
+    
+    if not conversion:
+        return False
+
+    db.delete(conversion)
+    db.commit()
+
+    return True
+
+
 # ================================================================== #
 # Conversion Calculation Helpers                                     #
 # ================================================================== #
 
 def convert_value(
-        db: Session,
-        value: float,
-        from_unit_id: int,
-        to_unit_id: int
+    db: Session,
+    value: float,
+    from_unit_id: int,
+    to_unit_id: int
 ) -> float | None:
     """Convert a numeric value from one unit to another.
 

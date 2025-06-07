@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,8 +15,10 @@ from app.schemas.core import (
     ConversionResult,
     UnitConversionCreate,
     UnitConversionRead,
+    UnitConversionUpdate,
     UnitCreate,
     UnitRead,
+    UnitUpdate,
     UnitWithConversions
 )
 
@@ -36,8 +38,8 @@ conversions_router = APIRouter(prefix="/units", tags=["Unit Conversion"])
     summary="Create a new unit"
 )
 def create_unit(
-        unit_data: UnitCreate,
-        db: Annotated[Session, Depends(get_db)]
+    unit_data: UnitCreate,
+    db: Annotated[Session, Depends(get_db)]
 ) -> UnitRead:
     """Create a new unit in the system.
 
@@ -77,8 +79,8 @@ def create_unit(
     summary="Get all units"
 )
 def get_all_units(
-        db: Annotated[Session, Depends(get_db)],
-        unit_type: Annotated[UnitType | None, Query(description="Filter by unit type")] = None
+    db: Annotated[Session, Depends(get_db)],
+    unit_type: Annotated[UnitType | None, Query(description="Filter by unit type")] = None
 ) -> list[UnitRead]:
     """Retrieve all units, optionally filtered by type.
 
@@ -103,8 +105,8 @@ def get_all_units(
     summary="Get a single unit by ID"
 )
 def get_unit_by_id(
-        unit_id: int,
-        db: Annotated[Session, Depends(get_db)]
+    unit_id: int,
+    db: Annotated[Session, Depends(get_db)]
 ) -> UnitRead:
     """Retrieve a specific unit by its ID.
 
@@ -127,14 +129,118 @@ def get_unit_by_id(
     return UnitRead.model_validate(unit, from_attributes=True)
 
 
+@units_router.patch(
+    "/{unit_id}",
+    response_model=UnitRead,
+    summary="Update an existing unit"
+)
+def update_unit(
+    unit_id: int,
+    unit_data: UnitUpdate,
+    db: Annotated[Session, Depends(get_db)]
+) -> UnitRead:
+    """Update an existing unit with partial data.
+
+    Args:
+        unit_id: The unique identifier of the unit to update.
+        unit_data: Partial unit data to update (only provided fields are updated).
+        db: Database session dependency.
+
+    Returns:
+        The updated unit with all its properties.
+
+    Raises:
+        HTTPException: 
+            - 404 if unit with the specified ID is not found.
+            - 400 if updated name conflicts with existing unit.
+
+    Example:
+        ```json
+        {
+            "name": "kilogram",
+            "to_base_factor": 1000.0
+        }
+        ```
+
+    Note:
+        All fields are optional. Only provided fields will be updated.
+    """
+    try:
+        updated_unit = crud_core.update_unit(db=db, unit_id=unit_id, unit_data=unit_data)
+        if not updated_unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit with ID {unit_id} not found"
+            )
+        return UnitRead.model_validate(updated_unit, from_attributes=True)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unit name '{unit_data.name}' already exists"
+        )
+
+
+@units_router.delete(
+    "/{unit_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a unit"
+)
+def delete_unit(
+    unit_id: int,
+    db: Annotated[Session, Depends(get_db)]
+) -> Response:
+    """Delete a unit from the system.
+
+    Args:
+        unit_id: The unique identifier of the unit to delete.
+        db: Database session dependency.
+
+    Returns:
+        Empty response with 204 status code.
+
+    Raises:
+        HTTPException: 
+            - 404 if unit with the specified ID is not found.
+            - 400 if unit has dependent conversions and cannot be deleted.
+
+    Note:
+        Units with existing conversions cannot be deleted to maintain referential integrity.
+        Delete all conversions referencing this unit first.
+    """
+    # Check if unit exists
+    unit = crud_core.get_unit_by_id(db=db, unit_id=unit_id)
+    if not unit:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unit with ID {unit_id} not found"
+        )
+
+    # Check if unit has conversions
+    if crud_core.has_unit_conversions(db=db, unit_id=unit_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete unit '{unit.name}' because it has dependent conversions. Delete conversions first."
+        )
+
+    success = crud_core.delete_unit(db=db, unit_id=unit_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete unit"
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @units_router.get(
     "/{unit_id}/conversions",
     response_model=UnitWithConversions,
     summary="Get unit with available conversions"
 )
 def get_unit_conversions(
-        unit_id: int,
-        db: Annotated[Session, Depends(get_db)]
+    unit_id: int,
+    db: Annotated[Session, Depends(get_db)]
 ) -> UnitWithConversions:
     """Retrieve a unit along with all its available conversions to other units.
 
@@ -184,8 +290,8 @@ def get_unit_conversions(
     summary="Create a new unit conversion"
 )
 def create_unit_conversion(
-        conversion_data: UnitConversionCreate,
-        db: Annotated[Session, Depends(get_db)]
+    conversion_data: UnitConversionCreate,
+    db: Annotated[Session, Depends(get_db)]
 ) -> UnitConversionRead:
     """Create a new conversion relationship between two units.
 
@@ -248,9 +354,9 @@ def create_unit_conversion(
     summary="Get unit conversions with optional filtering"
 )
 def get_unit_conversions_filtered(
-        db: Annotated[Session, Depends(get_db)],
-        from_unit_id: Annotated[int | None, Query(description="Filter by source unit ID")] = None,
-        to_unit_id: Annotated[int | None, Query(description="Filter by target unit ID")] = None
+    db: Annotated[Session, Depends(get_db)],
+    from_unit_id: Annotated[int | None, Query(description="Filter by source unit ID")] = None,
+    to_unit_id: Annotated[int | None, Query(description="Filter by target unit ID")] = None
 ) -> list[UnitConversionRead]:
     """Retrieve unit conversions with optional filtering by source or target unit.
 
@@ -298,6 +404,106 @@ def get_unit_conversions_filtered(
     ]
 
 
+@conversions_router.patch(
+    "/conversions/{from_unit_id}/{to_unit_id}",
+    response_model=UnitConversionRead,
+    summary="Update a unit conversion factor"
+)
+def update_unit_conversion(
+    from_unit_id: int,
+    to_unit_id: int,
+    conversion_data: UnitConversionUpdate,
+    db: Annotated[Session, Depends(get_db)]
+) -> UnitConversionRead:
+    """Update the conversion factor for an existing unit conversion.
+
+    Args:
+        from_unit_id: Source unit identifier.
+        to_unit_id: Target unit identifier.
+        conversion_data: Updated conversion data (factor).
+        db: Database session dependency.
+
+    Returns:
+        The updated unit conversion with unit names included.
+
+    Raises:
+        HTTPException: 404 if conversion is not found.
+
+    Example:
+        ```json
+        {
+            "factor": 1234.5
+        }
+        ```
+
+    Note:
+        Only the conversion factor can be updated. To change units, 
+        delete the existing conversion and create a new one.
+    """
+    updated_conversion = crud_core.update_unit_conversion(
+        db=db,
+        from_unit_id=from_unit_id,
+        to_unit_id=to_unit_id,
+        conversion_data=conversion_data
+    )
+    
+    if not updated_conversion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Conversion from unit {from_unit_id} to unit {to_unit_id} not found"
+        )
+
+    return UnitConversionRead(
+        from_unit_id=updated_conversion.from_unit_id,
+        to_unit_id=updated_conversion.to_unit_id,
+        factor=updated_conversion.factor,
+        from_unit_name=updated_conversion.from_unit.name,
+        to_unit_name=updated_conversion.to_unit.name
+    )
+
+
+@conversions_router.delete(
+    "/conversions/{from_unit_id}/{to_unit_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a unit conversion"
+)
+def delete_unit_conversion(
+    from_unit_id: int,
+    to_unit_id: int,
+    db: Annotated[Session, Depends(get_db)]
+) -> Response:
+    """Delete a unit conversion relationship.
+
+    Args:
+        from_unit_id: Source unit identifier.
+        to_unit_id: Target unit identifier.
+        db: Database session dependency.
+
+    Returns:
+        Empty response with 204 status code.
+
+    Raises:
+        HTTPException: 404 if conversion is not found.
+
+    Example:
+        DELETE /units/conversions/1/2
+        Deletes the conversion from unit 1 to unit 2.
+    """
+    success = crud_core.delete_unit_conversion(
+        db=db,
+        from_unit_id=from_unit_id,
+        to_unit_id=to_unit_id
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Conversion from unit {from_unit_id} to unit {to_unit_id} not found"
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ================================================================== #
 # Unit Conversion Calculation Endpoints                              #
 # ================================================================== #
@@ -308,10 +514,10 @@ def get_unit_conversions_filtered(
     summary="Convert value between units"
 )
 def convert_value_between_units(
-        from_unit_id: int,
-        to_unit_id: int,
-        value: Annotated[float, Query(description="Value to convert", gt=0)],
-        db: Annotated[Session, Depends(get_db)]
+    from_unit_id: int,
+    to_unit_id: int,
+    value: Annotated[float, Query(description="Value to convert", gt=0)],
+    db: Annotated[Session, Depends(get_db)]
 ) -> ConversionResult:
     """Convert a value from one unit to another.
 
@@ -383,9 +589,9 @@ def convert_value_between_units(
     summary="Check if conversion between units is possible"
 )
 def check_conversion_possibility(
-        from_unit_id: int,
-        to_unit_id: int,
-        db: Annotated[Session, Depends(get_db)]
+    from_unit_id: int,
+    to_unit_id: int,
+    db: Annotated[Session, Depends(get_db)]
 ) -> dict[str, bool]:
     """Check if conversion between two units is possible.
 

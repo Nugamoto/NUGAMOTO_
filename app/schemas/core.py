@@ -37,18 +37,21 @@ class _UnitBase(BaseModel):
     )
 
     @field_validator('name')
-    def validate_name(cls, v: str) -> str:
-        """Validate and normalize unit name.
+    def validate_name(cls, v: str | None) -> str | None:
+        """Validate and normalize unit name if provided.
         
         Args:
-            v: Raw unit name input.
+            v: Raw unit name input (can be None for updates).
             
         Returns:
-            Normalized unit name (lowercase, trimmed).
+            Normalized unit name (lowercase, trimmed) or None.
             
         Raises:
             ValueError: If name is empty, whitespace only, or too long.
         """
+        if v is None:
+            return v
+            
         if not v or v.isspace():
             raise ValueError("Unit name cannot be empty or whitespace")
 
@@ -65,6 +68,29 @@ class _UnitBase(BaseModel):
 class UnitCreate(_UnitBase):
     """Schema for creating a new unit."""
     pass
+
+
+class UnitUpdate(_UnitBase):
+    """Schema for updating an existing unit (partial updates allowed)."""
+
+    # Override fields to make them optional
+    name: Annotated[str | None, Field(
+        None,
+        min_length=1,
+        max_length=50,
+        description="Unit name (e.g., 'g', 'ml', 'piece', 'pack')"
+    )]
+    type: Annotated[UnitType | None, Field(
+        None,
+        description="Unit type: weight, volume, count, measure, or package"
+    )]
+    to_base_factor: Annotated[float | None, Field(
+        None,
+        gt=0,
+        description="Factor to convert to base unit (e.g., 1000 for kg → g)"
+    )]
+
+    # Validator is inherited automatically - no duplication!
 
 
 class UnitRead(_UnitBase):
@@ -124,6 +150,21 @@ class _UnitConversionBase(BaseModel):
 class UnitConversionCreate(_UnitConversionBase):
     """Schema for creating a new unit conversion relationship."""
     pass
+
+
+class UnitConversionUpdate(BaseModel):
+    """Schema for updating an existing unit conversion (only factor can be updated)."""
+
+    factor: Annotated[float, Field(
+        gt=0,
+        description="New conversion factor: value_in_from_unit * factor = value_in_to_unit"
+    )]
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
 
 
 class UnitConversionRead(_UnitConversionBase):
