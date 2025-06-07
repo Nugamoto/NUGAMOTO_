@@ -440,3 +440,9 @@ def get_shopping_list_products(
         ShoppingProductAssignmentRead.model_validate(assignment, from_attributes=True)
         for assignment in assignments
     ]
+
+
+# Create main router that includes both sub-routers
+router = APIRouter()
+router.include_router(kitchen_router)
+router.include_router(products_router)

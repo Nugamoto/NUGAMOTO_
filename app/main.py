@@ -8,7 +8,8 @@ from .api.v1 import (
     inventory as inventory_router,
     shopping as shopping_router,
     core as core_router,
-    food as food_router
+    food as food_router,
+    ai as ai_router,
 )
 
 app = FastAPI(
@@ -23,14 +24,15 @@ app.include_router(food_router.router, prefix="/v1")
 
 # User routes
 app.include_router(user_router.router, prefix="/v1")
+
 # Kitchen routes
 app.include_router(kitchen_router.router, prefix="/v1")
 
 # Inventory routes
-app.include_router(inventory_router.kitchen_router, prefix="/v1")
-app.include_router(inventory_router.inventory_items_router, prefix="/v1")
-app.include_router(inventory_router.storage_router, prefix="/v1")
+app.include_router(inventory_router.router, prefix="/v1")
 
 # Shopping routes
-app.include_router(shopping_router.kitchen_router, prefix="/v1")
-app.include_router(shopping_router.products_router, prefix="/v1")
+app.include_router(shopping_router.router, prefix="/v1")
+
+# AI routes
+app.include_router(ai_router.router, prefix="/v1")

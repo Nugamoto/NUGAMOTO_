@@ -601,3 +601,10 @@ def _build_inventory_item_read(item) -> InventoryItemRead:
         expires_soon=item.expires_soon(),
         base_unit_name=item.food_item.base_unit.name if item.food_item.base_unit else None
     )
+
+
+# Create main router that includes all sub-routers
+router = APIRouter()
+router.include_router(kitchen_router)
+router.include_router(storage_router)
+router.include_router(inventory_items_router)
