@@ -92,29 +92,41 @@ def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUs
     return KitchenWithUsers.model_validate(kitchen, from_attributes=True)
 
 
-@router.put(
+@router.patch(
     "/{kitchen_id}",
     response_model=KitchenRead,
     status_code=status.HTTP_200_OK,
-    summary="Update an existing kitchen",
+    summary="Partially update an existing kitchen",
 )
 def update_kitchen(
         kitchen_id: int,
         kitchen_data: KitchenUpdate,
         db: Session = Depends(get_db),
 ) -> KitchenRead:
-    """Update an existing kitchen (partial update).
+    """Partially update an existing kitchen.
+
+    This endpoint allows partial updates of kitchen data. Only the fields provided
+    in the request body will be updated. All fields in the KitchenUpdate schema
+    are optional, enabling granular updates.
 
     Args:
         kitchen_id: Primary key of the kitchen to update.
-        kitchen_data: Partial kitchen payload.
+        kitchen_data: Partial kitchen data containing only fields to be updated.
         db: Injected database session.
 
     Returns:
-        The updated kitchen.
+        The updated kitchen with all current field values.
 
     Raises:
         HTTPException: 404 if the kitchen does not exist.
+
+    Example:
+        ```json
+        {
+            "name": "Updated Kitchen Name"
+        }
+        ```
+        Only the specified fields will be updated, other fields remain unchanged.
     """
     try:
         updated_kitchen = crud_kitchen.update_kitchen(db, kitchen_id, kitchen_data)
@@ -205,11 +217,11 @@ def add_user_to_kitchen(
     return UserKitchenRead.model_validate(user_kitchen, from_attributes=True)
 
 
-@router.put(
+@router.patch(
     "/{kitchen_id}/users/{user_id}/role",
     response_model=UserKitchenRead,
     status_code=status.HTTP_200_OK,
-    summary="Update user role in kitchen",
+    summary="Partially update user role in kitchen",
 )
 def update_user_role_in_kitchen(
         kitchen_id: int,
@@ -217,20 +229,31 @@ def update_user_role_in_kitchen(
         role_data: UserKitchenUpdate,
         db: Session = Depends(get_db),
 ) -> UserKitchenRead:
-    """Update a user's role in a kitchen.
+    """Partially update a user's role in a kitchen.
+
+    This endpoint allows updating the role of a user within a specific kitchen.
+    Only the role field will be updated as specified in the request body.
 
     Args:
         kitchen_id: Primary key of the kitchen.
         user_id: Primary key of the user.
-        role_data: New role information.
+        role_data: New role information to be updated.
         db: Injected database session.
 
     Returns:
-        The updated user-kitchen relationship.
+        The updated user-kitchen relationship with the new role.
 
     Raises:
         HTTPException:
             * 404 – if the kitchen, user, or relationship does not exist.
+
+    Example:
+        ```json
+        {
+            "role": "ADMIN"
+        }
+        ```
+        Only the role will be updated, preserving other relationship data.
     """
     try:
         user_kitchen = crud_kitchen.update_user_role_in_kitchen(
