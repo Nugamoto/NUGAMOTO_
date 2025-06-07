@@ -14,17 +14,17 @@ from app.schemas.core import UnitCreate, UnitConversionCreate
 # ================================================================== #
 
 def create_unit(db: Session, unit_data: UnitCreate) -> Unit:
-    """Create a new unit.
+    """Create a new unit in the system.
 
     Args:
-        db: Database session
-        unit_data: Unit creation data
+        db: Database session.
+        unit_data: Validated unit creation data.
 
     Returns:
-        Created unit instance
+        The newly created and persisted unit instance.
 
     Raises:
-        IntegrityError: If unit name already exists
+        IntegrityError: If unit name already exists (handled by caller).
     """
     db_unit = Unit(
         name=unit_data.name,
@@ -40,14 +40,14 @@ def create_unit(db: Session, unit_data: UnitCreate) -> Unit:
 
 
 def get_unit_by_id(db: Session, unit_id: int) -> Unit | None:
-    """Get unit by ID.
+    """Retrieve a unit by its unique identifier.
 
     Args:
-        db: Database session
-        unit_id: Unit ID to fetch
+        db: Database session.
+        unit_id: The unique identifier of the unit.
 
     Returns:
-        Unit instance or None if not found
+        Unit instance if found, None otherwise.
     """
     return db.scalar(
         select(Unit).where(Unit.id == unit_id)
@@ -55,14 +55,14 @@ def get_unit_by_id(db: Session, unit_id: int) -> Unit | None:
 
 
 def get_unit_by_name(db: Session, unit_name: str) -> Unit | None:
-    """Get unit by name.
+    """Retrieve a unit by its name (case-insensitive).
 
     Args:
-        db: Database session
-        unit_name: Unit name to search for
+        db: Database session.
+        unit_name: The name of the unit to search for.
 
     Returns:
-        Unit instance or None if not found
+        Unit instance if found, None otherwise.
     """
     return db.scalar(
         select(Unit).where(Unit.name == unit_name.lower().strip())
@@ -70,14 +70,14 @@ def get_unit_by_name(db: Session, unit_name: str) -> Unit | None:
 
 
 def get_all_units(db: Session, unit_type: UnitType | None = None) -> list[Unit]:
-    """Get all units, optionally filtered by type.
+    """Retrieve all units, optionally filtered by type.
 
     Args:
-        db: Database session
-        unit_type: Optional unit type filter
+        db: Database session.
+        unit_type: Optional filter to get units of a specific type only.
 
     Returns:
-        List of unit instances
+        List of unit instances, ordered by type and name.
     """
     query = select(Unit).order_by(Unit.type, Unit.name)
 
@@ -88,14 +88,14 @@ def get_all_units(db: Session, unit_type: UnitType | None = None) -> list[Unit]:
 
 
 def get_units_by_type(db: Session, unit_type: UnitType) -> list[Unit]:
-    """Get all units of a specific type.
+    """Retrieve all units of a specific type.
 
     Args:
-        db: Database session
-        unit_type: Unit type to filter by
+        db: Database session.
+        unit_type: The unit type to filter by.
 
     Returns:
-        List of unit instances of the specified type
+        List of unit instances of the specified type, ordered by name.
     """
     return list(db.scalars(
         select(Unit)
@@ -112,17 +112,17 @@ def create_unit_conversion(
         db: Session,
         conversion_data: UnitConversionCreate
 ) -> UnitConversion:
-    """Create a new unit conversion.
+    """Create a new unit conversion relationship.
 
     Args:
-        db: Database session
-        conversion_data: Unit conversion creation data
+        db: Database session.
+        conversion_data: Validated unit conversion creation data.
 
     Returns:
-        Created unit conversion instance
+        The newly created and persisted unit conversion instance.
 
     Raises:
-        IntegrityError: If conversion already exists or units don't exist
+        IntegrityError: If conversion already exists or units don't exist.
     """
     db_conversion = UnitConversion(
         from_unit_id=conversion_data.from_unit_id,
@@ -142,18 +142,23 @@ def get_unit_conversion(
         from_unit_id: int,
         to_unit_id: int
 ) -> UnitConversion | None:
-    """Get specific unit conversion.
+    """Retrieve a specific unit conversion relationship.
 
     Args:
-        db: Database session
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
+        db: Database session.
+        from_unit_id: Source unit identifier.
+        to_unit_id: Target unit identifier.
 
     Returns:
-        Unit conversion instance or None if not found
+        Unit conversion instance if found, None otherwise.
     """
     return db.scalar(
-        select(UnitConversion).where(
+        select(UnitConversion)
+        .options(
+            selectinload(UnitConversion.from_unit),
+            selectinload(UnitConversion.to_unit)
+        )
+        .where(
             and_(
                 UnitConversion.from_unit_id == from_unit_id,
                 UnitConversion.to_unit_id == to_unit_id
@@ -167,64 +172,73 @@ def get_conversion_factor(
         from_unit_id: int,
         to_unit_id: int
 ) -> float | None:
-    """Get conversion factor between two units.
+    """Get the conversion factor between two units.
 
     Args:
-        db: Database session
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
+        db: Database session.
+        from_unit_id: Source unit identifier.
+        to_unit_id: Target unit identifier.
 
     Returns:
-        Conversion factor or None if conversion doesn't exist
+        Conversion factor if conversion exists, None otherwise.
     """
+    if from_unit_id == to_unit_id:
+        return 1.0
+        
     conversion = get_unit_conversion(db, from_unit_id, to_unit_id)
     return conversion.factor if conversion else None
 
 
 def get_conversions_from_unit(db: Session, unit_id: int) -> list[UnitConversion]:
-    """Get all conversions from a specific unit.
+    """Retrieve all conversions originating from a specific unit.
 
     Args:
-        db: Database session
-        unit_id: Source unit ID
+        db: Database session.
+        unit_id: Source unit identifier.
 
     Returns:
-        List of unit conversion instances
+        List of unit conversion instances with target units loaded.
     """
     return list(db.scalars(
         select(UnitConversion)
-        .options(selectinload(UnitConversion.to_unit))
+        .options(
+            selectinload(UnitConversion.from_unit),
+            selectinload(UnitConversion.to_unit)
+        )
         .where(UnitConversion.from_unit_id == unit_id)
         .order_by(UnitConversion.to_unit_id)
     ).all())
 
 
 def get_conversions_to_unit(db: Session, unit_id: int) -> list[UnitConversion]:
-    """Get all conversions to a specific unit.
+    """Retrieve all conversions targeting a specific unit.
 
     Args:
-        db: Database session
-        unit_id: Target unit ID
+        db: Database session.
+        unit_id: Target unit identifier.
 
     Returns:
-        List of unit conversion instances
+        List of unit conversion instances with source units loaded.
     """
     return list(db.scalars(
         select(UnitConversion)
-        .options(selectinload(UnitConversion.from_unit))
+        .options(
+            selectinload(UnitConversion.from_unit),
+            selectinload(UnitConversion.to_unit)
+        )
         .where(UnitConversion.to_unit_id == unit_id)
         .order_by(UnitConversion.from_unit_id)
     ).all())
 
 
 def get_all_unit_conversions(db: Session) -> list[UnitConversion]:
-    """Get all unit conversions.
+    """Retrieve all unit conversions in the system.
 
     Args:
-        db: Database session
+        db: Database session.
 
     Returns:
-        List of all unit conversion instances
+        List of all unit conversion instances with related units loaded.
     """
     return list(db.scalars(
         select(UnitConversion)
@@ -237,7 +251,7 @@ def get_all_unit_conversions(db: Session) -> list[UnitConversion]:
 
 
 # ================================================================== #
-# Conversion Calculation Helper                                      #
+# Conversion Calculation Helpers                                     #
 # ================================================================== #
 
 def convert_value(
@@ -246,16 +260,16 @@ def convert_value(
         from_unit_id: int,
         to_unit_id: int
 ) -> float | None:
-    """Convert a value from one unit to another.
+    """Convert a numeric value from one unit to another.
 
     Args:
-        db: Database session
-        value: Value to convert
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
+        db: Database session.
+        value: The numeric value to convert.
+        from_unit_id: Source unit identifier.
+        to_unit_id: Target unit identifier.
 
     Returns:
-        Converted value or None if conversion is not possible
+        Converted value if conversion is possible, None otherwise.
     """
     if from_unit_id == to_unit_id:
         return value
@@ -268,15 +282,15 @@ def convert_value(
 
 
 def can_convert_units(db: Session, from_unit_id: int, to_unit_id: int) -> bool:
-    """Check if conversion between two units is possible.
+    """Check whether conversion between two units is possible.
 
     Args:
-        db: Database session
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
+        db: Database session.
+        from_unit_id: Source unit identifier.
+        to_unit_id: Target unit identifier.
 
     Returns:
-        True if conversion is possible, False otherwise
+        True if conversion is possible, False otherwise.
     """
     if from_unit_id == to_unit_id:
         return True

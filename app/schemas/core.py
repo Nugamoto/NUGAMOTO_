@@ -32,12 +32,23 @@ class _UnitBase(BaseModel):
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
-        validate_assignment=True
+        validate_assignment=True,
+        from_attributes=True
     )
 
     @field_validator('name')
     def validate_name(cls, v: str) -> str:
-        """Validate unit name."""
+        """Validate and normalize unit name.
+        
+        Args:
+            v: Raw unit name input.
+            
+        Returns:
+            Normalized unit name (lowercase, trimmed).
+            
+        Raises:
+            ValueError: If name is empty, whitespace only, or too long.
+        """
         if not v or v.isspace():
             raise ValueError("Unit name cannot be empty or whitespace")
 
@@ -57,7 +68,7 @@ class UnitCreate(_UnitBase):
 
 
 class UnitRead(_UnitBase):
-    """Schema for reading unit data."""
+    """Schema for reading unit data with complete information."""
 
     id: int
     created_at: datetime.datetime
@@ -87,24 +98,36 @@ class _UnitConversionBase(BaseModel):
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
-        validate_assignment=True
+        validate_assignment=True,
+        from_attributes=True
     )
 
     @field_validator('to_unit_id')
     def validate_different_units(cls, v: int, info) -> int:
-        """Ensure from_unit_id and to_unit_id are different."""
+        """Ensure from_unit_id and to_unit_id are different.
+        
+        Args:
+            v: Target unit ID.
+            info: Validation info containing other field values.
+            
+        Returns:
+            Validated target unit ID.
+            
+        Raises:
+            ValueError: If attempting to create self-conversion.
+        """
         if 'from_unit_id' in info.data and info.data['from_unit_id'] == v:
             raise ValueError("Cannot create conversion from a unit to itself")
         return v
 
 
 class UnitConversionCreate(_UnitConversionBase):
-    """Schema for creating a new unit conversion."""
+    """Schema for creating a new unit conversion relationship."""
     pass
 
 
 class UnitConversionRead(_UnitConversionBase):
-    """Schema for reading unit conversion data."""
+    """Schema for reading unit conversion data with related unit names."""
 
     # Include related unit information for convenience
     from_unit_name: str | None = Field(
@@ -124,23 +147,53 @@ class UnitConversionRead(_UnitConversionBase):
 # ================================================================== #
 
 class UnitWithConversions(UnitRead):
-    """Unit schema including available conversions."""
+    """Unit schema including all available conversions from this unit."""
 
     available_conversions: list[UnitConversionRead] = Field(
         default_factory=list,
-        description="List of conversions from this unit"
+        description="List of all possible conversions from this unit"
     )
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ConversionResult(BaseModel):
-    """Schema for conversion calculation results."""
+    """Schema for unit conversion calculation results."""
 
-    original_value: float = Field(description="Original value to convert")
-    original_unit_id: int = Field(description="Original unit ID")
-    original_unit_name: str = Field(description="Original unit name")
-    converted_value: float = Field(description="Converted value")
-    target_unit_id: int = Field(description="Target unit ID")
-    target_unit_name: str = Field(description="Target unit name")
-    conversion_factor: float = Field(description="Applied conversion factor")
+    original_value: float = Field(
+        description="Original numeric value that was converted"
+    )
+    original_unit_id: int = Field(
+        description="Source unit identifier"
+    )
+    original_unit_name: str = Field(
+        description="Human-readable source unit name"
+    )
+    converted_value: float = Field(
+        description="Result of the conversion calculation"
+    )
+    target_unit_id: int = Field(
+        description="Target unit identifier"
+    )
+    target_unit_name: str = Field(
+        description="Human-readable target unit name"
+    )
+    conversion_factor: float = Field(
+        description="Conversion factor that was applied in the calculation"
+    )
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ================================================================== #
+# Validation Schemas                                                 #
+# ================================================================== #
+
+class ConversionPossibilityCheck(BaseModel):
+    """Schema for checking if conversion between units is possible."""
+
+    can_convert: bool = Field(
+        description="Whether conversion between the specified units is possible"
+    )
+    
     model_config = ConfigDict(from_attributes=True)
