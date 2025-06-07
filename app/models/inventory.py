@@ -10,6 +10,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.config import settings
 from app.db.base import Base
 from app.models.food import FoodItem
 
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
     from app.models.kitchen import Kitchen
 
 # Threshold for considering items as "expiring soon" (in days)
-EXPIRING_ITEMS_THRESHOLD_DAYS = 7
+EXPIRING_ITEMS_THRESHOLD_DAYS = settings.expiring_items_threshold_days
 
 
 class StorageLocation(Base):

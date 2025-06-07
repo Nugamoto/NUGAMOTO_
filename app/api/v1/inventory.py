@@ -23,13 +23,9 @@ from app.schemas.inventory import (
     StorageLocationWithInventory
 )
 
-# Create separate routers for different resource types
 kitchen_router = APIRouter()
 storage_router = APIRouter()
 inventory_items_router = APIRouter()
-
-# Legacy router for backward compatibility
-router = APIRouter()
 
 
 # ================================================================== #
