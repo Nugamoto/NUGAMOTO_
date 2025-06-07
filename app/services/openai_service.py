@@ -8,7 +8,7 @@ using the OpenAI API for generating recipes and summarizing inventory data.
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import openai
 from openai.types.chat import (
@@ -40,7 +40,7 @@ class OpenAIService(AIService):
     RECIPE_SYSTEM_PROMPT = "You are a helpful culinary assistant that creates recipes based on available ingredients and dietary preferences."
     INVENTORY_SYSTEM_PROMPT = "You are a helpful culinary assistant that summarizes kitchen inventory and suggests potential meals."
 
-    def __init__(self, model: str = "gpt-4o-mini", api_key: Optional[str] = None):
+    def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None):
         """
         Initialize the OpenAI service with API key from settings.
         
