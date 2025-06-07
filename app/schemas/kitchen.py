@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from pydantic.config import ConfigDict
 
-from app.models.kitchen import KitchenRole  # ← Import von Models!
+from app.models.kitchen import KitchenRole
 from app.schemas.user import UserRead
 
 
