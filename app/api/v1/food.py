@@ -21,14 +21,14 @@ from app.schemas.food import (
     FoodItemWithConversions
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/food-items", tags=["Food Items"])
 
 
 # ================================================================== #
 # FoodItem Endpoints                                                 #
 # ================================================================== #
 
-@router.post("/food-items/", response_model=FoodItemRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=FoodItemRead, status_code=status.HTTP_201_CREATED)
 def create_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -68,7 +68,7 @@ def create_food_item(
         )
 
 
-@router.get("/food-items/", response_model=list[FoodItemRead])
+@router.get("/", response_model=list[FoodItemRead])
 def get_food_items(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -104,7 +104,7 @@ def get_food_items(
     return result
 
 
-@router.get("/food-items/{food_item_id}", response_model=FoodItemRead)
+@router.get("/{food_item_id}", response_model=FoodItemRead)
 def get_food_item_by_id(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -135,7 +135,7 @@ def get_food_item_by_id(
     )
 
 
-@router.patch("/food-items/{food_item_id}", response_model=FoodItemRead)
+@router.patch("/{food_item_id}", response_model=FoodItemRead)
 def update_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -181,7 +181,7 @@ def update_food_item(
     )
 
 
-@router.delete("/food-items/{food_item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{food_item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -205,7 +205,7 @@ def delete_food_item(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/food-items/{food_item_id}/with-conversions", response_model=FoodItemWithConversions)
+@router.get("/{food_item_id}/with-conversions", response_model=FoodItemWithConversions)
 def get_food_item_with_conversions(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -259,7 +259,7 @@ def get_food_item_with_conversions(
 # ================================================================== #
 
 @router.post(
-    "/food-items/{food_item_id}/unit-conversions/",
+    "/{food_item_id}/unit-conversions/",
     response_model=FoodItemUnitConversionRead,
     status_code=status.HTTP_201_CREATED
 )
@@ -332,7 +332,7 @@ def create_food_unit_conversion(
 
 
 @router.get(
-    "/food-items/{food_item_id}/unit-conversions/",
+    "/{food_item_id}/unit-conversions/",
     response_model=list[FoodItemUnitConversionRead]
 )
 def get_food_unit_conversions(
@@ -368,7 +368,7 @@ def get_food_unit_conversions(
 
 
 @router.delete(
-    "/food-items/{food_item_id}/unit-conversions/{from_unit_id}/{to_unit_id}",
+    "/{food_item_id}/unit-conversions/{from_unit_id}/{to_unit_id}",
     status_code=status.HTTP_204_NO_CONTENT
 )
 def delete_food_unit_conversion(
@@ -407,7 +407,7 @@ def delete_food_unit_conversion(
 # Food-Specific Conversion Endpoints                                 #
 # ================================================================== #
 
-@router.post("/food-items/{food_item_id}/convert/", response_model=FoodConversionResult)
+@router.post("/{food_item_id}/convert/", response_model=FoodConversionResult)
 def convert_food_units(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -504,7 +504,7 @@ def convert_food_units(
     )
 
 
-@router.get("/food-items/{food_item_id}/can-convert/")
+@router.get("/{food_item_id}/can-convert/")
 def can_convert_food_units(
         *,
         db: Annotated[Session, Depends(get_db)],
