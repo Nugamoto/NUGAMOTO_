@@ -21,13 +21,13 @@ app = FastAPI(
 app.include_router(core_router.router, prefix="/v1", tags=["Core"])
 app.include_router(food_router.router, prefix="/v1", tags=["Food"])
 
-# User and kitchen routes
+# User routes
 app.include_router(user_router.router, prefix="/v1")
+# Kitchen routes
 app.include_router(kitchen_router.router, prefix="/v1")
 
 # Inventory routes
 app.include_router(inventory_router.kitchen_router, prefix="/v1")
-app.include_router(inventory_router.food_items_router, prefix="/v1")
 app.include_router(inventory_router.inventory_items_router, prefix="/v1")
 app.include_router(inventory_router.storage_router, prefix="/v1")
 
