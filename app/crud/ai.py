@@ -3,7 +3,8 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.ai import AIModelOutput, OutputFormat, OutputType, AIOutputTargetType
+from app.core.enums import AIOutputTargetType
+from app.models.ai import AIModelOutput, OutputFormat, OutputType
 from app.schemas.ai import AIModelOutputCreate, AIOutputSearchParams, AIOutputSummary
 
 
