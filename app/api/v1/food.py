@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.crud import food as crud_food
-from app.crud import core as crud_core
 from app.core.dependencies import get_db
+from app.crud import core as crud_core
+from app.crud import food as crud_food
 from app.schemas.food import (
     FoodConversionResult,
     FoodItemCreate,
@@ -186,7 +186,7 @@ def delete_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
         food_item_id: int
-) -> None:
+) -> Response:
     """Delete a food item.
 
     Args:
@@ -202,6 +202,7 @@ def delete_food_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Food item with ID {food_item_id} not found"
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/food-items/{food_item_id}/with-conversions", response_model=FoodItemWithConversions)
@@ -376,7 +377,7 @@ def delete_food_unit_conversion(
         food_item_id: int,
         from_unit_id: int,
         to_unit_id: int
-) -> None:
+) -> Response:
     """Delete a unit conversion for a food item.
 
     Args:
@@ -399,6 +400,7 @@ def delete_food_unit_conversion(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Conversion for food item {food_item_id} from unit {from_unit_id} to unit {to_unit_id} not found"
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
