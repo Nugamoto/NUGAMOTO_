@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.core.enums import AIOutputTargetType
 from app.crud import ai as crud_ai
-from app.models.ai import OutputType, OutputFormat, AIOutputTargetType
+from app.models.ai import OutputType, OutputFormat
 from app.schemas.ai import (
     AIModelOutputCreate,
     AIModelOutputRead,
