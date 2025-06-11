@@ -134,23 +134,6 @@ def update_user_credentials(
     return credentials
 
 
-def delete_user_credentials(db: Session, user_id: int) -> bool:
-    """Delete user credentials.
-
-    Args:
-        db: Database session.
-        user_id: ID of the user whose credentials to delete.
-
-    Returns:
-        True if credentials were found and deleted, False if no credentials found.
-    """
-    credentials = get_user_credentials_by_user_id(db, user_id)
-    if not credentials:
-        return False
-
-    db.delete(credentials)
-    db.commit()
-    return True
 
 
 def search_user_credentials(

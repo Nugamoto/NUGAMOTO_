@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -194,52 +194,6 @@ def update_user_credentials(
         )
 
     return UserCredentialsRead.model_validate(updated_credentials, from_attributes=True)
-
-
-@router.delete(
-    "/{user_id}/credentials",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete user credentials"
-)
-def delete_user_credentials(
-        user_id: int,
-        db: Annotated[Session, Depends(get_db)]
-) -> Response:
-    """Delete a user's credentials.
-
-    Args:
-        user_id: The unique identifier of the user.
-        db: Database session dependency.
-
-    Returns:
-        Empty response with 204 status code.
-
-    Raises:
-        HTTPException:
-            - 400 if user_id is invalid.
-            - 404 if no credentials found for the user.
-
-    Example:
-        DELETE /users/123/credentials
-
-    Warning:
-        This action is irreversible and will permanently delete all
-        authentication and personal data for the user.
-    """
-    if user_id <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User ID must be a positive integer"
-        )
-
-    success = crud_user_credentials.delete_user_credentials(db=db, user_id=user_id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No credentials found for user {user_id}"
-        )
-
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
