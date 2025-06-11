@@ -15,6 +15,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.core import Unit
     from app.models.inventory import InventoryItem
+    from app.models.user import User
 
 
 class FoodItem(Base):
@@ -78,6 +79,11 @@ class FoodItem(Base):
         back_populates="food_item",
         cascade="all, delete-orphan"
     )
+    aliases: Mapped[list[FoodItemAlias]] = relationship(
+        "FoodItemAlias",
+        back_populates="food_item",
+        cascade="all, delete-orphan"
+    )
 
     # ------------------------------------------------------------------ #
     # Dunder                                                               #
@@ -86,6 +92,77 @@ class FoodItem(Base):
         return (
             f"FoodItem(id={self.id!r}, name={self.name!r}, "
             f"category={self.category!r}, base_unit_id={self.base_unit_id!r})"
+        )
+
+
+class FoodItemAlias(Base):
+    """Represents a row in the ``food_item_alias`` table.
+
+    Allows multiple names/aliases for the same food item.
+    For example: "Haferflocken" → "Porridge", "Oats".
+    
+    The user_id field is optional to allow both global and user-specific aliases.
+    """
+
+    __tablename__ = "food_item_alias"
+
+    # ------------------------------------------------------------------ #
+    # Columns                                                             #
+    # ------------------------------------------------------------------ #
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    food_item_id: Mapped[int] = mapped_column(
+        ForeignKey("food_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Food item this alias refers to"
+    )
+    alias: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+        comment="Alternative name for the food item"
+    )
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="User who created this alias (NULL for global aliases)"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+
+    # ------------------------------------------------------------------ #
+    # Relationships                                                       #
+    # ------------------------------------------------------------------ #
+    food_item: Mapped[FoodItem] = relationship(
+        "FoodItem",
+        back_populates="aliases"
+    )
+    user: Mapped[User | None] = relationship(
+        "User",
+        foreign_keys=[user_id]
+    )
+
+    # ------------------------------------------------------------------ #
+    # Table Constraints                                                   #
+    # ------------------------------------------------------------------ #
+    __table_args__ = (
+        UniqueConstraint(
+            'food_item_id', 'alias', 'user_id',
+            name='uq_food_item_alias_user'
+        ),
+    )
+
+    # ------------------------------------------------------------------ #
+    # Dunder                                                               #
+    # ------------------------------------------------------------------ #
+    def __repr__(self) -> str:  # noqa: D401 – we want a short repr
+        return (
+            f"FoodItemAlias(id={self.id!r}, food_item_id={self.food_item_id!r}, "
+            f"alias={self.alias!r}, user_id={self.user_id!r})"
         )
 
 

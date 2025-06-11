@@ -5,8 +5,10 @@ from __future__ import annotations
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.food import FoodItem, FoodItemUnitConversion
-from app.schemas.food import FoodItemCreate, FoodItemUpdate, FoodItemUnitConversionCreate
+from app.models.food import FoodItem, FoodItemUnitConversion, FoodItemAlias
+from app.schemas.food import (
+    FoodItemCreate, FoodItemUpdate, FoodItemUnitConversionCreate, FoodItemAliasCreate
+)
 
 
 # ================================================================== #
@@ -171,6 +173,182 @@ def delete_food_item(db: Session, food_item_id: int) -> bool:
     db.commit()
 
     return True
+
+
+# ================================================================== #
+# FoodItemAlias CRUD Operations                                      #
+# ================================================================== #
+
+def create_food_item_alias(
+        db: Session,
+        alias_data: FoodItemAliasCreate
+) -> FoodItemAlias:
+    """Create a new food item alias.
+
+    Args:
+        db: Database session
+        alias_data: Alias creation data
+
+    Returns:
+        Created alias instance
+
+    Raises:
+        IntegrityError: If alias already exists for the combination of food_item_id, alias, and user_id
+    """
+    db_alias = FoodItemAlias(
+        food_item_id=alias_data.food_item_id,
+        alias=alias_data.alias,
+        user_id=alias_data.user_id
+    )
+
+    db.add(db_alias)
+    db.commit()
+    db.refresh(db_alias)
+
+    return db_alias
+
+
+def get_aliases_for_food_item(
+        db: Session,
+        food_item_id: int,
+        user_id: int | None = None
+) -> list[FoodItemAlias]:
+    """Get all aliases for a specific food item.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        user_id: Optional user ID to filter user-specific aliases
+
+    Returns:
+        List of alias instances for the food item
+    """
+    query = (
+        select(FoodItemAlias)
+        .options(
+            selectinload(FoodItemAlias.food_item),
+            selectinload(FoodItemAlias.user)
+        )
+        .where(FoodItemAlias.food_item_id == food_item_id)
+        .order_by(FoodItemAlias.alias)
+    )
+
+    if user_id is not None:
+        # Include global aliases (user_id is NULL) and user-specific aliases
+        query = query.where(
+            (FoodItemAlias.user_id == user_id) | (FoodItemAlias.user_id.is_(None))
+        )
+
+    return list(db.scalars(query).all())
+
+
+def get_all_aliases_for_user(
+        db: Session,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 100
+) -> list[FoodItemAlias]:
+    """Get all aliases created by a specific user.
+
+    Args:
+        db: Database session
+        user_id: User ID
+        skip: Number of items to skip
+        limit: Maximum number of items to return
+
+    Returns:
+        List of alias instances created by the user
+    """
+    return list(db.scalars(
+        select(FoodItemAlias)
+        .options(
+            selectinload(FoodItemAlias.food_item),
+            selectinload(FoodItemAlias.user)
+        )
+        .where(FoodItemAlias.user_id == user_id)
+        .order_by(FoodItemAlias.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    ).all())
+
+
+def get_alias_by_id(db: Session, alias_id: int) -> FoodItemAlias | None:
+    """Get alias by ID.
+
+    Args:
+        db: Database session
+        alias_id: Alias ID to fetch
+
+    Returns:
+        Alias instance or None if not found
+    """
+    return db.scalar(
+        select(FoodItemAlias)
+        .options(
+            selectinload(FoodItemAlias.food_item),
+            selectinload(FoodItemAlias.user)
+        )
+        .where(FoodItemAlias.id == alias_id)
+    )
+
+
+def delete_alias_by_id(db: Session, alias_id: int) -> bool:
+    """Delete an alias by ID.
+
+    Args:
+        db: Database session
+        alias_id: Alias ID to delete
+
+    Returns:
+        True if deleted, False if not found
+    """
+    db_alias = get_alias_by_id(db, alias_id)
+    if not db_alias:
+        return False
+
+    db.delete(db_alias)
+    db.commit()
+
+    return True
+
+
+def search_food_items_by_alias(
+        db: Session,
+        alias_term: str,
+        user_id: int | None = None,
+        skip: int = 0,
+        limit: int = 100
+) -> list[FoodItem]:
+    """Search food items by alias term.
+
+    Args:
+        db: Database session
+        alias_term: Term to search for in aliases
+        user_id: Optional user ID to include user-specific aliases
+        skip: Number of items to skip
+        limit: Maximum number of items to return
+
+    Returns:
+        List of food items that have matching aliases
+    """
+    query = (
+        select(FoodItem)
+        .join(FoodItemAlias)
+        .options(selectinload(FoodItem.base_unit))
+        .where(FoodItemAlias.alias.ilike(f"%{alias_term.strip()}%"))
+        .distinct()
+        .order_by(FoodItem.name)
+        .offset(skip)
+        .limit(limit)
+    )
+
+    if user_id is not None:
+        # Include global aliases (user_id is NULL) and user-specific aliases
+        query = query.where(
+            (FoodItemAlias.user_id == user_id) | (FoodItemAlias.user_id.is_(None))
+        )
+
+    return list(db.scalars(query).all())
 
 
 # ================================================================== #

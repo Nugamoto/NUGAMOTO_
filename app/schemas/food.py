@@ -139,6 +139,70 @@ class FoodItemUpdate(BaseModel):
 
 
 # ================================================================== #
+# FoodItemAlias Schemas                                              #
+# ================================================================== #
+
+class _FoodItemAliasBase(BaseModel):
+    """Base schema for FoodItemAlias with common fields."""
+
+    food_item_id: Annotated[int, Field(
+        gt=0,
+        description="Food item ID this alias refers to"
+    )]
+    alias: Annotated[str, Field(
+        min_length=1,
+        max_length=255,
+        description="Alternative name for the food item"
+    )]
+    user_id: Annotated[int | None, Field(
+        None,
+        gt=0,
+        description="User who created this alias (NULL for global aliases)"
+    )]
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True
+    )
+
+    @field_validator('alias')
+    def validate_alias(cls, v: str) -> str:
+        """Validate and normalize alias."""
+        if not v or v.isspace():
+            raise ValueError("Alias cannot be empty or whitespace")
+
+        v = v.strip()
+        if len(v) > 255:
+            raise ValueError("Alias must be 255 characters or less")
+
+        return v
+
+
+class FoodItemAliasCreate(_FoodItemAliasBase):
+    """Schema for creating a new food item alias."""
+    pass
+
+
+class FoodItemAliasRead(_FoodItemAliasBase):
+    """Schema for reading food item alias data."""
+
+    id: int
+    created_at: datetime.datetime
+
+    # Include related information for convenience
+    food_item_name: str | None = Field(
+        None,
+        description="Name of the food item this alias refers to"
+    )
+    user_name: str | None = Field(
+        None,
+        description="Name of the user who created this alias"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ================================================================== #
 # FoodItemUnitConversion Schemas                                     #
 # ================================================================== #
 
@@ -212,6 +276,15 @@ class FoodItemWithConversions(FoodItemRead):
     unit_conversions: list[FoodItemUnitConversionRead] = Field(
         default_factory=list,
         description="List of unit conversions for this food item"
+    )
+
+
+class FoodItemWithAliases(FoodItemRead):
+    """FoodItem schema including available aliases."""
+
+    aliases: list[FoodItemAliasRead] = Field(
+        default_factory=list,
+        description="List of aliases for this food item"
     )
 
 
