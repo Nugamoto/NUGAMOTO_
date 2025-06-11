@@ -4,34 +4,12 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.crud import user as crud_user
 from app.models.user_health import UserHealthProfile
 from app.schemas.user_health import UserHealthProfileCreate, UserHealthProfileUpdate
-
-
-def get_user_health_profile_by_user_id(
-        db: Session,
-        user_id: int
-) -> UserHealthProfile | None:
-    """Retrieve a user's health profile by user ID.
-
-    Args:
-        db: Database session.
-        user_id: ID of the user whose health profile to retrieve.
-
-    Returns:
-        UserHealthProfile instance if found, None otherwise.
-
-    Example:
-        >>> profile = get_user_health_profile_by_user_id(db, user_id=123)
-        >>> if profile:
-        ...     print(f"User {profile.user_id} is {profile.age} years old")
-    """
-    return db.query(UserHealthProfile).filter(
-        UserHealthProfile.user_id == user_id
-    ).first()
 
 
 def create_user_health_profile(
@@ -39,119 +17,86 @@ def create_user_health_profile(
         user_id: int,
         profile_data: UserHealthProfileCreate
 ) -> UserHealthProfile:
-    """Create a new health profile for a user.
+    """Create new health profile for a user.
 
     Args:
         db: Database session.
-        user_id: ID of the user.
-        profile_data: Health profile data to create.
+        user_id: ID of the user to create profile for.
+        profile_data: Validated health profile creation data.
 
     Returns:
-        The created UserHealthProfile instance.
+        The newly created and persisted health profile instance.
 
     Raises:
-        ValueError: If user_id is invalid.
-        IntegrityError: If a profile already exists for this user.
-
-    Example:
-        >>> from app.schemas.user_health import UserHealthProfileCreate
-        >>> data = UserHealthProfileCreate(age=30, weight_kg=70.5)
-        >>> profile = create_user_health_profile(db, 123, data)
-        >>> print(f"Profile created: {profile.last_updated}")
+        ValueError: If user_id is invalid or user doesn't exist.
+        IntegrityError: If health profile already exists for this user.
     """
     if user_id <= 0:
         raise ValueError("user_id must be a positive integer")
 
-    # Create new profile
-    profile_dict = profile_data.model_dump(exclude_unset=True)
-    profile_dict['user_id'] = user_id
-    profile_dict['last_updated'] = datetime.datetime.now(datetime.timezone.utc)
+    user = crud_user.get_user_by_id(db, user_id)
+    if not user:
+        raise ValueError(f"User with ID {user_id} does not exist")
 
-    new_profile = UserHealthProfile(**profile_dict)
-    db.add(new_profile)
-
-    try:
-        db.commit()
-        db.refresh(new_profile)
-        return new_profile
-    except IntegrityError:
-        db.rollback()
-        raise
-
-
-def update_user_health_profile(
-        db: Session,
-        user_id: int,
-        profile_data: UserHealthProfileUpdate
-) -> UserHealthProfile | None:
-    """Update an existing health profile.
-
-    Args:
-        db: Database session.
-        user_id: ID of the user.
-        profile_data: Health profile data to update with.
-
-    Returns:
-        The updated UserHealthProfile instance, or None if not found.
-
-    Raises:
-        ValueError: If user_id is invalid.
-
-    Example:
-        >>> from app.schemas.user_health import UserHealthProfileUpdate
-        >>> data = UserHealthProfileUpdate(age=31, weight_kg=72.0)
-        >>> profile = update_user_health_profile(db, 123, data)
-        >>> if profile:
-        ...     print(f"Profile updated: {profile.last_updated}")
-    """
-    if user_id <= 0:
-        raise ValueError("user_id must be a positive integer")
-
-    # Get existing profile
     existing_profile = get_user_health_profile_by_user_id(db, user_id)
-    if not existing_profile:
-        return None
+    if existing_profile:
+        raise ValueError("Health profile already exists for this user")
 
-    # Update existing profile
-    update_data = profile_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(existing_profile, field, value)
+    db_profile = UserHealthProfile(
+        user_id=user_id,
+        age=profile_data.age,
+        gender=profile_data.gender,
+        height_cm=profile_data.height_cm,
+        weight_kg=profile_data.weight_kg,
+        activity_level=profile_data.activity_level,
+        health_conditions=profile_data.health_conditions,
+        goal=profile_data.goal,
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+        updated_at=datetime.datetime.now(datetime.timezone.utc)
+    )
 
-    # Update timestamp
-    existing_profile.last_updated = datetime.datetime.now(datetime.timezone.utc)
-
+    db.add(db_profile)
     db.commit()
-    db.refresh(existing_profile)
-    return existing_profile
+    db.refresh(db_profile)
+
+    return db_profile
 
 
-def delete_user_health_profile(db: Session, user_id: int) -> bool:
-    """Delete a user's health profile.
+def get_user_health_profile_by_user_id(db: Session, user_id: int) -> UserHealthProfile | None:
+    """Retrieve health profile by user ID.
 
     Args:
         db: Database session.
-        user_id: ID of the user whose health profile to delete.
+        user_id: ID of the user whose health profile to retrieve.
 
     Returns:
-        True if profile was deleted, False if no profile was found.
-
-    Example:
-        >>> success = delete_user_health_profile(db, user_id=123)
-        >>> if success:
-        ...     print("Health profile deleted successfully")
-        ... else:
-        ...     print("No health profile found for user")
+        UserHealthProfile instance if found, None otherwise.
     """
-    profile = get_user_health_profile_by_user_id(db, user_id)
-    if not profile:
-        return False
-
-    db.delete(profile)
-    db.commit()
-    return True
+    return db.scalar(
+        select(UserHealthProfile).where(UserHealthProfile.user_id == user_id)
+    )
 
 
-def get_all_health_profiles(db: Session, skip: int = 0, limit: int = 100) -> list[type[UserHealthProfile]]:
+def get_user_health_profile_by_id(db: Session, profile_id: int) -> UserHealthProfile | None:
+    """Retrieve health profile by profile ID.
+
+    Args:
+        db: Database session.
+        profile_id: ID of the health profile to retrieve.
+
+    Returns:
+        UserHealthProfile instance if found, None otherwise.
+    """
+    return db.scalar(
+        select(UserHealthProfile).where(UserHealthProfile.id == profile_id)
+    )
+
+
+def get_all_health_profiles(
+        db: Session,
+        skip: int = 0,
+        limit: int = 100
+) -> list[UserHealthProfile]:
     """Retrieve all health profiles with pagination.
 
     Args:
@@ -160,49 +105,96 @@ def get_all_health_profiles(db: Session, skip: int = 0, limit: int = 100) -> lis
         limit: Maximum number of records to return.
 
     Returns:
-        List of UserHealthProfile instances.
-
-    Example:
-        >>> profiles = get_all_health_profiles(db, skip=0, limit=50)
-        >>> print(f"Found {len(profiles)} health profiles")
+        List of UserHealthProfile instances, ordered by user_id.
     """
-    return db.query(UserHealthProfile).offset(skip).limit(limit).all()
+    return list(db.scalars(
+        select(UserHealthProfile)
+        .offset(skip)
+        .limit(limit)
+        .order_by(UserHealthProfile.user_id)
+    ).all())
 
 
-def get_profiles_by_criteria(
+def update_user_health_profile(
+        db: Session,
+        user_id: int,
+        profile_data: UserHealthProfileUpdate
+) -> UserHealthProfile | None:
+    """Update existing health profile with partial data.
+
+    Args:
+        db: Database session.
+        user_id: ID of the user whose health profile to update.
+        profile_data: Partial health profile data to update (only non-None fields are updated).
+
+    Returns:
+        Updated UserHealthProfile instance if found, None otherwise.
+    """
+    profile = get_user_health_profile_by_user_id(db, user_id)
+    if not profile:
+        return None
+
+    # Update only the fields that are not None
+    update_data = profile_data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(profile, field, value)
+
+    profile.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
+    db.commit()
+    db.refresh(profile)
+
+    return profile
+
+
+def search_health_profiles(
         db: Session,
         min_age: int | None = None,
         max_age: int | None = None,
         gender: str | None = None,
-        activity_level: str | None = None
-) -> list[type[UserHealthProfile]]:
-    """Get health profiles matching specific criteria.
+        activity_level: str | None = None,
+        min_bmi: float | None = None,
+        max_bmi: float | None = None
+) -> list[UserHealthProfile]:
+    """Search health profiles by various criteria.
 
     Args:
         db: Database session.
         min_age: Minimum age filter.
         max_age: Maximum age filter.
-        gender: Gender filter.
-        activity_level: Activity level filter.
+        gender: Gender filter (case-insensitive).
+        activity_level: Activity level filter (case-insensitive).
+        min_bmi: Minimum BMI filter (calculated dynamically).
+        max_bmi: Maximum BMI filter (calculated dynamically).
 
     Returns:
         List of UserHealthProfile instances matching the criteria.
-
-    Example:
-        >>> profiles = get_profiles_by_criteria(
-        ...     db, min_age=25, max_age=35, gender="female"
-        ... )
-        >>> print(f"Found {len(profiles)} female profiles aged 25-35")
     """
-    query = db.query(UserHealthProfile)
+    stmt = select(UserHealthProfile)
 
     if min_age is not None:
-        query = query.filter(UserHealthProfile.age >= min_age)
+        stmt = stmt.where(UserHealthProfile.age >= min_age)
     if max_age is not None:
-        query = query.filter(UserHealthProfile.age <= max_age)
+        stmt = stmt.where(UserHealthProfile.age <= max_age)
     if gender is not None:
-        query = query.filter(UserHealthProfile.gender == gender.lower())
+        stmt = stmt.where(UserHealthProfile.gender == gender.lower())
     if activity_level is not None:
-        query = query.filter(UserHealthProfile.activity_level == activity_level.lower())
+        stmt = stmt.where(UserHealthProfile.activity_level == activity_level.lower())
 
-    return query.all()
+    profiles = list(db.scalars(stmt).all())
+
+    # Filter by BMI if specified (requires calculation)
+    if min_bmi is not None or max_bmi is not None:
+        filtered_profiles = []
+        for profile in profiles:
+            bmi = profile.bmi
+            if bmi is not None:
+                if min_bmi is not None and bmi < min_bmi:
+                    continue
+                if max_bmi is not None and bmi > max_bmi:
+                    continue
+            filtered_profiles.append(profile)
+        return filtered_profiles
+
+    return profiles
