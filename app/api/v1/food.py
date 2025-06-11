@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.crud import food as crud_food
-from app.crud import core as crud_core
 from app.core.dependencies import get_db
+from app.crud import core as crud_core
+from app.crud import food as crud_food
 from app.schemas.food import (
     FoodItemCreate, FoodItemRead, FoodItemUpdate, FoodItemWithConversions,
     FoodItemUnitConversionCreate, FoodItemUnitConversionRead,
@@ -18,7 +18,7 @@ from app.schemas.food import (
     FoodConversionResult
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/food-items", tags=["Food Items"])
 
 
 # ================================================================== #
@@ -128,7 +128,7 @@ def get_food_item_by_id(
     )
 
 
-@router.put("/{food_item_id}", response_model=FoodItemRead)
+@router.patch("/{food_item_id}", response_model=FoodItemRead)
 def update_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
