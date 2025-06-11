@@ -23,6 +23,8 @@ from app.models import ai  # noqa: F401  – ensures AIModelOutput model is regi
 from app.models import shopping  # noqa: F401  – ensures ShoppingList model is registered
 from app.models import core  # noqa: F401  – ensures Unit models are registered
 from app.models import food  # noqa: F401  – ensures FoodItem models are registered
+from app.models import user_health  # noqa: F401  – ensures UserHealth model is registered
+from app.models import user_credentials  # noqa: F401  – ensures UserCredentials model is registered
 
 
 def init_db(*, reset: bool = False) -> None:
