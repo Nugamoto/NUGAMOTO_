@@ -97,7 +97,33 @@ def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User:
     Raises:
         ValueError: If the user does not exist or the e-mail is already taken.
     """
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        return None
 
+    # Nur Felder aktualisieren, die übergeben wurden
+    if user_data.name is not None:
+        user.name = user_data.name
+
+    if user_data.email is not None:
+        normalized_email = user_data.email.lower()
+        existing_user = get_user_by_email(db, normalized_email)
+        if existing_user and existing_user.id != user_id:
+            raise ValueError("Email is already taken.")
+        user.email = normalized_email
+
+    if user_data.diet_type is not None:
+        user.diet_type = user_data.diet_type
+
+    if user_data.allergies is not None:
+        user.allergies = user_data.allergies
+
+    if user_data.preferences is not None:
+        user.preferences = user_data.preferences
+
+    db.commit()
+    db.refresh(user)
+    return user
 
 def delete_user(db: Session, user_id: int) -> None:
     """Remove a user from the database.

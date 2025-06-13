@@ -19,7 +19,8 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.post(
     "/",
     response_model=UserRead,
-    status_code=201
+    status_code=201,
+    summary="Create a new user"
 )
 def create_user(user_data: UserCreate, db: Session = Depends(get_db)) -> UserRead:
     if crud_user.get_user_by_email(db, user_data.email):
@@ -30,7 +31,8 @@ def create_user(user_data: UserCreate, db: Session = Depends(get_db)) -> UserRea
 
 @router.get("/",
             response_model=list[UserRead],
-            status_code=200
+            status_code=200,
+            summary="Get all users"
             )
 def read_all_users(db: Session = Depends(get_db)) -> list[UserRead]:
     """Retrieve all users from the database.
@@ -73,7 +75,7 @@ def read_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
     "/{user_id}",
     response_model=UserRead,
     status_code=status.HTTP_200_OK,
-    summary="Update an existing user (partial)",
+    summary="Update an existing user",
 )
 def update_user(
     user_id: int,
@@ -116,11 +118,12 @@ def update_user(
                 raise HTTPException(status_code=404, detail="User not found.") from exc
             case "Email already registered.":
                 raise HTTPException(status_code=400, detail="Email already registered.") from exc
-        # Re-raise unexpected errors
         raise
 
-    return UserRead.model_validate(updated_user, from_attributes=True)
+    if updated_user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
 
+    return UserRead.model_validate(updated_user, from_attributes=True)
 
 @router.delete(
     "/{user_id}",
