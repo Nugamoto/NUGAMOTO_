@@ -96,7 +96,7 @@ def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUs
     "/{kitchen_id}",
     response_model=KitchenRead,
     status_code=status.HTTP_200_OK,
-    summary="Partially update an existing kitchen",
+    summary="Update an existing kitchen",
 )
 def update_kitchen(
         kitchen_id: int,
@@ -221,7 +221,7 @@ def add_user_to_kitchen(
     "/{kitchen_id}/users/{user_id}/role",
     response_model=UserKitchenRead,
     status_code=status.HTTP_200_OK,
-    summary="Partially update user role in kitchen",
+    summary="Update user role in kitchen",
 )
 def update_user_role_in_kitchen(
         kitchen_id: int,
