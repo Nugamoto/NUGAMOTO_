@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import KitchenRole
 from app.db.base import Base
-from app.models.user import User
+
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.inventory import StorageLocation, InventoryItem
+    from app.models.shopping import ShoppingList
+    from app.models.device import Appliance, KitchenTool
 
 
 class Kitchen(Base):
@@ -27,7 +34,25 @@ class Kitchen(Base):
     user_kitchens: Mapped[list[UserKitchen]] = relationship(
         "UserKitchen", back_populates="kitchen", cascade="all, delete-orphan"
     )
-
+    storage_locations: Mapped[list[StorageLocation]] = relationship(
+        "StorageLocation",
+        back_populates="kitchen",
+        cascade="all, delete-orphan"
+    )
+    inventory_items: Mapped[list[InventoryItem]] = relationship(
+        "InventoryItem",
+        back_populates="kitchen",
+        cascade="all, delete-orphan"
+    )
+    shopping_lists: Mapped[list[ShoppingList]] = relationship(
+        "ShoppingList", back_populates="kitchen", cascade="all, delete-orphan"
+    )
+    appliances: Mapped[list[Appliance]] = relationship(
+        "Appliance", back_populates="kitchen", cascade="all, delete-orphan"
+    )
+    kitchen_tools: Mapped[list[KitchenTool]] = relationship(
+        "KitchenTool", back_populates="kitchen", cascade="all, delete-orphan"
+    )
     # ------------------------------------------------------------------ #
     # Dunder                                                               #
     # ------------------------------------------------------------------ #

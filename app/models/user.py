@@ -10,7 +10,10 @@ from sqlalchemy.orm import Mapped, mapped_column, validates, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.recipe import Recipe
     from app.models.kitchen import UserKitchen
+    from app.models.user_health import UserHealthProfile
+    from app.models.user_credentials import UserCredentials
 
 
 class User(Base):
@@ -35,6 +38,23 @@ class User(Base):
     # ------------------------------------------------------------------ #
     user_kitchens: Mapped[list[UserKitchen]] = relationship(
         "UserKitchen", back_populates="user", cascade="all, delete-orphan"
+    )
+    created_recipes: Mapped[list[Recipe]] = relationship(
+        "Recipe",
+        back_populates="created_by_user",
+        cascade="all, delete-orphan"
+    )
+    health_profile: Mapped[UserHealthProfile | None] = relationship(
+        "UserHealthProfile",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    credentials: Mapped[UserCredentials | None] = relationship(
+        "UserCredentials",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
     )
 
     # ------------------------------------------------------------------ #
