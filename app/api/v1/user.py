@@ -99,7 +99,7 @@ def update_user(
     Raises:
         HTTPException:
             * 404 – if the user does not exist.
-            * 400 – if the e-mail address is already taken by another user.
+            * 400 – if another user already takes the e-mail address.
 
     Example:
         ```json
