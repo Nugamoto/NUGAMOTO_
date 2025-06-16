@@ -99,7 +99,7 @@ class FoodItemAlias(Base):
     """Represents a row in the ``food_item_alias`` table.
 
     Allows multiple names/aliases for the same food item.
-    For example: "Haferflocken" → "Porridge", "Oats".
+    For example, "Haferflocken" → "Porridge", "Oats".
     
     The user_id field is optional to allow both global and user-specific aliases.
     """
@@ -170,7 +170,7 @@ class FoodItemUnitConversion(Base):
     """Represents a row in the ``food_item_unit_conversions`` table.
 
     Defines specific conversion factors for individual food items.
-    For example: "1 cup oats = 80 g" where oats is the food item.
+    For example, "1 cup oats = 80 g" where oats is the food item.
     Uses composite primary key of food_item_id, from_unit_id, and to_unit_id.
     """
 
