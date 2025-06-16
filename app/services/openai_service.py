@@ -117,8 +117,8 @@ class OpenAIService(AIService):
             return self._create_chat_completion(
                 system_content=self.RECIPE_SYSTEM_PROMPT,
                 user_content=prompt,
-                max_tokens=1000,
-                temperature=0.7
+                max_tokens=1001,
+                temperature=0.71
             )
         except Exception as e:
             logger.error(f"Recipe generation failed: {str(e)}")
