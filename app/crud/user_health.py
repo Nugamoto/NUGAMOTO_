@@ -67,7 +67,7 @@ def get_user_health_profile_by_user_id(db: Session, user_id: int) -> UserHealthP
 
     Args:
         db: Database session.
-        user_id: ID of the user whose health profile to retrieve.
+        user_id: ID of the user whose health profile is to retrieve.
 
     Returns:
         UserHealthProfile instance if found, None otherwise.
@@ -124,7 +124,7 @@ def update_user_health_profile(
 
     Args:
         db: Database session.
-        user_id: ID of the user whose health profile to update.
+        user_id: ID of the user whose health profile is to update.
         profile_data: Partial health profile data to update (only non-None fields are updated).
 
     Returns:
