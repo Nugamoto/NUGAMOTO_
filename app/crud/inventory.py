@@ -367,7 +367,7 @@ def get_low_stock_items(
         kitchen_id: Kitchen ID
         
     Returns:
-        List of low stock inventory items with related data
+        List of low-stock inventory items with related data
     """
     return list(db.scalars(
         select(InventoryItem)
