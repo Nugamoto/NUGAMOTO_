@@ -386,7 +386,7 @@ def get_low_stock_items(
         kitchen_id: Kitchen ID
         
     Returns:
-        List of low stock inventory items
+        List of low-stock inventory items
     """
     low_stock_items = crud_inventory.get_low_stock_items(
         db=db,
