@@ -22,7 +22,7 @@ def create_user_credentials(
     Args:
         db: Database session.
         user_id: ID of the user to create credentials for.
-        credentials_data: Validated credentials creation data.
+        credentials_data: Validated credential creation data.
 
     Returns:
         The newly created and persisted user credentials instance.
@@ -68,7 +68,7 @@ def get_user_credentials_by_user_id(db: Session, user_id: int) -> UserCredential
 
     Args:
         db: Database session.
-        user_id: ID of the user whose credentials to retrieve.
+        user_id: ID of the user whose credentials are to retrieve.
 
     Returns:
         UserCredentials instance if found, None otherwise.
@@ -110,7 +110,7 @@ def update_user_credentials(
 
     Args:
         db: Database session.
-        user_id: ID of the user whose credentials to update.
+        user_id: ID of the user whose credentials are to update.
         credentials_data: Partial credentials data to update (only non-None fields are updated).
 
     Returns:
