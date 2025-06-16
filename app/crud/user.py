@@ -77,7 +77,7 @@ def get_user_by_email(db: Session, email: str | EmailStr) -> User | None:
 
 
 
-def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User:
+def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User | None:
     """Update an existing user with partial data (PATCH-conform).
 
     This function implements proper PATCH semantics by:
@@ -106,7 +106,7 @@ def update_user(db: Session, user_id: int, user_data: UserUpdate) -> User:
         user.name = user_data.name
 
     if user_data.email is not None:
-        normalized_email = user_data.email.lower()
+        normalized_email = str(user_data.email).lower()
         existing_user = get_user_by_email(db, normalized_email)
         if existing_user and existing_user.id != user_id:
             raise ValueError("Email is already taken.")
