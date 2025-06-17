@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.crud.core import get_conversion_factor
 from app.models.food import FoodItem, FoodItemUnitConversion, FoodItemAlias
 from app.schemas.food import (
     FoodItemCreate, FoodItemUpdate, FoodItemUnitConversionCreate, FoodItemAliasCreate
@@ -419,25 +420,52 @@ def get_food_unit_conversion(
     )
 
 
-def get_conversion_for_food_item(
+def get_conversion_factor_for_food_item(
         db: Session,
         food_item_id: int,
         from_unit_id: int,
         to_unit_id: int
 ) -> float | None:
-    """Get conversion factor for a specific food item between units.
+    """Get the conversion factor for a specific food item, auto-handling reciprocals.
+
+    This function attempts in order:
+      1. Direct lookup in `food_item_unit_conversions` (from_unit_id → to_unit_id).
+      2. Reciprocal lookup (to_unit_id → from_unit_id) and returns 1/factor.
+      3. Returns None if no food-specific conversion exists.
 
     Args:
-        db: Database session
-        food_item_id: Food item ID
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
+        db (Session): Database session.
+        food_item_id (int): ID of the food item.
+        from_unit_id (int): Source unit ID.
+        to_unit_id (int): Target unit ID.
 
     Returns:
-        Conversion factor or None if conversion doesn't exist
+        float | None: Conversion factor such that
+        `value * factor = converted_value`, or None if not found.
+
+    Examples:
+        >>> # Direct food-specific conversion exists
+        >>> # e.g., for flour: 1 EL → 10 g
+        >>> get_conversion_factor_for_food_item(db, food_item_id, from_unit_id, to_unit_id)
+        10.0
+
+        >>> # Reciprocal lookup: 10 g → 1 EL
+        >>> get_conversion_factor_for_food_item(db, food_item_id, from_unit_id, to_unit_id)
+        0.1
     """
-    conversion = get_food_unit_conversion(db, food_item_id, from_unit_id, to_unit_id)
-    return conversion.factor if conversion else None
+    # 1) direct lookup
+    conv = get_food_unit_conversion(db, food_item_id, from_unit_id, to_unit_id)
+    if conv:
+        return conv.factor
+
+    # 2) reciprocal lookup
+    rev = get_food_unit_conversion(db, food_item_id, to_unit_id, from_unit_id)
+    if rev and rev.factor != 0:
+        return 1.0 / rev.factor
+
+    return None
+
+
 
 
 def get_conversions_for_food_item(
@@ -502,35 +530,53 @@ def convert_food_value(
         from_unit_id: int,
         to_unit_id: int
 ) -> tuple[float, bool] | None:
-    """Convert a value for a specific food item between units.
+    """Convert a quantity for a specific food item between units, with fallback.
+
+    This function attempts in order:
+      1. Food-specific conversion (via get_conversion_for_food_item).
+      2. Generic conversion (via get_conversion_factor from core).
+      3. Returns None if neither path exists.
 
     Args:
-        db: Database session
-        food_item_id: Food item ID
-        value: Value to convert
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
+        db (Session): Database session.
+        food_item_id (int): ID of the food item.
+        value (float): Quantity in the source unit.
+        from_unit_id (int): Source unit ID.
+        to_unit_id (int): Target unit ID.
 
     Returns:
-        Tuple of (converted_value, is_food_specific) or None if conversion is not possible
-        is_food_specific indicates whether a food-specific conversion was used
+        tuple[float, bool] | None:
+          - converted_value: The resulting quantity in the target unit.
+          - is_food_specific: True if a food-specific conversion was used.
+        Or None if no conversion path is found.
+
+    Examples:
+        >>> # Flour: 2 EL → g
+        >>> convert_food_value(db, food_item_id, 2.0, from_unit_id, to_unit_id)
+        (20.0, True)
+
+        >>> # Flour: 20 g → EL (reciprocal)
+        >>> convert_food_value(db, food_item_id, 20.0, from_unit_id, to_unit_id)
+        (2.0, True)
+
+        >>> # Generic weight conversion: 1 lb → kg
+        >>> convert_food_value(db, food_item_id, 1.0, from_unit_id, to_unit_id)
+        (0.453592, False)
     """
     if from_unit_id == to_unit_id:
         return value, False
 
-    # Try food-specific conversion first
-    factor = get_conversion_for_food_item(db, food_item_id, from_unit_id, to_unit_id)
+    # 1) Try food-specific conversion (direct or reciprocal)
+    factor = get_conversion_factor_for_food_item(db, food_item_id, from_unit_id, to_unit_id)
     if factor is not None:
         return value * factor, True
 
-    # Fall back to generic unit conversion if available
-    from app.crud import core as crud_core
-    factor = crud_core.get_conversion_factor(db, from_unit_id, to_unit_id)
+    # 2) Fall back to generic conversion for weight/volume
+    factor = get_conversion_factor(db, from_unit_id, to_unit_id)
     if factor is not None:
         return value * factor, False
 
     return None
-
 
 def can_convert_food_units(
         db: Session,
@@ -553,7 +599,7 @@ def can_convert_food_units(
         return True
 
     # Check food-specific conversion
-    if get_conversion_for_food_item(db, food_item_id, from_unit_id, to_unit_id) is not None:
+    if get_conversion_factor_for_food_item(db, food_item_id, from_unit_id, to_unit_id) is not None:
         return True
 
     # Check generic unit conversion

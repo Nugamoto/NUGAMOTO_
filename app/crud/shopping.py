@@ -661,7 +661,7 @@ def calculate_quantity_in_base_unit(
         return package_quantity
 
     # 3. Check food-specific conversions first (higher priority)
-    food_conversion_factor = crud_food.get_conversion_for_food_item(
+    food_conversion_factor = crud_food.get_conversion_factor_for_food_item(
         db=db,
         food_item_id=food_item_id,
         from_unit_id=package_unit_id,

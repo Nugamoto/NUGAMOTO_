@@ -495,7 +495,7 @@ def convert_quantity_to_base_unit(
         return quantity
 
     # 3. Check food-specific conversions first (higher priority)
-    food_conversion_factor = crud_food.get_conversion_for_food_item(
+    food_conversion_factor = crud_food.get_conversion_factor_for_food_item(
         db=db,
         food_item_id=food_item_id,
         from_unit_id=input_unit_id,
