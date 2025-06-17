@@ -9,8 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.core.enums import UnitType
 from app.crud import core as crud_core
-from app.models.core import UnitType
 from app.schemas.core import (
     ConversionResult,
     UnitConversionCreate,

@@ -5,7 +5,8 @@ from __future__ import annotations
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.core import Unit, UnitConversion, UnitType
+from app.core.enums import UnitType
+from app.models.core import Unit, UnitConversion
 from app.schemas.core import UnitCreate, UnitConversionCreate, UnitUpdate, UnitConversionUpdate
 
 

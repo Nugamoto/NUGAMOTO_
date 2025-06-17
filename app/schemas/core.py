@@ -7,7 +7,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.core import UnitType
+from app.core.enums import UnitType
 
 
 # ================================================================== #
