@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import and_, select, func, ColumnElement
+from sqlalchemy import and_, select, func
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import UnitType
@@ -252,30 +252,71 @@ def get_conversion_factor(
     db: Session,
     from_unit_id: int,
     to_unit_id: int
-) -> float | ColumnElement[float] | None:
-    """Get the conversion factor between two units.
+) -> float | None:
+    """Retrieve the conversion factor between two units, auto-handling reciprocals and fallback.
+
+    This function attempts in order:
+    1. Direct lookup in the `unit_conversions` table (`from_unit_id` → `to_unit_id`).
+    2. Reciprocal lookup (`to_unit_id` → `from_unit_id`) and return `1.0 / factor`.
+    3. Generic fallback using each unit’s `to_base_factor` if both units share
+       the same type (`WEIGHT` or `VOLUME`).
 
     Args:
-        db: Database session.
-        from_unit_id: Source unit identifier.
-        to_unit_id: Target unit identifier.
+        db (Session): SQLAlchemy database session.
+        from_unit_id (int): ID of the source unit.
+        to_unit_id (int): ID of the target unit.
 
     Returns:
-        Conversion factor if conversion exists, None otherwise.
+        float | None: Conversion factor so that
+        `value_in_from_unit * factor = value_in_to_unit`, or `None` if no
+        conversion path exists.
+
+    Examples:
+        >>> # Explicit conversion exists
+        >>> get_conversion_factor(db, from_unit_id=8, to_unit_id=7)
+        3.0  # 1 tbsp → 3 tsp
+
+        >>> # Reciprocal lookup (only one direction stored)
+        >>> # unit_conversions has (tsp → tbsp = 0.3333)
+        >>> get_conversion_factor(db, from_unit_id=7, to_unit_id=8)
+        3.0  # 1 tsp → 0.3333 tbsp → reciprocal = 1 / 0.3333 = 3
+
+        >>> # Generic fallback for weight (lb → kg)
+        >>> # lb.to_base_factor = 453.592 (g), kg.to_base_factor = 1000 (g)
+        >>> get_conversion_factor(db, from_unit_id, to_unit_id)
+        0.453592
+
+        >>> # No conversion for different types (e.g., weight → volume)
+        >>> get_conversion_factor(db, from_unit_id, to_unit_id) is None
     """
+    # Same unit => factor 1.0
     if from_unit_id == to_unit_id:
         return 1.0
 
-    conv = get_unit_conversion(db, from_unit_id, to_unit_id)
-    if conv:
-        return conv.factor
+    # 1) Try explicit conversion table
+    conversion = get_unit_conversion(db, from_unit_id, to_unit_id)
+    if conversion:
+        return conversion.factor
 
+    # 2) reciprocal lookup
+    reverse = get_unit_conversion(db, to_unit_id, from_unit_id)
+    if reverse and reverse.factor:
+        return 1.0 / reverse.factor
+
+    # 3) Generic fallback for weight/volume
     from_unit = get_unit_by_id(db, from_unit_id)
     to_unit = get_unit_by_id(db, to_unit_id)
-    if from_unit and to_unit:
+    if (
+            from_unit is not None and
+            to_unit is not None and
+            from_unit.type == to_unit.type and
+            from_unit.type in (UnitType.WEIGHT, UnitType.VOLUME)
+    ):
         return from_unit.to_base_factor / to_unit.to_base_factor
 
+    # No conversion path found
     return None
+
 
 def get_conversions_from_unit(db: Session, unit_id: int) -> list[UnitConversion]:
     """Retrieve all conversions originating from a specific unit.
