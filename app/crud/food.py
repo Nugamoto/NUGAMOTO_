@@ -578,30 +578,55 @@ def convert_food_value(
 
     return None
 
+
 def can_convert_food_units(
         db: Session,
         food_item_id: int,
         from_unit_id: int,
         to_unit_id: int
 ) -> bool:
-    """Check if conversion between two units is possible for a specific food item.
+    """Determine whether two units can be converted for a given food item.
+
+    This function attempts in order:
+      1. Trivially true if source and target units are identical.
+      2. Food-specific conversion (direct or reciprocal).
+      3. Generic conversion for weight/volume via core.get_conversion_factor.
 
     Args:
-        db: Database session
-        food_item_id: Food item ID
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
+        db (Session): The SQLAlchemy database session.
+        food_item_id (int): The ID of the food item.
+        from_unit_id (int): The source unit ID.
+        to_unit_id (int): The target unit ID.
 
     Returns:
-        True if conversion is possible, False otherwise
+        bool: True if any conversion path exists, False otherwise.
+
+    Examples:
+        # Same unit
+        assert can_convert_food_units(db, flour_id, g_id, g_id) is True
+
+        # Food-specific conversion exists (e.g. EL ↔ g for flour)
+        assert can_convert_food_units(db, flour_id, el_id, g_id) is True
+        assert can_convert_food_units(db, flour_id, g_id, el_id) is True
+
+        # Generic weight conversion (e.g. lb ↔ kg)
+        assert can_convert_food_units(db, any_id, lb_id, kg_id) is True
+
+        # No path between count and volume
+        assert can_convert_food_units(db, any_id, piece_id, ml_id) is False
     """
+    # 1) identical units
     if from_unit_id == to_unit_id:
         return True
 
-    # Check food-specific conversion
+    # 2) food-specific conversion (direct or reciprocal)
     if get_conversion_factor_for_food_item(db, food_item_id, from_unit_id, to_unit_id) is not None:
         return True
 
-    # Check generic unit conversion
-    from app.crud import core as crud_core
-    return crud_core.can_convert_units(db, from_unit_id, to_unit_id)
+    # 3) generic conversion for weight/volume
+    # Use get_conversion_factor which includes type checking and to_base_factor fallback
+    if get_conversion_factor(db, from_unit_id, to_unit_id) is not None:
+        return True
+
+    # No conversion path found
+    return False

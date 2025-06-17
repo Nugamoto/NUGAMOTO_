@@ -750,7 +750,7 @@ def can_convert_food_units(
         food_item_id: int,
         from_unit_id: int,
         to_unit_id: int
-) -> bool:
+) -> dict[str, bool]:
     """Check if conversion between two units is possible for a specific food item.
 
     Args:
@@ -788,9 +788,11 @@ def can_convert_food_units(
             detail=f"To unit with ID {to_unit_id} not found"
         )
 
-    return crud_food.can_convert_food_units(
+    can_convert = crud_food.can_convert_food_units(
         db=db,
         food_item_id=food_item_id,
         from_unit_id=from_unit_id,
         to_unit_id=to_unit_id
     )
+
+    return {"can_convert": can_convert}
