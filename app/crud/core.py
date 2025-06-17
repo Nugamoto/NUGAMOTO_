@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, func
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import UnitType
@@ -177,16 +177,13 @@ def has_unit_conversions(db: Session, unit_id: int) -> bool:
     Returns:
         True if unit has conversions (as source or target), False otherwise.
     """
-    conversions_count = db.scalar(
-        select(db.func.count(UnitConversion.from_unit_id))
-        .where(
-            (UnitConversion.from_unit_id == unit_id) |
-            (UnitConversion.to_unit_id == unit_id)
-        )
+    stmt = (
+        select(func.count())
+        .select_from(UnitConversion)
+        .where(UnitConversion.from_unit_id == unit_id)
     )
-    
-    return conversions_count > 0
 
+    return db.execute(stmt).scalar_one() > 0
 
 # ================================================================== #
 # Unit Conversion CRUD Operations                                    #
