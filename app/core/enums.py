@@ -5,6 +5,15 @@ from __future__ import annotations
 from enum import Enum
 
 
+class UnitType(str, Enum):
+    """Enumeration of unit types."""
+
+    WEIGHT = "weight"
+    VOLUME = "volume"
+    COUNT = "count"
+    MEASURE = "measure"
+    PACKAGE = "package"
+
 class KitchenRole(str, Enum):
     """Valid roles for users in kitchens."""
 

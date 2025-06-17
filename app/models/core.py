@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -11,20 +10,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.enums import UnitType
 from app.db.base import Base
 
 if TYPE_CHECKING:
     pass
-
-
-class UnitType(str, Enum):
-    """Enumeration of unit types."""
-
-    WEIGHT = "weight"
-    VOLUME = "volume"
-    COUNT = "count"
-    MEASURE = "measure"
-    PACKAGE = "package"
 
 
 class Unit(Base):
