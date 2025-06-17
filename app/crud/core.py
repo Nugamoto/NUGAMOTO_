@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import and_, select, func
+from sqlalchemy import and_, select, func, ColumnElement
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import UnitType
@@ -252,7 +252,7 @@ def get_conversion_factor(
     db: Session,
     from_unit_id: int,
     to_unit_id: int
-) -> float | None:
+) -> float | ColumnElement[float] | None:
     """Get the conversion factor between two units.
 
     Args:
@@ -265,10 +265,17 @@ def get_conversion_factor(
     """
     if from_unit_id == to_unit_id:
         return 1.0
-        
-    conversion = get_unit_conversion(db, from_unit_id, to_unit_id)
-    return conversion.factor if conversion else None
 
+    conv = get_unit_conversion(db, from_unit_id, to_unit_id)
+    if conv:
+        return conv.factor
+
+    from_unit = get_unit_by_id(db, from_unit_id)
+    to_unit = get_unit_by_id(db, to_unit_id)
+    if from_unit and to_unit:
+        return from_unit.to_base_factor / to_unit.to_base_factor
+
+    return None
 
 def get_conversions_from_unit(db: Session, unit_id: int) -> list[UnitConversion]:
     """Retrieve all conversions originating from a specific unit.
