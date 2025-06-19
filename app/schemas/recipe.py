@@ -64,7 +64,7 @@ class RecipeIngredientRead(_RecipeIngredientBase):
 
     recipe_id: int
     created_at: datetime.datetime
-    last_updated: datetime.datetime | None
+    updated_at: datetime.datetime | None
 
     # Optional nested details for display
     food_item_name: str | None = Field(

@@ -117,7 +117,7 @@ class ShoppingProduct(Base):
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
-    last_updated: Mapped[datetime.datetime | None] = mapped_column(
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime,
         nullable=True,
         onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
@@ -211,7 +211,7 @@ class ShoppingProductAssignment(Base):
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
-    last_updated: Mapped[datetime.datetime | None] = mapped_column(
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime,
         nullable=True,
         onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)

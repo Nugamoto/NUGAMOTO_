@@ -125,7 +125,7 @@ class InventoryItem(Base):
         nullable=True,
         comment="Expiration date of this specific inventory item"
     )
-    last_updated: Mapped[datetime.datetime] = mapped_column(
+    updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime,
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc),

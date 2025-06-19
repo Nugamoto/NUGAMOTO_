@@ -73,7 +73,7 @@ class FoodItemRead(_FoodItemBase):
 
     id: int
     created_at: datetime.datetime
-    last_updated: datetime.datetime | None
+    updated_at: datetime.datetime | None
 
     # Include base unit information for convenience
     base_unit_name: str | None = Field(

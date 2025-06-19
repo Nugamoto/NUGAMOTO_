@@ -145,7 +145,7 @@ class InventoryItemRead(_InventoryItemBase):
 
     id: int
     kitchen_id: int
-    last_updated: datetime.datetime
+    updated_at: datetime.datetime
 
     # Include related objects for convenience
     food_item: FoodItemRead

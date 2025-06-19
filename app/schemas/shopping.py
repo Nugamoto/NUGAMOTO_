@@ -97,7 +97,7 @@ class ShoppingProductRead(_ShoppingProductBase):
 
     id: int
     created_at: datetime.datetime
-    last_updated: datetime.datetime | None
+    updated_at: datetime.datetime | None
 
     # Optional nested details
     food_item_name: str | None = Field(
@@ -179,7 +179,7 @@ class ShoppingProductAssignmentRead(_ShoppingProductAssignmentBase):
     shopping_list_id: int
     shopping_product_id: int
     created_at: datetime.datetime
-    last_updated: datetime.datetime | None
+    updated_at: datetime.datetime | None
 
     # Nested product details
     shopping_product: ShoppingProductRead
