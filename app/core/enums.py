@@ -5,6 +5,10 @@ from __future__ import annotations
 from enum import Enum
 
 
+class Units(str, Enum):
+    """Enumeration of units."""
+    pass
+
 class UnitType(str, Enum):
     """Enumeration of unit types."""
 
@@ -20,6 +24,26 @@ class KitchenRole(str, Enum):
     OWNER = "owner"
     ADMIN = "admin"
     MEMBER = "member"
+
+
+class Gender(str, Enum):
+    """Valid genders for user health profiles."""
+
+    MALE = "male"
+    FEMALE = "female"
+    NON_BINARY = "non-binary"
+    PREFER_NOT_TO_SAY = "prefer not to say"
+    OTHER = "other"
+
+
+class ActivityLevel(str, Enum):
+    """Valid activity levels for user health profiles."""
+
+    SEDENTARY = "sedentary"
+    LIGHTLY_ACTIVE = "lightly active"
+    MODERATELY_ACTIVE = "moderately active"
+    VERY_ACTIVE = "very active"
+    EXTREMELY_ACTIVE = "extremely active"
 
 
 class PackageType(str, Enum):

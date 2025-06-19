@@ -7,6 +7,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.enums import Gender, ActivityLevel
+
 
 class _UserHealthProfileBase(BaseModel):
     """Base schema for user health profile with common fields."""
@@ -79,9 +81,7 @@ class _UserHealthProfileBase(BaseModel):
             raise ValueError("Gender cannot be empty or whitespace")
 
         v_normalized = v.strip().lower()
-        allowed_genders = {
-            'male', 'female', 'non-binary', 'prefer not to say', 'other'
-        }
+        allowed_genders = {gender.value for gender in Gender}
 
         if v_normalized not in allowed_genders:
             raise ValueError(f"Gender must be one of: {', '.join(sorted(allowed_genders))}")
@@ -108,10 +108,7 @@ class _UserHealthProfileBase(BaseModel):
             raise ValueError("Activity level cannot be empty or whitespace")
 
         v_normalized = v.strip().lower()
-        allowed_levels = {
-            'sedentary', 'lightly active', 'moderately active',
-            'very active', 'extremely active'
-        }
+        allowed_levels = {level.value for level in ActivityLevel}
 
         if v_normalized not in allowed_levels:
             raise ValueError(f"Activity level must be one of: {', '.join(sorted(allowed_levels))}")
