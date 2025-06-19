@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from pydantic.config import ConfigDict
 
 
@@ -16,7 +16,48 @@ class _UserBase(BaseModel):
     preferences: str | None = Field(default=None)
 
     # Allow ORM objects to be returned directly from CRUD.
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+    @field_validator('name')
+    def validate_name(cls, v: str) -> str:
+        """Validate and normalize user name."""
+        if not v or v.isspace():
+            raise ValueError("User name cannot be empty or whitespace")
+
+        # Normalize to title case for consistency
+        v = v.strip().title()
+
+        if len(v) > 100:
+            raise ValueError("User name must be 100 characters or less")
+
+        return v
+
+    @field_validator('diet_type')
+    def validate_diet_type(cls, v: str | None) -> str | None:
+        """Validate and normalize diet type."""
+        if v is None:
+            return v
+
+        if not v or v.isspace():
+            raise ValueError("Diet type cannot be empty or whitespace")
+
+        # Normalize to lowercase for consistency
+        return v.strip().lower()
+
+    @field_validator('allergies', 'preferences')
+    def validate_text_fields(cls, v: str | None) -> str | None:
+        """Validate and normalize text fields."""
+        if v is None:
+            return v
+
+        if not v or v.isspace():
+            raise ValueError("Text field cannot be empty or whitespace")
+
+        return v.strip()
 
 
 class UserCreate(_UserBase):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
 
 from app.models.kitchen import KitchenRole
@@ -15,7 +15,25 @@ class _KitchenBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
 
     # Allow ORM objects to be returned directly from CRUD.
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+    @field_validator('name')
+    def validate_name(cls, v: str) -> str:
+        """Validate and normalize kitchen name."""
+        if not v or v.isspace():
+            raise ValueError("Kitchen name cannot be empty or whitespace")
+
+        # Normalize to title case for consistency
+        v = v.strip().title()
+
+        if len(v) > 255:
+            raise ValueError("Kitchen name must be 255 characters or less")
+
+        return v
 
 
 class KitchenCreate(_KitchenBase):

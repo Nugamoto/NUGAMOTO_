@@ -20,7 +20,25 @@ class _ShoppingListBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     type: ShoppingListType
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+    @field_validator('name')
+    def validate_name(cls, v: str) -> str:
+        """Validate and normalize shopping list name."""
+        if not v or v.isspace():
+            raise ValueError("Shopping list name cannot be empty or whitespace")
+
+        # Normalize to title case for consistency
+        v = v.strip().title()
+
+        if len(v) > 255:
+            raise ValueError("Shopping list name must be 255 characters or less")
+
+        return v
 
 
 class ShoppingListCreate(_ShoppingListBase):
@@ -43,7 +61,28 @@ class ShoppingListUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     type: ShoppingListType | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+    @field_validator('name')
+    def validate_name(cls, v: str | None) -> str | None:
+        """Validate and normalize shopping list name."""
+        if v is None:
+            return v
+
+        if not v or v.isspace():
+            raise ValueError("Shopping list name cannot be empty or whitespace")
+
+        # Normalize to title case for consistency
+        v = v.strip().title()
+
+        if len(v) > 255:
+            raise ValueError("Shopping list name must be 255 characters or less")
+
+        return v
 
 
 # ================================================================== #
@@ -72,19 +111,25 @@ class _ShoppingProductBase(BaseModel):
         description="Estimated price for this package"
     )
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
 
     @field_validator("package_type")
     def validate_package_type(cls, v: str) -> str:
-        """Normalize package type format.
-        
-        Args:
-            v: The package type value to validate.
-            
-        Returns:
-            The normalized package type.
-        """
-        return v.strip()
+        """Validate and normalize package type."""
+        if not v or v.isspace():
+            raise ValueError("Package type cannot be empty or whitespace")
+
+        # Keep original case but trim whitespace
+        v = v.strip()
+
+        if len(v) > 100:
+            raise ValueError("Package type must be 100 characters or less")
+
+        return v
 
 
 class ShoppingProductCreate(_ShoppingProductBase):
@@ -127,21 +172,28 @@ class ShoppingProductUpdate(BaseModel):
     package_type: str | None = Field(default=None, min_length=1, max_length=100)
     estimated_price: float | None = Field(default=None, ge=0)
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
 
     @field_validator("package_type")
     def validate_package_type(cls, v: str | None) -> str | None:
-        """Normalize package type format.
-        
-        Args:
-            v: The package type value to validate.
-            
-        Returns:
-            The normalized package type or None.
-        """
+        """Validate and normalize package type."""
         if v is None:
             return v
-        return v.strip()
+
+        if not v or v.isspace():
+            raise ValueError("Package type cannot be empty or whitespace")
+
+        # Keep original case but trim whitespace
+        v = v.strip()
+
+        if len(v) > 100:
+            raise ValueError("Package type must be 100 characters or less")
+
+        return v
 
 
 # ================================================================== #
@@ -164,7 +216,27 @@ class _ShoppingProductAssignmentBase(BaseModel):
         description="User note about this specific assignment"
     )
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+    @field_validator('note')
+    def validate_note(cls, v: str | None) -> str | None:
+        """Validate and normalize note field."""
+        if v is None:
+            return v
+
+        if not v or v.isspace():
+            raise ValueError("Note cannot be empty or whitespace")
+
+        v = v.strip()
+
+        if len(v) > 500:
+            raise ValueError("Note must be 500 characters or less")
+
+        return v
 
 
 class ShoppingProductAssignmentCreate(_ShoppingProductAssignmentBase):
@@ -193,7 +265,27 @@ class ShoppingProductAssignmentUpdate(BaseModel):
         description="Updated note for this assignment"
     )
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+    @field_validator('note')
+    def validate_note(cls, v: str | None) -> str | None:
+        """Validate and normalize note field."""
+        if v is None:
+            return v
+
+        if not v or v.isspace():
+            raise ValueError("Note cannot be empty or whitespace")
+
+        v = v.strip()
+
+        if len(v) > 500:
+            raise ValueError("Note must be 500 characters or less")
+
+        return v
 
 
 # ================================================================== #
