@@ -35,6 +35,12 @@ class PackageType(str, Enum):
     JAR = "jar"
     PACKAGE = "package"
     BULK = "bulk"
+    POUCH = "pouch"
+    SACK = "sack"
+    CARTON = "carton"
+    STICK = "stick"
+    ROLL = "roll"
+    CONTAINER = "container"
 
 
 class ShoppingListType(str, Enum):
