@@ -90,8 +90,6 @@ class UnitUpdate(_UnitBase):
         description="Factor to convert to base unit (e.g., 1000 for kg → g)"
     )]
 
-    # Validator is inherited automatically - no duplication!
-
 
 class UnitRead(_UnitBase):
     """Schema for reading unit data with complete information."""
@@ -170,7 +168,6 @@ class UnitConversionUpdate(BaseModel):
 class UnitConversionRead(_UnitConversionBase):
     """Schema for reading unit conversion data with related unit names."""
 
-    # Include related unit information for convenience
     from_unit_name: str | None = Field(
         None,
         description="Name of the source unit"
