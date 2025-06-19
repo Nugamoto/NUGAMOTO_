@@ -1,5 +1,7 @@
 """FastAPI application main entry point."""
 
+# start development server: uvicorn app.main:app --reload
+
 from fastapi import FastAPI
 
 from .api.v1 import (
