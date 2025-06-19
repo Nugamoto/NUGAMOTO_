@@ -31,7 +31,7 @@ crud_device = crud.device
 device_types_router = APIRouter(prefix="/device-types", tags=["Device Types"])
 appliances_router = APIRouter(prefix="/kitchens", tags=["Appliances"])
 tools_router = APIRouter(prefix="/kitchens", tags=["Kitchen Tools"])
-summary_router = APIRouter(prefix="/kitchens", tags=["Kitchen Summary"])
+summary_router = APIRouter(prefix="/kitchens", tags=["Kitchen Device Summary"])
 
 
 # ================================================================== #
