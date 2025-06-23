@@ -9,6 +9,7 @@ class Units(str, Enum):
     """Enumeration of units."""
     pass
 
+
 class UnitType(str, Enum):
     """Enumeration of unit types."""
 
@@ -17,6 +18,7 @@ class UnitType(str, Enum):
     COUNT = "count"
     MEASURE = "measure"
     PACKAGE = "package"
+
 
 class KitchenRole(str, Enum):
     """Valid roles for users in kitchens."""
@@ -44,6 +46,14 @@ class ActivityLevel(str, Enum):
     MODERATELY_ACTIVE = "moderately active"
     VERY_ACTIVE = "very active"
     EXTREMELY_ACTIVE = "extremely active"
+
+
+class DifficultyLevel(str, Enum):
+    """Valid difficulty levels for recipes."""
+
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
 
 
 class PackageType(str, Enum):
