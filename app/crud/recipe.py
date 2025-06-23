@@ -1,8 +1,6 @@
-"""CRUD operations for recipe system v2.0."""
+"""CRUD helper functions for the Recipe model."""
 
 from __future__ import annotations
-
-import datetime
 
 from sqlalchemy import select, and_, func
 from sqlalchemy.orm import Session, joinedload
@@ -11,61 +9,26 @@ from sqlalchemy.sql import Select
 from app.models.core import Unit
 from app.models.food import FoodItem
 from app.models.recipe import (
-    Recipe,
-    RecipeIngredient,
-    RecipeStep,
-    RecipeNutrition,
-    RecipeReview
+    Recipe, RecipeIngredient, RecipeStep, RecipeNutrition, RecipeReview
 )
 from app.models.user import User
 from app.schemas.recipe import (
-    RecipeCreate,
-    RecipeUpdate,
-    RecipeIngredientCreate,
-    RecipeIngredientUpdate,
-    RecipeSearchParams,
-    RecipeSummary,
-    RecipeNutritionCreate,
-    RecipeNutritionUpdate,
-    RecipeReviewUpsert,
-    RecipeReviewUpdate,
-    RecipeRatingSummary
+    RecipeCreate, RecipeUpdate, RecipeIngredientCreate, RecipeIngredientUpdate,
+    RecipeSearchParams, RecipeSummary, RecipeNutritionCreate, RecipeNutritionUpdate,
+    RecipeReviewUpsert, RecipeReviewUpdate, RecipeRatingSummary
 )
 
-
-# ================================================================== #
-# Recipe CRUD                                                        #
-# ================================================================== #
 
 def create_recipe(db: Session, recipe_data: RecipeCreate) -> Recipe:
     """Create and persist a new recipe with all related data.
 
     Args:
         db: Database session.
-        recipe_data: Validated recipe payload including ingredients, steps, and nutrition.
+        recipe_data: Validated recipe payload.
 
     Returns:
-        The newly created, *refreshed* recipe instance with all relationships.
-
-    Raises:
-        ValueError: If referenced food items, units, or user do not exist.
-
-    Example:
-        >>> ingredient = RecipeIngredientCreate(
-        ...     food_item_id=1,
-        ...     amount_in_base_unit=150.0,  # 150g in base unit
-        ...     original_unit_id=2,         # "tsp" unit
-        ...     original_amount=3.0         # 3 tsp as entered by user
-        ... )
-        >>> data = RecipeCreate(
-        ...     title="Pasta Bolognese",
-        ...     ingredients=[ingredient],
-        ...     steps=[...],
-        ...     created_by_user_id=123
-        ... )
-        >>> result = create_recipe(db, data)
+        The newly created, refreshed recipe instance.
     """
-    # Validate that all food items exist
     food_item_ids = [ingredient.food_item_id for ingredient in recipe_data.ingredients]
     existing_food_items = db.scalars(
         select(FoodItem.id).where(FoodItem.id.in_(food_item_ids))
@@ -75,7 +38,6 @@ def create_recipe(db: Session, recipe_data: RecipeCreate) -> Recipe:
         missing_ids = set(food_item_ids) - set(existing_food_items)
         raise ValueError(f"Food items not found: {missing_ids}")
 
-    # Validate that all original units exist (if specified)
     original_unit_ids = [
         ingredient.original_unit_id
         for ingredient in recipe_data.ingredients
@@ -89,22 +51,22 @@ def create_recipe(db: Session, recipe_data: RecipeCreate) -> Recipe:
             missing_unit_ids = set(original_unit_ids) - set(existing_units)
             raise ValueError(f"Units not found: {missing_unit_ids}")
 
-    # Validate user exists if specified
     if recipe_data.created_by_user_id is not None:
         user_stmt = select(User).where(User.id == recipe_data.created_by_user_id)
         if db.scalar(user_stmt) is None:
             raise ValueError("User not found.")
 
-    # Create the recipe
     new_recipe = Recipe(
         title=recipe_data.title,
         is_ai_generated=recipe_data.is_ai_generated,
         created_by_user_id=recipe_data.created_by_user_id,
+        difficulty=recipe_data.difficulty,
+        servings=recipe_data.servings,
+        tags=recipe_data.tags,
     )
     db.add(new_recipe)
-    db.flush()  # Get the recipe ID without committing
+    db.flush()
 
-    # Create ingredients
     for ingredient_data in recipe_data.ingredients:
         ingredient = RecipeIngredient(
             recipe_id=new_recipe.id,
@@ -115,7 +77,6 @@ def create_recipe(db: Session, recipe_data: RecipeCreate) -> Recipe:
         )
         db.add(ingredient)
 
-    # Create steps
     for step_data in recipe_data.steps:
         step = RecipeStep(
             recipe_id=new_recipe.id,
@@ -124,7 +85,6 @@ def create_recipe(db: Session, recipe_data: RecipeCreate) -> Recipe:
         )
         db.add(step)
 
-    # Create nutrition if provided
     if recipe_data.nutrition is not None:
         nutrition = RecipeNutrition(
             recipe_id=new_recipe.id,
@@ -143,27 +103,27 @@ def create_recipe(db: Session, recipe_data: RecipeCreate) -> Recipe:
 
 
 def get_recipe_by_id(db: Session, recipe_id: int) -> Recipe | None:
-    """Get a recipe by ID.
+    """Return a recipe by primary key.
 
     Args:
         db: Database session.
-        recipe_id: The unique identifier of the recipe.
+        recipe_id: Primary key of the recipe.
 
     Returns:
-        The recipe if found, None otherwise.
+        The matching recipe or None.
     """
     return db.scalar(select(Recipe).where(Recipe.id == recipe_id))
 
 
 def get_recipe_with_details(db: Session, recipe_id: int) -> Recipe | None:
-    """Get a recipe with all related data (ingredients, steps, nutrition).
+    """Get a recipe with all related data loaded.
 
     Args:
         db: Database session.
-        recipe_id: The unique identifier of the recipe.
+        recipe_id: Primary key of the recipe.
 
     Returns:
-        The recipe with all relationships loaded, or None if not found.
+        The recipe with all relationships loaded, or None.
     """
     return db.scalar(
         select(Recipe)
@@ -223,16 +183,12 @@ def get_all_recipes(
     return list(db.scalars(query).all())
 
 
-def update_recipe(
-        db: Session,
-        recipe_id: int,
-        recipe_data: RecipeUpdate
-) -> Recipe | None:
-    """Update a recipe.
+def update_recipe(db: Session, recipe_id: int, recipe_data: RecipeUpdate) -> Recipe | None:
+    """Update an existing recipe.
 
     Args:
         db: Database session.
-        recipe_id: The unique identifier of the recipe.
+        recipe_id: Primary key of the recipe.
         recipe_data: Validated update data.
 
     Returns:
@@ -242,7 +198,6 @@ def update_recipe(
     if recipe is None:
         return None
 
-    # Update only provided fields
     update_data = recipe_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(recipe, field, value)
@@ -252,27 +207,22 @@ def update_recipe(
     return recipe
 
 
-def delete_recipe(db: Session, recipe_id: int) -> bool:
-    """Delete a recipe.
+def delete_recipe(db: Session, recipe_id: int) -> None:
+    """Remove a recipe from the database.
 
     Args:
         db: Database session.
-        recipe_id: The unique identifier of the recipe.
+        recipe_id: Primary key of the recipe to delete.
 
-    Returns:
-        True if the recipe was deleted, False if it wasn't found.
-
-    Note:
-        This will also delete all related ingredients, steps, nutrition,
-        and reviews due to cascade delete.
+    Raises:
+        ValueError: If the recipe does not exist.
     """
     recipe = get_recipe_by_id(db, recipe_id)
     if recipe is None:
-        return False
+        raise ValueError("Recipe not found.")
 
     db.delete(recipe)
     db.commit()
-    return True
 
 
 def get_recipe_summary(db: Session) -> RecipeSummary:
@@ -301,10 +251,6 @@ def get_recipe_summary(db: Session) -> RecipeSummary:
     )
 
 
-# ================================================================== #
-# Recipe Ingredient CRUD (v2.0)                                     #
-# ================================================================== #
-
 def add_recipe_ingredient(
         db: Session,
         recipe_id: int,
@@ -321,33 +267,20 @@ def add_recipe_ingredient(
         The newly created ingredient.
 
     Raises:
-        ValueError: If recipe or food item doesn't exist, or ingredient already exists.
-
-    Example:
-        >>> data = RecipeIngredientCreate(
-        ...     food_item_id=1,
-        ...     amount_in_base_unit=150.0,  # 150g flour
-        ...     original_unit_id=5,         # "cup" unit
-        ...     original_amount=1.0         # 1 cup
-        ... )
-        >>> result = add_recipe_ingredient(db, 1, data)
+        ValueError: If recipe or food item doesn't exist.
     """
-    # Verify recipe exists
     if not get_recipe_by_id(db, recipe_id):
         raise ValueError("Recipe not found")
 
-    # Verify food item exists
     food_item = db.scalar(select(FoodItem).where(FoodItem.id == ingredient_data.food_item_id))
     if not food_item:
         raise ValueError("Food item not found")
 
-    # Verify original unit exists (if specified)
     if ingredient_data.original_unit_id is not None:
         unit = db.scalar(select(Unit).where(Unit.id == ingredient_data.original_unit_id))
         if not unit:
             raise ValueError("Original unit not found")
 
-    # Check if ingredient already exists
     existing = get_recipe_ingredient(db, recipe_id, ingredient_data.food_item_id)
     if existing:
         raise ValueError("Ingredient already exists in this recipe")
@@ -396,10 +329,7 @@ def get_recipe_ingredient(
     )
 
 
-def get_ingredients_for_recipe(
-        db: Session,
-        recipe_id: int
-) -> list[RecipeIngredient]:
+def get_ingredients_for_recipe(db: Session, recipe_id: int) -> list[RecipeIngredient]:
     """Get all ingredients for a recipe.
 
     Args:
@@ -443,26 +373,21 @@ def update_recipe_ingredient(
     if ingredient is None:
         return None
 
-    # Validate original unit exists (if being updated)
     if ingredient_data.original_unit_id is not None:
         unit = db.scalar(select(Unit).where(Unit.id == ingredient_data.original_unit_id))
         if not unit:
             raise ValueError("Original unit not found")
 
-    # Update only provided fields
     update_data = ingredient_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(ingredient, field, value)
-
-    # Update timestamp
-    ingredient.last_updated = datetime.datetime.now(datetime.timezone.utc)
 
     db.commit()
     db.refresh(ingredient)
     return ingredient
 
 
-def delete_recipe_ingredient(db: Session, recipe_id: int, food_item_id: int) -> bool:
+def delete_recipe_ingredient(db: Session, recipe_id: int, food_item_id: int) -> None:
     """Remove an ingredient from a recipe.
 
     Args:
@@ -470,21 +395,16 @@ def delete_recipe_ingredient(db: Session, recipe_id: int, food_item_id: int) -> 
         recipe_id: The ID of the recipe.
         food_item_id: The ID of the food item.
 
-    Returns:
-        True if the ingredient was removed, False if it wasn't found.
+    Raises:
+        ValueError: If the ingredient was not found.
     """
     ingredient = get_recipe_ingredient(db, recipe_id, food_item_id)
     if ingredient is None:
-        return False
+        raise ValueError("Ingredient not found.")
 
     db.delete(ingredient)
     db.commit()
-    return True
 
-
-# ================================================================== #
-# Recipe Nutrition CRUD                                             #
-# ================================================================== #
 
 def create_or_update_recipe_nutrition(
         db: Session,
@@ -504,24 +424,20 @@ def create_or_update_recipe_nutrition(
     Raises:
         ValueError: If recipe doesn't exist.
     """
-    # Verify recipe exists
     if not get_recipe_by_id(db, recipe_id):
         raise ValueError("Recipe not found")
 
-    # Check if nutrition already exists
     existing_nutrition = db.scalar(
         select(RecipeNutrition).where(RecipeNutrition.recipe_id == recipe_id)
     )
 
     if existing_nutrition:
-        # Update existing nutrition
         for field, value in nutrition_data.model_dump().items():
             setattr(existing_nutrition, field, value)
         db.commit()
         db.refresh(existing_nutrition)
         return existing_nutrition
     else:
-        # Create new nutrition
         nutrition = RecipeNutrition(
             recipe_id=recipe_id,
             kcal=nutrition_data.kcal,
@@ -558,7 +474,6 @@ def update_recipe_nutrition(
     if nutrition is None:
         return None
 
-    # Update only provided fields
     update_data = nutrition_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(nutrition, field, value)
@@ -568,30 +483,25 @@ def update_recipe_nutrition(
     return nutrition
 
 
-def delete_recipe_nutrition(db: Session, recipe_id: int) -> bool:
+def delete_recipe_nutrition(db: Session, recipe_id: int) -> None:
     """Delete nutrition information for a recipe.
 
     Args:
         db: Database session.
         recipe_id: The ID of the recipe.
 
-    Returns:
-        True if nutrition was deleted, False if it wasn't found.
+    Raises:
+        ValueError: If nutrition was not found.
     """
     nutrition = db.scalar(
         select(RecipeNutrition).where(RecipeNutrition.recipe_id == recipe_id)
     )
     if nutrition is None:
-        return False
+        raise ValueError("Nutrition not found.")
 
     db.delete(nutrition)
     db.commit()
-    return True
 
-
-# ================================================================== #
-# Recipe Search and AI Features                                     #
-# ================================================================== #
 
 def get_recipes_by_available_ingredients(
         db: Session,
@@ -607,15 +517,10 @@ def get_recipes_by_available_ingredients(
 
     Returns:
         A list of recipes ordered by ingredient match percentage.
-
-    Example:
-        >>> available_items = [1, 2, 3, 4]  # flour, eggs, milk, sugar
-        >>> recipes = get_recipes_by_available_ingredients(db, available_items, 0.8)
     """
     if not food_item_ids:
         return []
 
-    # Subquery to count total ingredients per recipe
     total_ingredients = (
         select(
             RecipeIngredient.recipe_id,
@@ -625,7 +530,6 @@ def get_recipes_by_available_ingredients(
         .subquery()
     )
 
-    # Subquery to count available ingredients per recipe
     available_ingredients = (
         select(
             RecipeIngredient.recipe_id,
@@ -636,7 +540,6 @@ def get_recipes_by_available_ingredients(
         .subquery()
     )
 
-    # Main query to get recipes with match percentage
     query = (
         select(Recipe)
         .join(total_ingredients, Recipe.id == total_ingredients.c.recipe_id)
@@ -652,11 +555,7 @@ def get_recipes_by_available_ingredients(
     return list(db.scalars(query).all())
 
 
-def get_ai_generated_recipes(
-        db: Session,
-        skip: int = 0,
-        limit: int = 100
-) -> list[Recipe]:
+def get_ai_generated_recipes(db: Session, skip: int = 0, limit: int = 100) -> list[Recipe]:
     """Get all AI-generated recipes.
 
     Args:
@@ -678,10 +577,6 @@ def get_ai_generated_recipes(
     return list(db.scalars(query).all())
 
 
-# ================================================================== #
-# Recipe Review CRUD                                                #
-# ================================================================== #
-
 def create_or_update_recipe_review(
         db: Session,
         user_id: int,
@@ -702,13 +597,11 @@ def create_or_update_recipe_review(
     Raises:
         ValueError: If user or recipe doesn't exist.
     """
-    # Verify user and recipe exist
     if not db.scalar(select(User).where(User.id == user_id)):
         raise ValueError("User not found")
     if not get_recipe_by_id(db, recipe_id):
         raise ValueError("Recipe not found")
 
-    # Check if review already exists
     existing_review = db.scalar(
         select(RecipeReview).where(
             and_(
@@ -719,15 +612,12 @@ def create_or_update_recipe_review(
     )
 
     if existing_review:
-        # Update existing review
         existing_review.rating = review_data.rating
         existing_review.comment = review_data.comment
-        existing_review.created_at = datetime.datetime.now(datetime.timezone.utc)
         db.commit()
         db.refresh(existing_review)
         return existing_review
     else:
-        # Create new review
         review = RecipeReview(
             user_id=user_id,
             recipe_id=recipe_id,
@@ -817,20 +707,16 @@ def update_recipe_review(
     if review is None:
         return None
 
-    # Update only provided fields
     update_data = review_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(review, field, value)
-
-    # Update timestamp
-    review.created_at = datetime.datetime.now(datetime.timezone.utc)
 
     db.commit()
     db.refresh(review)
     return review
 
 
-def delete_recipe_review(db: Session, user_id: int, recipe_id: int) -> bool:
+def delete_recipe_review(db: Session, user_id: int, recipe_id: int) -> None:
     """Delete a recipe review.
 
     Args:
@@ -838,16 +724,15 @@ def delete_recipe_review(db: Session, user_id: int, recipe_id: int) -> bool:
         user_id: The ID of the user.
         recipe_id: The ID of the recipe.
 
-    Returns:
-        True if the review was deleted, False if it wasn't found.
+    Raises:
+        ValueError: If the review was not found.
     """
     review = get_recipe_review_by_user(db, user_id, recipe_id)
     if review is None:
-        return False
+        raise ValueError("Review not found.")
 
     db.delete(review)
     db.commit()
-    return True
 
 
 def get_recipe_rating_summary(db: Session, recipe_id: int) -> RecipeRatingSummary:
@@ -873,11 +758,9 @@ def get_recipe_rating_summary(db: Session, recipe_id: int) -> RecipeRatingSummar
             rating_distribution={"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
         )
 
-    # Calculate average rating
     total_rating = sum(review.rating for review in reviews)
     average_rating = total_rating / total_reviews
 
-    # Calculate rating distribution
     distribution = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
     for review in reviews:
         distribution[str(review.rating)] += 1
