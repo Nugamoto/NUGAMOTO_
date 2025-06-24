@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -124,12 +124,14 @@ def update_recipe(
 def delete_recipe(
         recipe_id: int,
         db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     """Delete a recipe and all its related data."""
     try:
         crud_recipe.delete_recipe(db, recipe_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Recipe not found.") from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -195,12 +197,14 @@ def delete_recipe_ingredient(
         recipe_id: int,
         food_item_id: int,
         db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     """Remove an ingredient from a recipe."""
     try:
         crud_recipe.delete_recipe_ingredient(db, recipe_id, food_item_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Ingredient not found.") from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -247,12 +251,14 @@ def update_recipe_nutrition(
 def delete_recipe_nutrition(
         recipe_id: int,
         db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     """Delete nutrition information for a recipe."""
     try:
         crud_recipe.delete_recipe_nutrition(db, recipe_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Nutrition not found.") from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
@@ -361,9 +367,11 @@ def delete_recipe_review(
         recipe_id: int,
         user_id: int,
         db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     """Delete a recipe review."""
     try:
         crud_recipe.delete_recipe_review(db, user_id, recipe_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Review not found.") from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
