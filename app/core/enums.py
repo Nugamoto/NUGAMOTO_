@@ -48,6 +48,17 @@ class ActivityLevel(str, Enum):
     EXTREMELY_ACTIVE = "extremely active"
 
 
+class DeviceCategory(str, Enum):
+    """Valid device categories."""
+
+    APPLIANCE = "appliance"
+    TOOL = "tool"
+    COOKWARE = "cookware"
+    BAKEWARE = "bakeware"
+    GADGET = "gadget"
+    STORAGE = "storage"
+
+
 class DifficultyLevel(str, Enum):
     """Valid difficulty levels for recipes."""
 

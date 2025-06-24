@@ -7,6 +7,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.enums import DeviceCategory
+
 
 # ================================================================== #
 # Device Type Schemas                                                #
@@ -43,9 +45,7 @@ class _DeviceTypeBase(BaseModel):
             raise ValueError("Category cannot be empty or whitespace")
 
         v_normalized = v.strip().lower()
-        allowed_categories = {
-            'appliance', 'tool', 'cookware', 'bakeware', 'gadget', 'storage'
-        }
+        allowed_categories = {category.value for category in DeviceCategory}
 
         if v_normalized not in allowed_categories:
             raise ValueError(f"Category must be one of: {', '.join(sorted(allowed_categories))}")
@@ -174,21 +174,21 @@ class _ApplianceBase(BaseModel):
         """Validate power values and check for consistency if both are provided."""
         if v is None:
             return v
-        
+
         # Basic validation - power must be positive
         if v <= 0:
             raise ValueError(f"{info.field_name} must be greater than 0")
-        
+
         # Optional: Add consistency check between power_kw and power_watts
         # This would require access to other field values during validation
         # For now, we keep it simple and validate each field independently
-        
+
         return v
 
 
 class ApplianceCreate(_ApplianceBase):
     """Schema for creating new appliance."""
-    
+
     device_type_id: Annotated[int, Field(
         gt=0,
         description="ID of the device type"
@@ -197,7 +197,7 @@ class ApplianceCreate(_ApplianceBase):
 
 class ApplianceUpdate(_ApplianceBase):
     """Schema for updating appliance (partial updates allowed)."""
-    
+
     name: Annotated[str | None, Field(
         None,
         min_length=1,
