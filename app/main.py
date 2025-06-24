@@ -11,7 +11,7 @@ from .api.v1 import (
     shopping as shopping_router,
     core as core_router,
     food as food_router,
-    ai as ai_router,
+    ai_model_output as ai_router,
     user_health as user_health_router,
     user_credentials as user_credentials_router,
     device as device_router,

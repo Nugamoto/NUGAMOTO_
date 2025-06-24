@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.core.enums import AIOutputTargetType
-from app.models.ai import OutputType, OutputFormat
+from app.models.ai_model_output import OutputType, OutputFormat
 
 
 class _AIModelOutputBase(BaseModel):

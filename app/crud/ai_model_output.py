@@ -4,8 +4,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import AIOutputTargetType
-from app.models.ai import AIModelOutput, OutputFormat, OutputType
-from app.schemas.ai import AIModelOutputCreate, AIOutputSearchParams, AIOutputSummary
+from app.models.ai_model_output import AIModelOutput, OutputFormat, OutputType
+from app.schemas.ai_model_output import AIModelOutputCreate, AIOutputSearchParams, AIOutputSummary
 
 
 def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOutput:
@@ -119,7 +119,7 @@ def get_all_ai_outputs(
         ...     target_type=AIOutputTargetType.RECIPE,
         ...     model_version="gpt-4"
         ... )
-        >>> outputs = get_all_ai_outputs(db, params, skip=0, limit=10)
+        >>> outputs = get_all_ai_outputs(db, params, skip=1, limit=5)
     """
     query = select(AIModelOutput)
 
@@ -234,7 +234,7 @@ def get_ai_outputs_by_target(
 
     Example:
         >>> outputs = get_ai_outputs_by_target(
-        ...     db, AIOutputTargetType.RECIPE, 456, skip=0, limit=10
+        ...     db, AIOutputTargetType.RECIPE, 456, skip=1, limit=5
         ... )
         >>> print(f"Found {len(outputs)} AI outputs for recipe 456")
     """
