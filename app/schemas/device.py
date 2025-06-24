@@ -7,8 +7,6 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.core.enums import DeviceCategory
-
 
 # ================================================================== #
 # Device Type Schemas                                                #
@@ -45,7 +43,9 @@ class _DeviceTypeBase(BaseModel):
             raise ValueError("Category cannot be empty or whitespace")
 
         v_normalized = v.strip().lower()
-        allowed_categories = {category.value for category in DeviceCategory}
+        allowed_categories = {
+            'appliance', 'tool', 'cookware', 'bakeware', 'gadget', 'storage'
+        }
 
         if v_normalized not in allowed_categories:
             raise ValueError(f"Category must be one of: {', '.join(sorted(allowed_categories))}")
@@ -150,7 +150,6 @@ class _ApplianceBase(BaseModel):
     )]
     notes: Annotated[str | None, Field(
         None,
-        min_length=1,
         description="Additional notes about the appliance"
     )]
 
@@ -165,8 +164,9 @@ class _ApplianceBase(BaseModel):
         """Validate and normalize text fields."""
         if v is None:
             return v
+        # Convert empty strings to None instead of raising validation error
         if not v or v.isspace():
-            raise ValueError("Text field cannot be empty or whitespace")
+            return None
         return v.strip()
 
     @field_validator('power_kw', 'power_watts')
@@ -257,14 +257,10 @@ class _KitchenToolBase(BaseModel):
     )]
     size_or_detail: Annotated[str | None, Field(
         None,
-        min_length=1,
-        max_length=100,
         description="Size specification or descriptive detail"
     )]
     material: Annotated[str | None, Field(
         None,
-        min_length=1,
-        max_length=100,
         description="Primary material"
     )]
     quantity: Annotated[int | None, Field(
@@ -279,7 +275,6 @@ class _KitchenToolBase(BaseModel):
     )]
     notes: Annotated[str | None, Field(
         None,
-        min_length=1,
         description="Additional notes about the tool"
     )]
 
@@ -294,8 +289,9 @@ class _KitchenToolBase(BaseModel):
         """Validate and normalize material field."""
         if v is None:
             return v
+        # Convert empty strings to None instead of raising validation error
         if not v or v.isspace():
-            raise ValueError("Material cannot be empty or whitespace")
+            return None
 
         v_normalized = v.strip().lower()
 
@@ -307,8 +303,9 @@ class _KitchenToolBase(BaseModel):
         """Validate and normalize text fields."""
         if v is None:
             return v
+        # Convert empty strings to None instead of raising validation error
         if not v or v.isspace():
-            raise ValueError("Text field cannot be empty or whitespace")
+            return None
         return v.strip()
 
 
