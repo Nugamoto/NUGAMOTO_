@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import datetime
+import json
 import logging
 from typing import Any
 
-import openai
+from openai import OpenAI
 from openai.types.chat import (
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam
@@ -27,11 +27,7 @@ class OpenAIServiceError(Exception):
 
 
 class OpenAIService(AIService):
-    """OpenAI service implementation for AI features.
-
-    This service provides AI functionality using OpenAI's GPT models,
-    including recipe generation, inventory analysis, and cooking suggestions.
-    """
+    """OpenAI service implementation for AI features."""
 
     def __init__(
             self,
@@ -43,18 +39,17 @@ class OpenAIService(AIService):
 
         Args:
             db: Database session for accessing kitchen data.
-            model: OpenAI model to use (default: gpt-4o-mini).
+            model: OpenAI model to use.
             api_key: Optional API key override.
         """
         self.db = db
         self.api_key = api_key or settings.OPENAI_API_KEY
-        self.client = openai.OpenAI(api_key=self.api_key)
-        self.model = model
-        self.prompt_builder = PromptBuilder(db)
-
         if not self.api_key:
             raise OpenAIServiceError("OpenAI API key is required")
 
+        self.client = OpenAI(api_key=self.api_key)
+        self.model = model
+        self.prompt_builder = PromptBuilder(db)
         logger.debug(f"Initialized OpenAIService with model: {model}")
 
     async def generate_recipe(
@@ -64,13 +59,13 @@ class OpenAIService(AIService):
             kitchen_id: int,
             **kwargs: Any
     ) -> RecipeGenerationResponse:
-        """Generate a recipe using OpenAI GPT model.
+        """Generate a recipe using OpenAI.
 
         Args:
             request: Recipe generation request with preferences.
             user_id: ID of the requesting user.
             kitchen_id: ID of the kitchen.
-            **kwargs: Additional OpenAI-specific parameters.
+            **kwargs: Additional parameters.
 
         Returns:
             Structured recipe response.
@@ -79,8 +74,8 @@ class OpenAIService(AIService):
             OpenAIServiceError: If recipe generation fails.
         """
         try:
-            # Build dynamic prompts
-            system_prompt, user_prompt = await self.prompt_builder.build_recipe_prompt(
+            # Build dynamic prompts (no await needed)
+            system_prompt, user_prompt = self.prompt_builder.build_recipe_prompt(
                 request=request,
                 user_id=user_id,
                 kitchen_id=kitchen_id
@@ -96,7 +91,6 @@ class OpenAIService(AIService):
 
             # Parse and validate response
             recipe_response = RecipeGenerationResponse.model_validate(response_data)
-
             logger.info(f"Successfully generated recipe for user {user_id}")
             return recipe_response
 
@@ -113,17 +107,17 @@ class OpenAIService(AIService):
 
         Args:
             kitchen_id: ID of the kitchen to analyze.
-            **kwargs: Additional OpenAI-specific parameters.
+            **kwargs: Additional parameters.
 
         Returns:
-            Dictionary containing inventory analysis and recommendations.
+            Analysis and recommendations.
 
         Raises:
-            OpenAIServiceError: If inventory analysis fails.
+            OpenAIServiceError: If analysis fails.
         """
         try:
-            # Build dynamic prompts for inventory analysis
-            system_prompt, user_prompt = await self.prompt_builder.build_inventory_analysis_prompt(
+            # Build dynamic prompts (no await needed)
+            system_prompt, user_prompt = self.prompt_builder.build_inventory_analysis_prompt(
                 kitchen_id=kitchen_id
             )
 
@@ -148,12 +142,12 @@ class OpenAIService(AIService):
             user_id: int,
             **kwargs: Any
     ) -> dict[str, Any]:
-        """Get personalized cooking suggestions.
+        """Get personalized cooking suggestions using OpenAI.
 
         Args:
             kitchen_id: ID of the kitchen.
             user_id: ID of the user requesting suggestions.
-            **kwargs: Additional OpenAI-specific parameters.
+            **kwargs: Additional parameters.
 
         Returns:
             Dictionary containing personalized cooking suggestions.
@@ -164,12 +158,11 @@ class OpenAIService(AIService):
         try:
             # Create a basic recipe request for suggestions
             suggestion_request = RecipeGenerationRequest(
-                meal_type="any",
                 special_requests="Provide 3-5 quick meal suggestions based on available ingredients"
             )
 
-            # Use recipe generation with modified prompt for suggestions
-            system_prompt, user_prompt = await self.prompt_builder.build_recipe_prompt(
+            # Use recipe generation prompt with modified prompt for suggestions
+            system_prompt, user_prompt = self.prompt_builder.build_recipe_prompt(
                 request=suggestion_request,
                 user_id=user_id,
                 kitchen_id=kitchen_id
@@ -178,9 +171,21 @@ class OpenAIService(AIService):
             # Modify system prompt for suggestions
             suggestion_system_prompt = system_prompt.replace(
                 "Provide responses in valid JSON format with the specified schema.",
-                "Provide 3-5 quick meal suggestions in JSON format with simple recipes."
+                """Provide 3-5 quick meal suggestions in JSON format with the following structure:
+                {
+                    "suggestions": [
+                        {
+                            "title": "Recipe title",
+                            "description": "Brief description",
+                            "estimated_time": "Total time in minutes",
+                            "difficulty": "easy/medium/hard",
+                            "main_ingredients": ["ingredient1", "ingredient2"]
+                        }
+                    ]
+                }"""
             )
 
+            # Generate suggestions using OpenAI
             suggestions_data = await self._create_json_completion(
                 system_content=suggestion_system_prompt,
                 user_content=user_prompt + "\n\nPlease provide quick meal suggestions rather than a single detailed recipe.",
@@ -202,20 +207,6 @@ class OpenAIService(AIService):
             max_tokens: int = 1500,
             temperature: float = 0.7
     ) -> dict[str, Any]:
-        """Create a JSON completion using OpenAI API.
-
-        Args:
-            system_content: System message content.
-            user_content: User message content.
-            max_tokens: Maximum tokens to generate.
-            temperature: Sampling temperature.
-
-        Returns:
-            Parsed JSON response.
-
-        Raises:
-            OpenAIServiceError: If API call fails.
-        """
         try:
             messages = [
                 ChatCompletionSystemMessageParam(
@@ -228,20 +219,20 @@ class OpenAIService(AIService):
                 )
             ]
 
-            response = self.client.chat.completions.create(
+            # Create completion without await
+            completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                response_format={"type": "json_object"}  # Ensures JSON response
+                response_format={"type": "json_object"}
             )
 
-            content = response.choices[0].message.content
+            # Access response content
+            content = completion.choices[0].message.content
             if not content:
                 raise OpenAIServiceError("Empty response from OpenAI")
 
-            # Parse JSON response
-            import json
             return json.loads(content)
 
         except json.JSONDecodeError as e:
