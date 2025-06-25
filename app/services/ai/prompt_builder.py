@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.crud import inventory as crud_inventory
 from app.crud import device as crud_device
+from app.crud import inventory as crud_inventory
 from app.crud import user as crud_user
 from app.schemas.ai_service import RecipeGenerationRequest
-from app.schemas.user import UserRead
-from app.schemas.inventory import InventoryItemRead
-from app.schemas.device import ApplianceRead, KitchenToolRead
+from app.models.user import User
+from app.models.inventory import InventoryItem
 
 
 class PromptBuilder:
@@ -27,7 +25,7 @@ class PromptBuilder:
         """
         self.db = db
 
-    async def build_recipe_prompt(
+    def build_recipe_prompt(
             self,
             request: RecipeGenerationRequest,
             user_id: int,
@@ -43,22 +41,23 @@ class PromptBuilder:
         Returns:
             Tuple of (system_prompt, user_prompt).
         """
-        # Get user data
-        user = await crud_user.get(self.db, id=user_id)
+        # Get user data using correct CRUD function
+        user = crud_user.get_user_by_id(self.db, user_id=user_id)
         if not user:
             raise ValueError(f"User {user_id} not found")
 
-        # Get kitchen inventory
-        inventory_items = await crud_inventory.get_kitchen_inventory(
+        # Get kitchen inventory using correct CRUD function
+        inventory_items = crud_inventory.get_kitchen_inventory(
             self.db, kitchen_id=kitchen_id
         )
 
-        # Get available appliances and tools
-        appliances = await crud_device.get_appliances_by_kitchen_id(
-            self.db, kitchen_id=kitchen_id, available_only=True
+        # Get available appliances and tools using correct CRUD functions
+        # These return the extended schemas with device type info
+        appliances = crud_device.get_kitchen_appliances(
+            self.db, kitchen_id=kitchen_id
         )
-        tools = await crud_device.get_kitchen_tools_by_kitchen_id(
-            self.db, kitchen_id=kitchen_id, available_only=True
+        tools = crud_device.get_kitchen_tools(
+            self.db, kitchen_id=kitchen_id
         )
 
         system_prompt = self._build_system_prompt()
@@ -95,10 +94,10 @@ Provide responses in valid JSON format with the specified schema."""
     def _build_user_prompt(
             self,
             request: RecipeGenerationRequest,
-            user: UserRead,
-            inventory_items: list[InventoryItemRead],
-            appliances: list[ApplianceRead],
-            tools: list[KitchenToolRead]
+            user: User,
+            inventory_items: list[InventoryItem],
+            appliances: list,  # Any type, could be ApplianceWithDeviceType
+            tools: list       # Any type, could be KitchenToolWithDeviceType
     ) -> str:
         """Build the user prompt with all contextual information."""
 
@@ -136,7 +135,7 @@ Please respond with a complete recipe in JSON format."""
 
         return prompt
 
-    def _build_user_context(self, user: UserRead) -> str:
+    def _build_user_context(self, user: User) -> str:
         """Build user-specific context section."""
         context = f"USER PROFILE:\n- Name: {user.name}"
 
@@ -151,7 +150,7 @@ Please respond with a complete recipe in JSON format."""
 
         return context
 
-    def _build_inventory_context(self, inventory_items: list[InventoryItemRead]) -> str:
+    def _build_inventory_context(self, inventory_items: list[InventoryItem]) -> str:
         """Build inventory context section."""
         if not inventory_items:
             return "AVAILABLE INGREDIENTS:\n- No ingredients currently in inventory"
@@ -164,7 +163,9 @@ Please respond with a complete recipe in JSON format."""
         regular_items = []
 
         for item in inventory_items:
-            item_desc = f"- {item.food_item.name}: {item.quantity} {item.base_unit_name or 'units'}"
+            # Get base unit name from the relationship
+            base_unit_name = item.food_item.base_unit.name if item.food_item.base_unit else 'units'
+            item_desc = f"- {item.food_item.name}: {item.quantity} {base_unit_name}"
 
             if item.expiration_date and (item.expiration_date - today).days <= 3:
                 expiring_soon.append(f"{item_desc} (expires {item.expiration_date})")
@@ -181,29 +182,34 @@ Please respond with a complete recipe in JSON format."""
 
         return context
 
-    def _build_equipment_context(
-            self,
-            appliances: list[ApplianceRead],
-            tools: list[KitchenToolRead]
-    ) -> str:
+    def _build_equipment_context(self, appliances: list, tools: list) -> str:
         """Build kitchen equipment context section."""
         context = "AVAILABLE KITCHEN EQUIPMENT:"
 
         if appliances:
             context += "\n\nAppliances:"
             for appliance in appliances:
-                context += f"\n- {appliance.display_name}"
-                if appliance.capacity_liters:
-                    context += f" ({appliance.capacity_liters}L capacity)"
+                # Handle both Appliance and ApplianceWithDeviceType objects
+                display_name = getattr(appliance, 'display_name', 'Unknown Appliance')
+                capacity = getattr(appliance, 'capacity_liters', None)
+
+                context += f"\n- {display_name}"
+                if capacity:
+                    context += f" ({capacity}L capacity)"
 
         if tools:
             context += "\n\nTools:"
             for tool in tools:
-                tool_desc = f"- {tool.name}"
-                if tool.size_or_detail:
-                    tool_desc += f" ({tool.size_or_detail})"
-                if tool.quantity and tool.quantity > 1:
-                    tool_desc += f" (x{tool.quantity})"
+                # Handle both KitchenTool and KitchenToolWithDeviceType objects
+                name = getattr(tool, 'name', 'Unknown Tool')
+                size_detail = getattr(tool, 'size_or_detail', None)
+                quantity = getattr(tool, 'quantity', None)
+
+                tool_desc = f"- {name}"
+                if size_detail:
+                    tool_desc += f" ({size_detail})"
+                if quantity and quantity > 1:
+                    tool_desc += f" (x{quantity})"
                 context += f"\n{tool_desc}"
 
         if not appliances and not tools:
@@ -244,7 +250,7 @@ Please respond with a complete recipe in JSON format."""
 
         return context
 
-    async def build_inventory_analysis_prompt(self, kitchen_id: int) -> tuple[str, str]:
+    def build_inventory_analysis_prompt(self, kitchen_id: int) -> tuple[str, str]:
         """Build prompts for inventory analysis.
 
         Args:
@@ -253,7 +259,8 @@ Please respond with a complete recipe in JSON format."""
         Returns:
             Tuple of (system_prompt, user_prompt).
         """
-        inventory_items = await crud_inventory.get_kitchen_inventory(
+        # Get inventory using correct CRUD function
+        inventory_items = crud_inventory.get_kitchen_inventory(
             self.db, kitchen_id=kitchen_id
         )
 
@@ -276,15 +283,18 @@ Respond in JSON format with structured analysis."""
         good_items = []
 
         for item in inventory_items:
-            if item.is_expired:
-                expired_items.append(f"- {item.food_item.name}: {item.quantity} {item.base_unit_name or 'units'} (expired {item.expiration_date})")
-            elif item.expires_soon:
+            # Get base unit name from the relationship
+            base_unit_name = item.food_item.base_unit.name if item.food_item.base_unit else 'units'
+
+            if item.is_expired():
+                expired_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (expired {item.expiration_date})")
+            elif item.expires_soon():
                 days_left = (item.expiration_date - today).days if item.expiration_date else None
-                expiring_items.append(f"- {item.food_item.name}: {item.quantity} {item.base_unit_name or 'units'} (expires in {days_left} days)")
-            elif item.is_low_stock:
-                low_stock_items.append(f"- {item.food_item.name}: {item.quantity} {item.base_unit_name or 'units'} (below minimum)")
+                expiring_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (expires in {days_left} days)")
+            elif item.is_low_stock():
+                low_stock_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (below minimum)")
             else:
-                good_items.append(f"- {item.food_item.name}: {item.quantity} {item.base_unit_name or 'units'}")
+                good_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name}")
 
         user_prompt = "Please analyze this kitchen inventory:\n\n"
 
