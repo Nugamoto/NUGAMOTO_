@@ -299,6 +299,21 @@ class TestUserCredentialsCRUD:
         expected_address = "123 Main St\n10001 New York\nUSA"
         assert credentials.full_address == expected_address
 
+    def test_full_address_property_missing_fields(self, db: Session):
+        """full_address returns None when no address components provided."""
+        user_data = UserCreate(name="Test User", email="testuser@example.com")
+        user = crud_user.create_user(db, user_data)
+
+        credentials_data = UserCredentialsCreate(
+            email="user@example.com",
+            password_hash="hashed_password_123",
+        )
+        credentials = crud_user_credentials.create_user_credentials(
+            db, user_id=user.id, credentials_data=credentials_data
+        )
+
+        assert credentials.full_address is None
+
     def test_search_user_credentials(self, db: Session):
         """Test searching credentials by various criteria."""
         # Create multiple users with credentials
