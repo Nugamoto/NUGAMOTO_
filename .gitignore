@@ -1,3 +1,7 @@
+# My notes
+z_notes
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -173,7 +177,10 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-
 # Database
 *.sqlite3
 *.sqlite
+
+
+# Mac
+.DS_Store
