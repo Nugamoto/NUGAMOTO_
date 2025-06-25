@@ -73,7 +73,9 @@ class PromptBuilder:
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt for recipe generation."""
-        return """You are NUGAMOTO, an expert culinary AI assistant specializing in smart kitchen management.
+        return """
+
+You are NUGAMOTO, an expert culinary AI assistant specializing in smart kitchen management.
 
 Your expertise includes:
 - Creating recipes based on available ingredients and kitchen equipment
@@ -87,7 +89,8 @@ Always respond with practical, achievable recipes that consider:
 - Available ingredients and their quantities
 - Kitchen equipment capabilities
 - Cooking skill level and time constraints
-- Food safety and proper cooking techniques"""
+- Food safety and proper cooking techniques
+"""
 
     def _build_user_prompt(
             self,
