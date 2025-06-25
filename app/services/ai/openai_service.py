@@ -219,21 +219,82 @@ class OpenAIService(AIService):
                 )
             ]
 
-            # Create completion without await
+            # Define the function schema based on RecipeGenerationResponse
+            function_schema = {
+                "name": "generate_recipe",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+                        "description": {"type": "string", "maxLength": 500},
+                        "cuisine_type": {"type": "string", "maxLength": 50},
+                        "difficulty_level": {"type": "string", "enum": ["easy", "medium", "hard"]},  # Kleinbuchstaben!
+                        "prep_time_minutes": {"type": "integer", "minimum": 0},
+                        "cook_time_minutes": {"type": "integer", "minimum": 0},
+                        "total_time_minutes": {"type": "integer", "minimum": 0},
+                        "servings": {"type": "integer", "minimum": 1},
+                        "ingredients": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string", "minLength": 1, "maxLength": 100},
+                                    "amount": {"type": "string", "minLength": 1, "maxLength": 50},
+                                    "notes": {"type": "string", "maxLength": 200}
+                                },
+                                "required": ["name", "amount"]
+                            },
+                            "minItems": 1
+                        },
+                        "instructions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "step_number": {"type": "integer", "minimum": 1},
+                                    "instruction": {"type": "string", "minLength": 1, "maxLength": 1000},
+                                    "estimated_time": {"type": "integer", "minimum": 1}
+                                },
+                                "required": ["step_number", "instruction"]
+                            },
+                            "minItems": 1
+                        },
+                        "nutritional_info": {
+                            "type": "object",
+                            "properties": {
+                                "calories_per_serving": {"type": "integer", "minimum": 0},
+                                "protein_grams": {"type": "number", "minimum": 0},
+                                "carbs_grams": {"type": "number", "minimum": 0},
+                                "fat_grams": {"type": "number", "minimum": 0},
+                                "fiber_grams": {"type": "number", "minimum": 0}
+                            }
+                        },
+                        "tips": {"type": "array", "items": {"type": "string"}},
+                        "tags": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": [
+                        "title", "difficulty_level", "prep_time_minutes",
+                        "cook_time_minutes", "total_time_minutes", "servings",
+                        "ingredients", "instructions"
+                    ]
+                }
+            }
+
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                response_format={"type": "json_object"}
+                functions=[function_schema],
+                function_call={"name": "generate_recipe"}
             )
 
-            # Access response content
-            content = completion.choices[0].message.content
-            if not content:
-                raise OpenAIServiceError("Empty response from OpenAI")
+            # Extract the function call result
+            function_call = completion.choices[0].message.function_call
+            if not function_call or not function_call.arguments:
+                raise OpenAIServiceError("No function call in response")
 
-            return json.loads(content)
+            return json.loads(function_call.arguments)
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {str(e)}")
