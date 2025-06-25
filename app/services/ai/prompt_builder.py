@@ -87,9 +87,7 @@ Always respond with practical, achievable recipes that consider:
 - Available ingredients and their quantities
 - Kitchen equipment capabilities
 - Cooking skill level and time constraints
-- Food safety and proper cooking techniques
-
-Provide responses in valid JSON format with the specified schema."""
+- Food safety and proper cooking techniques"""
 
     def _build_user_prompt(
             self,
