@@ -232,10 +232,10 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
             {"user_id": uid, "kitchen_id": kitchen_id, "role": role,
              "created_at": now, "updated_at": now}
             for uid, role in [
-                (user_id_map["demo@example.com"], "owner"),
-                (user_id_map["alice@example.com"], "member"),
-                (user_id_map["bob@example.com"], "member"),
-                (user_id_map["charlie@example.com"], "member"),
+                (user_id_map["demo@example.com"], "OWNER"),
+                (user_id_map["alice@example.com"], "MEMBER"),
+                (user_id_map["bob@example.com"], "MEMBER"),
+                (user_id_map["charlie@example.com"], "MEMBER"),
             ]
         ])
 
