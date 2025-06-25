@@ -741,14 +741,14 @@ def get_kitchen_device_summary(db: Session, kitchen_id: int) -> KitchenDeviceSum
         func.count(func.distinct(Appliance.device_type_id)).label("appliance_types")
     ).where(Appliance.kitchen_id == kitchen_id)
     
-    appliance_type_count = db.execute(appliance_types_stmt).scalar() or 0
+    db.execute(appliance_types_stmt).scalar() or 0
 
     # Count unique device types used in tools
     tool_types_stmt = select(
         func.count(func.distinct(KitchenTool.device_type_id)).label("tool_types")
     ).where(KitchenTool.kitchen_id == kitchen_id)
     
-    tool_type_count = db.execute(tool_types_stmt).scalar() or 0
+    db.execute(tool_types_stmt).scalar() or 0
 
     # Count total unique device types (union of both)
     unique_types_stmt = select(
