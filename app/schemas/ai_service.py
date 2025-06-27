@@ -6,8 +6,11 @@ import datetime
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy.orm import Session
 
 from app.core.enums import DifficultyLevel
+from app.schemas.ai_model_output import AIModelOutputRead
+from app.schemas.recipe import RecipeWithDetails, RecipeCreate
 
 
 # ================================================================== #
@@ -211,6 +214,83 @@ class RecipeGenerationResponse(BaseModel):
         from_attributes=True
     )
 
+    def to_recipe_create(self, db: Session) -> RecipeCreate:
+        """Convert AI response to RecipeCreate schema.
+        
+        Args:
+            db: Database session for food item lookups.
+            
+        Returns:
+            RecipeCreate instance.
+            
+        Raises:
+            ValueError: If ingredients cannot be mapped to food items.
+        """
+        from app.crud.food import get_food_item_by_name
+        from app.schemas.recipe import (
+            RecipeCreate,
+            RecipeIngredientCreate,
+            RecipeStepCreate,
+            RecipeNutritionCreate
+        )
+
+        # Map ingredients
+        ingredients = []
+        unknown_ingredients = []
+
+        for ing in self.ingredients:
+            # Find food item by name
+            food_item = get_food_item_by_name(db, ing.name)
+            if food_item:
+                ingredients.append(
+                    RecipeIngredientCreate(
+                        food_item_id=food_item.id,
+                        amount_in_base_unit=1.0,  # Default conversion
+                        original_amount=float(ing.amount.split()[0]),
+                        original_unit_id=None  # Would need unit mapping
+                    )
+                )
+            else:
+                unknown_ingredients.append(ing.name)
+
+        if unknown_ingredients:
+            raise ValueError(
+                f"Could not find these ingredients in database: {', '.join(unknown_ingredients)}"
+            )
+
+        # Map steps
+        steps = [
+            RecipeStepCreate(
+                step_number=idx + 1,
+                instruction=step.instruction
+            )
+            for idx, step in enumerate(self.instructions)
+        ]
+
+        # Map nutrition if available
+        nutrition = None
+        if self.nutritional_info:
+            nutrition = RecipeNutritionCreate(
+                kcal=self.nutritional_info.calories_per_serving,
+                protein_g=self.nutritional_info.protein_grams,
+                fat_g=self.nutritional_info.fat_grams,
+                carbs_g=self.nutritional_info.carbs_grams,
+                fiber_g=self.nutritional_info.fiber_grams,
+                source="ai_generated"
+            )
+
+        # Create recipe
+        return RecipeCreate(
+            title=self.title,
+            difficulty=self.difficulty_level.value,
+            servings=self.servings,
+            tags=self.tags,
+            ingredients=ingredients,
+            steps=steps,
+            nutrition=nutrition,
+            is_ai_generated=True
+        )
+
 
 # ================================================================== #
 # Inventory Analysis Schemas                                         #
@@ -310,5 +390,35 @@ class AIServiceResponse(BaseModel):
         default_factory=lambda: datetime.datetime.now(datetime.timezone.utc),
         description="Timestamp when response was generated"
     )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeRequestInput(BaseModel):
+    """Schema for recipe generation user input."""
+
+    user_input: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="User's recipe request in natural language"
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True
+    )
+
+    def to_generation_request(self) -> RecipeGenerationRequest:
+        """Convert user input to structured generation request."""
+        return RecipeGenerationRequest(
+            special_requests=self.user_input
+        )
+
+
+class RecipeWithAIOutput(BaseModel):
+    """Schema combining recipe and its AI generation metadata."""
+
+    recipe: RecipeWithDetails
+    ai_output: AIModelOutputRead
 
     model_config = ConfigDict(from_attributes=True)
