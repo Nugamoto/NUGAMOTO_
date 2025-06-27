@@ -574,7 +574,7 @@ def _build_inventory_item_read(item) -> InventoryItemRead:
         category=item.food_item.category,
         base_unit_id=item.food_item.base_unit_id,
         created_at=item.food_item.created_at,
-        last_updated=item.food_item.last_updated,
+        updated_at=item.food_item.updated_at,
         base_unit_name=item.food_item.base_unit.name if item.food_item.base_unit else None
     )
 
@@ -593,7 +593,7 @@ def _build_inventory_item_read(item) -> InventoryItemRead:
         quantity=item.quantity,
         min_quantity=item.min_quantity,
         expiration_date=item.expiration_date,
-        last_updated=item.last_updated,
+        updated_at=item.updated_at,
         food_item=food_item_read,
         storage_location=storage_location_read,
         is_low_stock=item.is_low_stock(),
