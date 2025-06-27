@@ -1,8 +1,10 @@
 """Interactive test script for AI service."""
 
 import asyncio
+import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Add project root to path
@@ -19,9 +21,36 @@ from app.core.enums import DifficultyLevel
 from app.crud import user as crud_user
 from app.crud import kitchen as crud_kitchen
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with separate levels for file and console
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+
+# Create timestamp for log filename
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_filename = log_dir / f"ai_test_{timestamp}.log"
+
+# Configure root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+
+# File handler (DEBUG level - alles)
+file_handler = logging.FileHandler(log_filename, encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(file_formatter)
+
+# Console handler (INFO level - nur wichtige Infos)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(levelname)s - %(message)s')
+console_handler.setFormatter(console_formatter)
+
+# Add handlers to root logger
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
+
 logger = logging.getLogger(__name__)
+print(f"📝 Detailed logs will be saved to: {log_filename}")
 
 
 def create_recipe_request() -> RecipeGenerationRequest:
@@ -77,7 +106,7 @@ def create_recipe_request() -> RecipeGenerationRequest:
     # Special requests
     special_requests = input("Special requests or preferences [optional]: ").strip() or None
 
-    return RecipeGenerationRequest(
+    recipe_request = RecipeGenerationRequest(
         cuisine_type=cuisine_type,
         meal_type=meal_type,
         difficulty_level=difficulty_level,
@@ -89,28 +118,77 @@ def create_recipe_request() -> RecipeGenerationRequest:
         special_requests=special_requests
     )
 
+    # Log the created request
+    logger.debug(f"Created recipe request: {recipe_request.model_dump()}")
+
+    return recipe_request
+
+
+def print_prompt_info(system_prompt: str, user_prompt: str):
+    """Print the prompts that will be sent to the AI."""
+    print("\n" + "=" * 80)
+    print("📝 PROMPTS SENT TO OPENAI")
+    print("=" * 80)
+
+    print("\n🤖 SYSTEM PROMPT:")
+    print("-" * 50)
+    print(system_prompt)
+
+    print("\n👤 USER PROMPT:")
+    print("-" * 50)
+    print(user_prompt)
+    print("=" * 80)
+
+    # Log the prompts to file
+    logger.debug("=== SYSTEM PROMPT ===")
+    logger.debug(system_prompt)
+    logger.debug("=== USER PROMPT ===")
+    logger.debug(user_prompt)
+
+
+def print_structured_output(response_data: dict):
+    """Print the structured output received from OpenAI."""
+    print("\n" + "=" * 80)
+    print("📊 STRUCTURED OUTPUT FROM OPENAI API")
+    print("=" * 80)
+
+    # Pretty print the JSON response
+    formatted_json = json.dumps(response_data, indent=2, ensure_ascii=False)
+    print(formatted_json)
+    print("=" * 80)
+
+    # Entfernt: Doppeltes Logging - wird bereits im OpenAI Service geloggt
+
 
 async def interactive_test():
     """Interactive test with user selection."""
+    logger.info("Starting NUGAMOTO AI Service Interactive Test")
+    
     if not settings.OPENAI_API_KEY:
+        logger.error("OPENAI_API_KEY not found in environment variables")
         print("❌ Error: OPENAI_API_KEY not found in environment variables")
         return
 
     db: Session = SessionLocal()
+    logger.debug("Database session created")
 
     try:
         print("🤖 NUGAMOTO AI Service - Interactive Test")
         print("=" * 50)
 
         # Get users
+        logger.debug("Fetching all users from database")
         users = crud_user.get_all_users(db)
         if not users:
+            logger.warning("No users found in database")
             print("❌ No users found in database.")
             return
 
+        logger.info(f"Found {len(users)} users in database")
         print("\n👥 Available users:")
         for i, user in enumerate(users, 1):
             print(f"{i}. {user.name} ({user.email})")
+            logger.debug(f"User {i}: {user.name} (ID: {user.id}, Email: {user.email})")
 
         # Select user
         while True:
@@ -123,18 +201,23 @@ async def interactive_test():
             except ValueError:
                 print("Please enter a valid number.")
 
+        logger.info(f"Selected user: {selected_user.name} (ID: {selected_user.id})")
         print(f"✅ Selected user: {selected_user.name}")
 
         # Get user's kitchens
+        logger.debug(f"Fetching kitchens for user {selected_user.id}")
         user_kitchens = crud_kitchen.get_user_kitchens(db, user_id=selected_user.id)
         if not user_kitchens:
+            logger.warning(f"User {selected_user.id} has no kitchens")
             print(f"⚠️  User has no kitchens.")
             return
 
+        logger.info(f"Found {len(user_kitchens)} kitchens for user {selected_user.id}")
         print("\n🏠 User's kitchens:")
         kitchens = [uk.kitchen for uk in user_kitchens]
         for i, kitchen in enumerate(kitchens, 1):
             print(f"{i}. {kitchen.name}")
+            logger.debug(f"Kitchen {i}: {kitchen.name} (ID: {kitchen.id})")
 
         # Select kitchen
         while True:
@@ -147,22 +230,52 @@ async def interactive_test():
             except ValueError:
                 print("Please enter a valid number.")
 
+        logger.info(f"Selected kitchen: {selected_kitchen.name} (ID: {selected_kitchen.id})")
         print(f"✅ Selected kitchen: {selected_kitchen.name}")
 
         # Create recipe request
+        logger.debug("Starting recipe request creation")
         recipe_request = create_recipe_request()
 
         # Generate recipe
         print(f"\n🔄 Generating recipe...")
+        logger.info("Initializing OpenAI service")
         ai_service = OpenAIService(db=db)
 
+        # Build the prompts to show them before making the API call
+        logger.debug("Building prompts for OpenAI API")
+        system_prompt, user_prompt = ai_service.prompt_builder.build_recipe_prompt(
+            request=recipe_request,
+            user_id=selected_user.id,
+            kitchen_id=selected_kitchen.id
+        )
+
+        # Display the prompts
+        print_prompt_info(system_prompt, user_prompt)
+
+        # Ask user if they want to continue
+        continue_choice = input("\n🔄 Do you want to proceed with the API call? (y/n): ").strip().lower()
+        if continue_choice not in ['y', 'yes']:
+            logger.info("API call cancelled by user")
+            print("❌ API call cancelled by user.")
+            return
+
+        # Make the API call and capture the raw response
+        print("\n🔄 Making API call to OpenAI...")
+        logger.info("Starting recipe generation with OpenAI API")
+        
         recipe = await ai_service.generate_recipe(
             request=recipe_request,
             user_id=selected_user.id,
             kitchen_id=selected_kitchen.id
         )
 
+        # Convert the response back to dict for display
+        response_data = recipe.model_dump()
+        print_structured_output(response_data)
+
         # Display results
+        logger.info("Recipe generation completed successfully")
         print("\n" + "="*80)
         print("🎉 RECIPE GENERATION SUCCESSFUL!")
         print("="*80)
@@ -193,14 +306,18 @@ async def interactive_test():
             print(f"\n🏷️  Tags: {', '.join(recipe.tags)}")
 
         print("="*80)
+        logger.info("Interactive test completed successfully")
 
     except OpenAIServiceError as e:
+        logger.error(f"AI Service Error: {str(e)}", exc_info=True)
         print(f"\n❌ AI Service Error: {e}")
     except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         print(f"\n❌ Unexpected error: {e}")
-        logger.exception("Full error details:")
     finally:
+        logger.debug("Closing database session")
         db.close()
+        logger.info("Interactive test session ended")
 
 
 if __name__ == "__main__":
