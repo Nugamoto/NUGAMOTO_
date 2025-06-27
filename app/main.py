@@ -11,11 +11,12 @@ from .api.v1 import (
     shopping as shopping_router,
     core as core_router,
     food as food_router,
-    ai_model_output as ai_router,
+    ai_model_output as ai_model_output_router,
     user_health as user_health_router,
     user_credentials as user_credentials_router,
     device as device_router,
-    recipe as recipe_router
+    recipe as recipe_router,
+    ai as ai_router,
 )
 
 app = FastAPI(
@@ -43,6 +44,7 @@ app.include_router(inventory_router.router, prefix="/v1")
 app.include_router(shopping_router.router, prefix="/v1")
 
 # AI routes
+app.include_router(ai_model_output_router.router, prefix="/v1")
 app.include_router(ai_router.router, prefix="/v1")
 
 # Device routes
