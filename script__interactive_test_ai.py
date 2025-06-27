@@ -157,8 +157,6 @@ def print_structured_output(response_data: dict):
     print(formatted_json)
     print("=" * 80)
 
-    # Entfernt: Doppeltes Logging - wird bereits im OpenAI Service geloggt
-
 
 async def interactive_test():
     """Interactive test with user selection."""
