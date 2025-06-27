@@ -20,7 +20,8 @@ class AIService(abc.ABC):
     async def generate_recipe(
             self,
             request: RecipeGenerationRequest,
-            **kwargs: Any
+            user_id: int,
+            kitchen_id: int
     ) -> RecipeGenerationResponse:
         """Generate a recipe based on the provided request.
 
