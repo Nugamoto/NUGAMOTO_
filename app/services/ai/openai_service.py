@@ -280,6 +280,12 @@ class OpenAIService(AIService):
                 }
             }
 
+            # Log the request details
+            logger.info("Making OpenAI API request...")
+            logger.debug(f"Model: {self.model}")
+            logger.debug(f"Temperature: {temperature}")
+            logger.debug(f"Max tokens: {max_tokens}")
+
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -289,12 +295,25 @@ class OpenAIService(AIService):
                 function_call={"name": "generate_recipe"}
             )
 
+            # Log the raw response
+            logger.info("Received OpenAI API response")
+            logger.debug(f"Response ID: {completion.id}")
+            logger.debug(f"Model used: {completion.model}")
+            logger.debug(f"Usage: {completion.usage}")
+
             # Extract the function call result
             function_call = completion.choices[0].message.function_call
             if not function_call or not function_call.arguments:
                 raise OpenAIServiceError("No function call in response")
 
-            return json.loads(function_call.arguments)
+            # Parse and log the structured output
+            response_data = json.loads(function_call.arguments)
+            logger.info("Successfully parsed structured output from OpenAI")
+            
+            # Log the structured output for debugging
+            logger.debug(f"Structured output: {json.dumps(response_data, indent=2)}")
+
+            return response_data
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {str(e)}")
