@@ -80,6 +80,20 @@ class RecipeGenerationRequest(BaseModel):
             return None
         return v.strip().lower()
 
+    @classmethod
+    def from_user_input(cls, user_input: str) -> RecipeGenerationRequest:
+        return cls(
+            special_requests=user_input,
+            cuisine_type=None,
+            meal_type=None,
+            difficulty_level=None,
+            max_prep_time=None,
+            max_cook_time=None,
+            servings=None,
+            dietary_restrictions=[],
+            exclude_ingredients=[]
+        )
+
 
 class RecipeIngredient(BaseModel):
     """Schema for recipe ingredients."""
@@ -409,10 +423,8 @@ class RecipeRequestInput(BaseModel):
     )
 
     def to_generation_request(self) -> RecipeGenerationRequest:
-        """Convert user input to structured generation request."""
-        return RecipeGenerationRequest(
-            special_requests=self.user_input
-        )
+        """Convert user input to structured generation request using factory method."""
+        return RecipeGenerationRequest.from_user_input(self.user_input)
 
 
 class RecipeWithAIOutput(BaseModel):
