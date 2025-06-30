@@ -44,12 +44,11 @@ def create_storage_location(
 ) -> StorageLocationRead:
     """Create a new storage location for a kitchen."""
     try:
-        storage_location = crud_inventory.create_storage_location(
+        return crud_inventory.create_storage_location(
             db=db,
             kitchen_id=kitchen_id,
             storage_data=storage_data
         )
-        return StorageLocationRead.model_validate(storage_location)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -68,8 +67,7 @@ def get_kitchen_storage_locations(
         kitchen_id: int
 ) -> list[StorageLocationRead]:
     """Get all storage locations for a kitchen."""
-    storage_locations = crud_inventory.get_kitchen_storage_locations(db, kitchen_id)
-    return [StorageLocationRead.model_validate(location) for location in storage_locations]
+    return crud_inventory.get_kitchen_storage_locations(db, kitchen_id)
 
 
 @storage_locations_router.get(
@@ -89,7 +87,7 @@ def get_storage_location(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Storage location with ID {storage_location_id} not found"
         )
-    return StorageLocationRead.model_validate(storage_location)
+    return storage_location
 
 
 @storage_locations_router.put(
@@ -114,7 +112,7 @@ def update_storage_location(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Storage location with ID {storage_location_id} not found"
         )
-    return StorageLocationRead.model_validate(storage_location)
+    return storage_location
 
 
 @storage_locations_router.delete(
