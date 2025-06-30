@@ -7,9 +7,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.core.dependencies import get_db
 from app.crud import inventory as crud_inventory
-from app.models.user import User
 from app.schemas.inventory import (
     InventoryItemCreate,
     InventoryItemRead,
@@ -40,24 +39,10 @@ inventory_items_router = APIRouter(prefix="/items", tags=["inventory-items"])
 def create_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int,
         storage_data: StorageLocationCreate
 ) -> StorageLocationRead:
-    """Create a new storage location for a kitchen.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        kitchen_id: Kitchen ID to create storage location for
-        storage_data: Storage location creation data
-        
-    Returns:
-        Created storage location data
-        
-    Raises:
-        HTTPException: 400 if storage location name already exists in kitchen
-    """
+    """Create a new storage location for a kitchen."""
     try:
         storage_location = crud_inventory.create_storage_location(
             db=db,
@@ -80,19 +65,9 @@ def create_storage_location(
 def get_kitchen_storage_locations(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int
 ) -> list[StorageLocationRead]:
-    """Get all storage locations for a kitchen.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        kitchen_id: Kitchen ID to get storage locations for
-        
-    Returns:
-        List of storage location data
-    """
+    """Get all storage locations for a kitchen."""
     storage_locations = crud_inventory.get_kitchen_storage_locations(db, kitchen_id)
     return [StorageLocationRead.model_validate(location) for location in storage_locations]
 
@@ -105,22 +80,9 @@ def get_kitchen_storage_locations(
 def get_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         storage_location_id: int
 ) -> StorageLocationRead:
-    """Get a storage location by its ID.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        storage_location_id: Storage location ID to fetch
-        
-    Returns:
-        Storage location data
-        
-    Raises:
-        HTTPException: 404 if storage location not found
-    """
+    """Get a storage location by its ID."""
     storage_location = crud_inventory.get_storage_location_by_id(db, storage_location_id)
     if storage_location is None:
         raise HTTPException(
@@ -138,24 +100,10 @@ def get_storage_location(
 def update_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         storage_location_id: int,
         storage_data: StorageLocationUpdate
 ) -> StorageLocationRead:
-    """Update an existing storage location.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        storage_location_id: Storage location ID to update
-        storage_data: Updated storage location data
-        
-    Returns:
-        Updated storage location data
-        
-    Raises:
-        HTTPException: 404 if storage location not found
-    """
+    """Update an existing storage location."""
     storage_location = crud_inventory.update_storage_location(
         db=db,
         storage_location_id=storage_location_id,
@@ -177,19 +125,9 @@ def update_storage_location(
 def delete_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         storage_location_id: int
 ) -> None:
-    """Delete a storage location.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        storage_location_id: Storage location ID to delete
-        
-    Raises:
-        HTTPException: 404 if storage location not found
-    """
+    """Delete a storage location."""
     deleted = crud_inventory.delete_storage_location(db, storage_location_id)
     if not deleted:
         raise HTTPException(
@@ -211,34 +149,16 @@ def delete_storage_location(
 def create_or_update_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int,
         inventory_data: InventoryItemCreate
 ) -> InventoryItemRead:
-    """Create a new inventory item or update existing one.
-    
-    If an inventory item for the same food item and storage location already
-    exists, the quantities will be combined and other fields updated.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        kitchen_id: Kitchen ID to create inventory item for
-        inventory_data: Inventory item creation data
-        
-    Returns:
-        Created or updated inventory item data with computed properties
-        
-    Raises:
-        HTTPException: 400 if food_item_id or storage_location_id don't exist
-    """
+    """Create a new inventory item or update existing one."""
     try:
-        inventory_item = crud_inventory.create_or_update_inventory_item(
+        return crud_inventory.create_or_update_inventory_item(
             db=db,
             kitchen_id=kitchen_id,
             inventory_data=inventory_data
         )
-        return crud_inventory._build_inventory_item_read(inventory_item)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -254,22 +174,9 @@ def create_or_update_inventory_item(
 def get_kitchen_inventory(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int
 ) -> list[InventoryItemRead]:
-    """Get all inventory items for a kitchen.
-    
-    Returns items with related food item and storage location information.
-    Quantities are shown in the food item's base unit with computed properties.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        kitchen_id: Kitchen ID to get inventory for
-        
-    Returns:
-        List of inventory item data with computed properties
-    """
+    """Get all inventory items for a kitchen."""
     return crud_inventory.get_kitchen_inventory(db, kitchen_id)
 
 
@@ -281,25 +188,9 @@ def get_kitchen_inventory(
 def get_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         inventory_id: int
 ) -> InventoryItemRead:
-    """Get an inventory item by its global ID.
-
-    Returns the item with related food item and storage location information.
-    Quantity is shown in the food item's base unit with computed properties.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        inventory_id: Inventory item ID to fetch
-        
-    Returns:
-        Inventory item data with computed properties
-        
-    Raises:
-        HTTPException: 404 if inventory item not found
-    """
+    """Get an inventory item by its global ID."""
     item = crud_inventory.get_inventory_item_by_id(db, inventory_id)
     if item is None:
         raise HTTPException(
@@ -317,24 +208,10 @@ def get_inventory_item(
 def update_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         inventory_id: int,
         inventory_data: InventoryItemUpdate
 ) -> InventoryItemRead:
-    """Update an existing inventory item.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        inventory_id: Inventory item ID to update
-        inventory_data: Updated inventory item data
-        
-    Returns:
-        Updated inventory item data with computed properties
-        
-    Raises:
-        HTTPException: 404 if inventory item not found
-    """
+    """Update an existing inventory item."""
     inventory_item = crud_inventory.update_inventory_item(
         db=db,
         inventory_item_id=inventory_id,
@@ -345,7 +222,7 @@ def update_inventory_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inventory item with ID {inventory_id} not found"
         )
-    return crud_inventory._build_inventory_item_read(inventory_item)
+    return inventory_item
 
 
 @inventory_items_router.delete(
@@ -356,19 +233,9 @@ def update_inventory_item(
 def delete_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         inventory_id: int
 ) -> None:
-    """Delete an inventory item.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        inventory_id: Inventory item ID to delete
-        
-    Raises:
-        HTTPException: 404 if inventory item not found
-    """
+    """Delete an inventory item."""
     deleted = crud_inventory.delete_inventory_item(db, inventory_id)
     if not deleted:
         raise HTTPException(
@@ -389,21 +256,10 @@ def delete_inventory_item(
 def get_low_stock_items(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int
 ) -> list[InventoryItemRead]:
-    """Get all inventory items that are below their minimum quantity threshold.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        kitchen_id: Kitchen ID to analyze
-        
-    Returns:
-        List of low-stock inventory items with computed properties
-    """
-    low_stock_items = crud_inventory.get_low_stock_items(db, kitchen_id)
-    return [crud_inventory._build_inventory_item_read(item) for item in low_stock_items]
+    """Get all inventory items that are below their minimum quantity threshold."""
+    return crud_inventory.get_low_stock_items(db, kitchen_id)
 
 
 @inventory_items_router.get(
@@ -414,23 +270,11 @@ def get_low_stock_items(
 def get_expiring_items(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int,
         threshold_days: int = 7
 ) -> list[InventoryItemRead]:
-    """Get all inventory items that expire within the specified threshold.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        kitchen_id: Kitchen ID to analyze
-        threshold_days: Number of days to consider as "expiring soon"
-        
-    Returns:
-        List of expiring inventory items with computed properties
-    """
-    expiring_items = crud_inventory.get_expiring_items(db, kitchen_id, threshold_days)
-    return [crud_inventory._build_inventory_item_read(item) for item in expiring_items]
+    """Get all inventory items that expire within the specified threshold."""
+    return crud_inventory.get_expiring_items(db, kitchen_id, threshold_days)
 
 
 @inventory_items_router.get(
@@ -441,21 +285,10 @@ def get_expiring_items(
 def get_expired_items(
         *,
         db: Annotated[Session, Depends(get_db)],
-        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int
 ) -> list[InventoryItemRead]:
-    """Get all inventory items that have already expired.
-    
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        kitchen_id: Kitchen ID to analyze
-        
-    Returns:
-        List of expired inventory items with computed properties
-    """
-    expired_items = crud_inventory.get_expired_items(db, kitchen_id)
-    return [crud_inventory._build_inventory_item_read(item) for item in expired_items]
+    """Get all inventory items that have already expired."""
+    return crud_inventory.get_expired_items(db, kitchen_id)
 
 
 # ================================================================== #
