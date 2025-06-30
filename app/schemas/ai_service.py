@@ -96,8 +96,11 @@ class RecipeGenerationRequest(BaseModel):
 
 
 class RecipeIngredient(BaseModel):
-    """Schema for recipe ingredients."""
+    """Schema for recipe ingredients with database ID."""
 
+    id: Annotated[int, Field(
+        description="Food item ID from database"
+    )]
     name: Annotated[str, Field(
         min_length=1,
         max_length=100,
@@ -233,14 +236,14 @@ class RecipeGenerationResponse(BaseModel):
         
         Args:
             db: Database session for food item lookups.
-            
+        
         Returns:
             RecipeCreate instance.
-            
+        
         Raises:
             ValueError: If ingredients cannot be mapped to food items.
         """
-        from app.crud.food import get_food_item_by_name
+        from app.crud.food import get_food_item_by_id, get_food_item_by_name
         from app.schemas.recipe import (
             RecipeCreate,
             RecipeIngredientCreate,
@@ -248,24 +251,41 @@ class RecipeGenerationResponse(BaseModel):
             RecipeNutritionCreate
         )
 
-        # Map ingredients
+        # Map ingredients with ID-first approach
         ingredients = []
         unknown_ingredients = []
 
         for ing in self.ingredients:
-            # Find food item by name
-            food_item = get_food_item_by_name(db, ing.name)
+            food_item = None
+        
+        # Try to find by ID first (preferred method since we now require IDs)
+            try:
+                food_item = get_food_item_by_id(db, ing.id)
+            except Exception:
+                food_item = None
+        
+        # Fallback to name lookup if ID not found (backup safety)
+            if not food_item:
+                food_item = get_food_item_by_name(db, ing.name)
+        
             if food_item:
+            # Parse amount - extract numeric value
+                try:
+                    amount_parts = ing.amount.split()
+                    numeric_amount = float(amount_parts[0]) if amount_parts and amount_parts[0].replace('.', '').replace(',', '').isdigit() else 1.0
+                except (ValueError, IndexError):
+                    numeric_amount = 1.0
+            
                 ingredients.append(
                     RecipeIngredientCreate(
                         food_item_id=food_item.id,
-                        amount_in_base_unit=1.0,  # Default conversion
-                        original_amount=float(ing.amount.split()[0]),
-                        original_unit_id=None  # Would need unit mapping
+                        amount_in_base_unit=numeric_amount,  # Will need proper unit conversion
+                        original_amount=numeric_amount,
+                        original_unit_id=None  # Would need unit mapping logic
                     )
                 )
             else:
-                unknown_ingredients.append(ing.name)
+                unknown_ingredients.append(f"{ing.name} (ID: {ing.id})")
 
         if unknown_ingredients:
             raise ValueError(
@@ -275,10 +295,10 @@ class RecipeGenerationResponse(BaseModel):
         # Map steps
         steps = [
             RecipeStepCreate(
-                step_number=idx + 1,
+                step_number=step.step_number,
                 instruction=step.instruction
             )
-            for idx, step in enumerate(self.instructions)
+            for step in self.instructions
         ]
 
         # Map nutrition if available
