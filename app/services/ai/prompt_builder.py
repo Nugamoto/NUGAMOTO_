@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 from app.crud import device as crud_device
 from app.crud import inventory as crud_inventory
 from app.crud import user as crud_user
-from app.schemas.ai_service import RecipeGenerationRequest
-from app.models.user import User
 from app.models.inventory import InventoryItem
+from app.models.user import User
+from app.schemas.ai_service import RecipeGenerationRequest
 
 
 class PromptBuilder:
@@ -152,36 +152,32 @@ Please respond with a complete recipe in JSON format."""
         return context
 
     def _build_inventory_context(self, inventory_items: list[InventoryItem]) -> str:
-        """Build inventory context section."""
+        """Build inventory context with food item IDs for AI prompts."""
         if not inventory_items:
-            return "AVAILABLE INGREDIENTS:\n- No ingredients currently in inventory"
+            return "AVAILABLE INGREDIENTS:\nNo ingredients currently available in the kitchen inventory."
 
-        context = "AVAILABLE INGREDIENTS:"
-
-        # Group by categories and highlight expiring items
-        today = datetime.date.today()
-        expiring_soon = []
-        regular_items = []
+        # Group by category and include IDs
+        context_lines = [
+            "AVAILABLE INGREDIENTS (with database IDs for reference):"
+        ]
 
         for item in inventory_items:
-            # Get base unit name from the relationship
-            base_unit_name = item.food_item.base_unit.name if item.food_item.base_unit else 'units'
-            item_desc = f"- {item.food_item.name}: {item.quantity} {base_unit_name}"
+            food_item = item.food_item
+            base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
+            quantity_str = f"{item.quantity:.1f}" if item.quantity % 1 != 0 else f"{int(item.quantity)}"
 
-            if item.expiration_date and (item.expiration_date - today).days <= 3:
-                expiring_soon.append(f"{item_desc} (expires {item.expiration_date})")
-            else:
-                regular_items.append(item_desc)
+            ingredient_line = f"- {food_item.name} (ID: {food_item.id}): {quantity_str} {base_unit_name}"
 
-        if expiring_soon:
-            context += "\n\nEXPIRING SOON (prioritize these):"
-            context += "\n" + "\n".join(expiring_soon)
+            if item.expiration_date:
+                ingredient_line += f" | Expires: {item.expiration_date.strftime('%Y-%m-%d')}"
 
-        if regular_items:
-            context += "\n\nOTHER AVAILABLE:"
-            context += "\n" + "\n".join(regular_items)
+            context_lines.append(ingredient_line)
 
-        return context
+        context_lines.append(
+            "\nIMPORTANT: Always use the exact ID and name from this list when specifying ingredients in your recipe."
+        )
+
+        return "\n".join(context_lines)
 
     def _build_equipment_context(self, appliances: list, tools: list) -> str:
         """Build kitchen equipment context section."""
