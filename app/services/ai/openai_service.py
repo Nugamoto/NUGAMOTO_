@@ -219,7 +219,7 @@ class OpenAIService(AIService):
                 )
             ]
 
-            # Define the function schema based on RecipeGenerationResponse
+            # Define the function schema based on RecipeGenerationResponse with required ID
             function_schema = {
                 "name": "generate_recipe",
                 "parameters": {
@@ -228,7 +228,7 @@ class OpenAIService(AIService):
                         "title": {"type": "string", "minLength": 1, "maxLength": 200},
                         "description": {"type": "string", "maxLength": 500},
                         "cuisine_type": {"type": "string", "maxLength": 50},
-                        "difficulty_level": {"type": "string", "enum": ["easy", "medium", "hard"]},  # Kleinbuchstaben!
+                        "difficulty_level": {"type": "string", "enum": ["easy", "medium", "hard"]},
                         "prep_time_minutes": {"type": "integer", "minimum": 0},
                         "cook_time_minutes": {"type": "integer", "minimum": 0},
                         "total_time_minutes": {"type": "integer", "minimum": 0},
@@ -238,11 +238,15 @@ class OpenAIService(AIService):
                             "items": {
                                 "type": "object",
                                 "properties": {
+                                    "id": {
+                                        "type": "integer", 
+                                        "description": "Required food item ID from database - must match an ID from the available ingredients list"
+                                    },
                                     "name": {"type": "string", "minLength": 1, "maxLength": 100},
                                     "amount": {"type": "string", "minLength": 1, "maxLength": 50},
                                     "notes": {"type": "string", "maxLength": 200}
                                 },
-                                "required": ["name", "amount"]
+                                "required": ["id", "name", "amount"]
                             },
                             "minItems": 1
                         },
