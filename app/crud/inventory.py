@@ -23,6 +23,37 @@ from app.schemas.inventory import (
 
 
 # ================================================================== #
+# Schema Conversion Helper                                           #
+# ================================================================== #
+
+def build_inventory_item_read(item_orm: InventoryItem) -> InventoryItemRead:
+    """Convert ORM to Read schema with computed properties."""
+    return InventoryItemRead(
+        # Base fields from ORM
+        id=item_orm.id,
+        kitchen_id=item_orm.kitchen_id,
+        food_item_id=item_orm.food_item_id,
+        storage_location_id=item_orm.storage_location_id,
+        quantity=item_orm.quantity,
+        min_quantity=item_orm.min_quantity,
+        expiration_date=item_orm.expiration_date,
+        updated_at=item_orm.updated_at,
+
+        # Related objects
+        food_item=item_orm.food_item,
+        storage_location=item_orm.storage_location,
+
+        # Computed properties
+        is_low_stock=item_orm.is_low_stock(),
+        is_expired=item_orm.is_expired(),
+        expires_soon=item_orm.expires_soon(),
+
+        # Base unit name
+        base_unit_name=item_orm.food_item.base_unit.name if item_orm.food_item.base_unit else 'units'
+    )
+
+
+# ================================================================== #
 # StorageLocation CRUD Operations                                    #
 # ================================================================== #
 
@@ -145,14 +176,14 @@ def delete_storage_location(db: Session, storage_location_id: int) -> bool:
 
 
 # ================================================================== #
-# InventoryItem CRUD Operations                                      #
+# InventoryItem CRUD Operations - Schema Returns                    #
 # ================================================================== #
 
 def create_or_update_inventory_item(
         db: Session,
         kitchen_id: int,
         inventory_data: InventoryItemCreate
-) -> InventoryItem:
+) -> InventoryItemRead:
     """Create a new inventory item or update existing one.
     
     If an inventory item for the same food item and storage location already
@@ -164,7 +195,7 @@ def create_or_update_inventory_item(
         inventory_data: Inventory item creation data
         
     Returns:
-        Created or updated inventory item instance
+        Created or updated inventory item with computed properties
         
     Raises:
         ValueError: If food_item_id or storage_location_id don't exist
@@ -172,6 +203,8 @@ def create_or_update_inventory_item(
     # Check if item already exists
     existing_item = db.scalar(
         select(InventoryItem)
+        .options(selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit))
+        .options(selectinload(InventoryItem.storage_location))
         .where(
             and_(
                 InventoryItem.kitchen_id == kitchen_id,
@@ -191,12 +224,12 @@ def create_or_update_inventory_item(
         if inventory_data.expiration_date is not None:
             existing_item.expiration_date = inventory_data.expiration_date
 
-        existing_item.last_updated = datetime.datetime.now(datetime.timezone.utc)
+        existing_item.updated_at = datetime.datetime.now(datetime.timezone.utc)
         
         db.commit()
         db.refresh(existing_item)
 
-        return existing_item
+        return build_inventory_item_read(existing_item)
     else:
         # Create new item
         db_inventory = InventoryItem(
@@ -212,12 +245,27 @@ def create_or_update_inventory_item(
         db.commit()
         db.refresh(db_inventory)
 
-        return db_inventory
+        # Load relationships for schema conversion
+        db_inventory = db.scalar(
+            select(InventoryItem)
+            .options(selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit))
+            .options(selectinload(InventoryItem.storage_location))
+            .where(InventoryItem.id == db_inventory.id)
+        )
+
+        return build_inventory_item_read(db_inventory)
 
 
 def get_inventory_item_by_id(db: Session, inventory_item_id: int) -> InventoryItemRead | None:
-    """Get inventory item by ID - returns schema."""
-    # 1. ORM Query (unverändert mit proper eager loading)
+    """Get inventory item by ID - returns schema.
+    
+    Args:
+        db: Database session
+        inventory_item_id: Inventory item ID to fetch
+        
+    Returns:
+        Inventory item schema with computed properties or None if not found
+    """
     item_orm = db.scalar(
         select(InventoryItem)
         .options(selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit))
@@ -225,31 +273,36 @@ def get_inventory_item_by_id(db: Session, inventory_item_id: int) -> InventoryIt
         .where(InventoryItem.id == inventory_item_id)
     )
     
-    # 2. Null Check
     if not item_orm:
         return None
-    
-    # 3. Schema Conversion
-    return _build_inventory_item_read(item_orm)
+
+    return build_inventory_item_read(item_orm)
+
 
 def get_kitchen_inventory(db: Session, kitchen_id: int) -> list[InventoryItemRead]:
-    """Get all inventory items for a kitchen - returns schemas."""
-    # 1. ORM Query (unverändert mit proper eager loading)
+    """Get all inventory items for a kitchen - returns schemas.
+    
+    Args:
+        db: Database session
+        kitchen_id: Kitchen ID
+        
+    Returns:
+        List of inventory item schemas with computed properties
+    """
     items_orm = db.scalars(
         select(InventoryItem)
         .options(selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit))
         .options(selectinload(InventoryItem.storage_location))
         .where(InventoryItem.kitchen_id == kitchen_id)
     ).all()
-    
-    # 2. Schema Conversion for all items
-    return [_build_inventory_item_read(item) for item in items_orm]
+
+    return [build_inventory_item_read(item) for item in items_orm]
 
 
 def get_kitchen_inventory_grouped_by_storage(
         db: Session,
         kitchen_id: int
-) -> dict[StorageLocation, list[InventoryItem]]:
+) -> dict[StorageLocation, list[InventoryItemRead]]:
     """Get kitchen inventory grouped by storage location.
     
     Args:
@@ -257,7 +310,7 @@ def get_kitchen_inventory_grouped_by_storage(
         kitchen_id: Kitchen ID
         
     Returns:
-        Dictionary mapping storage locations to their inventory items
+        Dictionary mapping storage locations to their inventory item schemas
     """
     # Get all storage locations for the kitchen
     storage_locations = get_kitchen_storage_locations(db, kitchen_id)
@@ -266,12 +319,20 @@ def get_kitchen_inventory_grouped_by_storage(
 
     for storage in storage_locations:
         # Get inventory items for this storage location
-        items = get_kitchen_inventory(
-            db=db,
-            kitchen_id=kitchen_id,
-            storage_location_id=storage.id
-        )
-        result[storage] = items
+        items_orm = db.scalars(
+            select(InventoryItem)
+            .options(selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit))
+            .options(selectinload(InventoryItem.storage_location))
+            .where(
+                and_(
+                    InventoryItem.kitchen_id == kitchen_id,
+                    InventoryItem.storage_location_id == storage.id
+                )
+            )
+        ).all()
+
+        items_schemas = [build_inventory_item_read(item) for item in items_orm]
+        result[storage] = items_schemas
 
     return result
 
@@ -280,7 +341,7 @@ def update_inventory_item(
         db: Session,
         inventory_item_id: int,
         inventory_data: InventoryItemUpdate
-) -> InventoryItem | None:
+) -> InventoryItemRead | None:
     """Update an existing inventory item.
     
     Args:
@@ -289,9 +350,16 @@ def update_inventory_item(
         inventory_data: Updated inventory item data
         
     Returns:
-        Updated inventory item instance or None if not found
+        Updated inventory item schema with computed properties or None if not found
     """
-    db_inventory = get_inventory_item_by_id(db, inventory_item_id)
+    # Get the ORM object first  
+    db_inventory = db.scalar(
+        select(InventoryItem)
+        .options(selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit))
+        .options(selectinload(InventoryItem.storage_location))
+        .where(InventoryItem.id == inventory_item_id)
+    )
+    
     if not db_inventory:
         return None
 
@@ -300,12 +368,12 @@ def update_inventory_item(
         setattr(db_inventory, field, value)
 
     # Always update the timestamp
-    db_inventory.last_updated = datetime.datetime.now(datetime.timezone.utc)
+    db_inventory.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
     db.commit()
     db.refresh(db_inventory)
 
-    return db_inventory
+    return build_inventory_item_read(db_inventory)
 
 
 def delete_inventory_item(db: Session, inventory_item_id: int) -> bool:
@@ -318,7 +386,11 @@ def delete_inventory_item(db: Session, inventory_item_id: int) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    db_inventory = get_inventory_item_by_id(db, inventory_item_id)
+    db_inventory = db.scalar(
+        select(InventoryItem)
+        .where(InventoryItem.id == inventory_item_id)
+    )
+    
     if not db_inventory:
         return False
 
@@ -329,13 +401,13 @@ def delete_inventory_item(db: Session, inventory_item_id: int) -> bool:
 
 
 # ================================================================== #
-# Inventory Analysis Operations                                      #
+# Inventory Analysis Operations - Schema Returns                    #
 # ================================================================== #
 
 def get_low_stock_items(
         db: Session,
         kitchen_id: int
-) -> list[InventoryItem]:
+) -> list[InventoryItemRead]:
     """Get all inventory items that are below their minimum quantity threshold.
     
     Args:
@@ -343,9 +415,9 @@ def get_low_stock_items(
         kitchen_id: Kitchen ID
         
     Returns:
-        List of low-stock inventory items with related data
+        List of low-stock inventory item schemas with computed properties
     """
-    return list(db.scalars(
+    items_orm = db.scalars(
         select(InventoryItem)
         .options(
             selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
@@ -359,14 +431,16 @@ def get_low_stock_items(
             )
         )
         .order_by(InventoryItem.food_item_id)
-    ).all())
+    ).all()
+
+    return [build_inventory_item_read(item) for item in items_orm]
 
 
 def get_expiring_items(
         db: Session,
         kitchen_id: int,
         threshold_days: int = EXPIRING_ITEMS_THRESHOLD_DAYS
-) -> list[InventoryItem]:
+) -> list[InventoryItemRead]:
     """Get all inventory items that expire within the specified threshold.
     
     Args:
@@ -375,11 +449,11 @@ def get_expiring_items(
         threshold_days: Number of days to consider as "expiring soon"
         
     Returns:
-        List of expiring inventory items with related data, ordered by expiration date
+        List of expiring inventory item schemas with computed properties
     """
     threshold_date = datetime.date.today() + datetime.timedelta(days=threshold_days)
 
-    return list(db.scalars(
+    items_orm = db.scalars(
         select(InventoryItem)
         .options(
             selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
@@ -393,10 +467,12 @@ def get_expiring_items(
             )
         )
         .order_by(InventoryItem.expiration_date)
-    ).all())
+    ).all()
+
+    return [build_inventory_item_read(item) for item in items_orm]
 
 
-def get_expired_items(db: Session, kitchen_id: int) -> list[InventoryItem]:
+def get_expired_items(db: Session, kitchen_id: int) -> list[InventoryItemRead]:
     """Get all inventory items that have already expired.
     
     Args:
@@ -404,11 +480,11 @@ def get_expired_items(db: Session, kitchen_id: int) -> list[InventoryItem]:
         kitchen_id: Kitchen ID
         
     Returns:
-        List of expired inventory items with related data
+        List of expired inventory item schemas with computed properties
     """
     today = datetime.date.today()
 
-    return list(db.scalars(
+    items_orm = db.scalars(
         select(InventoryItem)
         .options(
             selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
@@ -422,7 +498,9 @@ def get_expired_items(db: Session, kitchen_id: int) -> list[InventoryItem]:
             )
         )
         .order_by(InventoryItem.expiration_date)
-    ).all())
+    ).all()
+
+    return [build_inventory_item_read(item) for item in items_orm]
 
 
 # ================================================================== #
@@ -570,23 +648,3 @@ def _get_generic_conversion_factor(
     )
 
     return conversion
-
-
-def _build_inventory_item_read(item_orm: InventoryItem) -> InventoryItemRead:
-    """Convert ORM to Read schema with computed properties."""
-    return InventoryItemRead(
-        # Base fields (automatic via from_attributes=True)
-        **{k: v for k, v in item_orm.__dict__.items() if not k.startswith('_')},
-
-        # Related objects
-        food_item=item_orm.food_item,
-        storage_location=item_orm.storage_location,
-
-        # Computed properties
-        is_low_stock=item_orm.is_low_stock(),
-        is_expired=item_orm.is_expired(),
-        expires_soon=item_orm.expires_soon(),
-
-        # Base unit name from relationship
-        base_unit_name=item_orm.food_item.base_unit.name if item_orm.food_item.base_unit else 'units'
-    )
