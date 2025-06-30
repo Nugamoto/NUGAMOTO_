@@ -215,60 +215,35 @@ def create_or_update_inventory_item(
         return db_inventory
 
 
-def get_inventory_item_by_id(db: Session, inventory_item_id: int) -> InventoryItem | None:
-    """Get inventory item by ID with related data.
-    
-    Args:
-        db: Database session
-        inventory_item_id: Inventory item ID to fetch
-        
-    Returns:
-        Inventory item instance with related data or None if not found
-    """
-    return db.scalar(
+def get_inventory_item_by_id(db: Session, inventory_item_id: int) -> InventoryItemRead | None:
+    """Get inventory item by ID - returns schema."""
+    # 1. ORM Query (unverändert mit proper eager loading)
+    item_orm = db.scalar(
         select(InventoryItem)
-        .options(
-            selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
-            selectinload(InventoryItem.storage_location)
-        )
+        .options(selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit))
+        .options(selectinload(InventoryItem.storage_location))
         .where(InventoryItem.id == inventory_item_id)
     )
-
-
-def get_kitchen_inventory(
-        db: Session,
-        kitchen_id: int,
-        food_item_id: int | None = None,
-        storage_location_id: int | None = None
-) -> list[InventoryItem]:
-    """Get inventory items for a kitchen with optional filtering.
     
-    Args:
-        db: Database session
-        kitchen_id: Kitchen ID
-        food_item_id: Optional food item filter
-        storage_location_id: Optional storage location filter
-        
-    Returns:
-        List of inventory item instances with related data
-    """
-    query = (
+    # 2. Null Check
+    if not item_orm:
+        return None
+    
+    # 3. Schema Conversion
+    return _build_inventory_item_read(item_orm)
+
+def get_kitchen_inventory(db: Session, kitchen_id: int) -> list[InventoryItemRead]:
+    """Get all inventory items for a kitchen - returns schemas."""
+    # 1. ORM Query (unverändert mit proper eager loading)
+    items_orm = db.scalars(
         select(InventoryItem)
-        .options(
-            selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit),
-            selectinload(InventoryItem.storage_location)
-        )
+        .options(selectinload(InventoryItem.food_item).selectinload(FoodItem.base_unit))
+        .options(selectinload(InventoryItem.storage_location))
         .where(InventoryItem.kitchen_id == kitchen_id)
-        .order_by(InventoryItem.food_item_id, InventoryItem.storage_location_id)
-    )
-
-    if food_item_id is not None:
-        query = query.where(InventoryItem.food_item_id == food_item_id)
-
-    if storage_location_id is not None:
-        query = query.where(InventoryItem.storage_location_id == storage_location_id)
+    ).all()
     
-    return list(db.scalars(query).all())
+    # 2. Schema Conversion for all items
+    return [_build_inventory_item_read(item) for item in items_orm]
 
 
 def get_kitchen_inventory_grouped_by_storage(
