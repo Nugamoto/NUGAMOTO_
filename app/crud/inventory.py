@@ -15,6 +15,7 @@ from app.models.inventory import (
 )
 from app.schemas.inventory import (
     InventoryItemCreate,
+    InventoryItemRead,
     InventoryItemUpdate,
     StorageLocationCreate,
     StorageLocationUpdate
@@ -594,3 +595,23 @@ def _get_generic_conversion_factor(
     )
 
     return conversion
+
+
+def _build_inventory_item_read(item_orm: InventoryItem) -> InventoryItemRead:
+    """Convert ORM to Read schema with computed properties."""
+    return InventoryItemRead(
+        # Base fields (automatic via from_attributes=True)
+        **{k: v for k, v in item_orm.__dict__.items() if not k.startswith('_')},
+
+        # Related objects
+        food_item=item_orm.food_item,
+        storage_location=item_orm.storage_location,
+
+        # Computed properties
+        is_low_stock=item_orm.is_low_stock(),
+        is_expired=item_orm.is_expired(),
+        expires_soon=item_orm.expires_soon(),
+
+        # Base unit name from relationship
+        base_unit_name=item_orm.food_item.base_unit.name if item_orm.food_item.base_unit else 'units'
+    )
