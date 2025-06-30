@@ -1,39 +1,38 @@
-"""API endpoints for inventory management."""
+"""Inventory management API endpoints."""
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
-from sqlalchemy.exc import IntegrityError
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db
-from app.crud import food as crud_food
+from app.api.deps import get_current_user, get_db
 from app.crud import inventory as crud_inventory
-from app.schemas.food import FoodItemRead
+from app.models.user import User
 from app.schemas.inventory import (
     InventoryItemCreate,
     InventoryItemRead,
     InventoryItemUpdate,
-    KitchenInventorySummary,
     StorageLocationCreate,
     StorageLocationRead,
     StorageLocationUpdate,
-    StorageLocationWithInventory
 )
 
-kitchen_router = APIRouter(prefix="/kitchen", tags=["Kitchen Inventory"])
-storage_router = APIRouter(prefix="/storage-locations", tags=["Storage Locations"])
-inventory_items_router = APIRouter(prefix="/inventory", tags=["Inventory Items"])
+# Create router
+inventory_router = APIRouter()
+
+# Sub-routers for different resource types
+storage_locations_router = APIRouter(prefix="/storage-locations", tags=["storage-locations"])
+inventory_items_router = APIRouter(prefix="/items", tags=["inventory-items"])
 
 
 # ================================================================== #
 # Storage Location Endpoints                                         #
 # ================================================================== #
 
-@storage_router.post(
-    "/{kitchen_id}/storage-locations/",
+@storage_locations_router.post(
+    "/",
     response_model=StorageLocationRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new storage location",
@@ -41,6 +40,7 @@ inventory_items_router = APIRouter(prefix="/inventory", tags=["Inventory Items"]
 def create_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int,
         storage_data: StorageLocationCreate
 ) -> StorageLocationRead:
@@ -48,7 +48,8 @@ def create_storage_location(
     
     Args:
         db: Database session
-        kitchen_id: Kitchen ID
+        current_user: Currently authenticated user
+        kitchen_id: Kitchen ID to create storage location for
         storage_data: Storage location creation data
         
     Returns:
@@ -63,45 +64,40 @@ def create_storage_location(
             kitchen_id=kitchen_id,
             storage_data=storage_data
         )
-        return StorageLocationRead.model_validate(storage_location, from_attributes=True)
-    except IntegrityError:
-        db.rollback()
+        return StorageLocationRead.model_validate(storage_location)
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Storage location '{storage_data.name}' already exists in this kitchen"
+            detail=f"Failed to create storage location: {str(e)}"
         )
 
 
-@kitchen_router.get(
-    "/{kitchen_id}/storage-locations/",
+@storage_locations_router.get(
+    "/",
     response_model=list[StorageLocationRead],
     summary="Get all storage locations for a kitchen",
 )
 def get_kitchen_storage_locations(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int
 ) -> list[StorageLocationRead]:
     """Get all storage locations for a kitchen.
     
     Args:
         db: Database session
-        kitchen_id: Kitchen ID
+        current_user: Currently authenticated user
+        kitchen_id: Kitchen ID to get storage locations for
         
     Returns:
-        List of storage locations
+        List of storage location data
     """
-    storage_locations = crud_inventory.get_kitchen_storage_locations(
-        db=db,
-        kitchen_id=kitchen_id
-    )
-    return [
-        StorageLocationRead.model_validate(storage, from_attributes=True)
-        for storage in storage_locations
-    ]
+    storage_locations = crud_inventory.get_kitchen_storage_locations(db, kitchen_id)
+    return [StorageLocationRead.model_validate(location) for location in storage_locations]
 
 
-@storage_router.get(
+@storage_locations_router.get(
     "/{storage_location_id}",
     response_model=StorageLocationRead,
     summary="Get a storage location by ID",
@@ -109,12 +105,14 @@ def get_kitchen_storage_locations(
 def get_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         storage_location_id: int
 ) -> StorageLocationRead:
-    """Get storage location by ID.
+    """Get a storage location by its ID.
     
     Args:
         db: Database session
+        current_user: Currently authenticated user
         storage_location_id: Storage location ID to fetch
         
     Returns:
@@ -123,20 +121,16 @@ def get_storage_location(
     Raises:
         HTTPException: 404 if storage location not found
     """
-    storage_location = crud_inventory.get_storage_location_by_id(
-        db=db,
-        storage_location_id=storage_location_id
-    )
-    if not storage_location:
+    storage_location = crud_inventory.get_storage_location_by_id(db, storage_location_id)
+    if storage_location is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Storage location with ID {storage_location_id} not found"
         )
+    return StorageLocationRead.model_validate(storage_location)
 
-    return StorageLocationRead.model_validate(storage_location, from_attributes=True)
 
-
-@storage_router.patch(
+@storage_locations_router.put(
     "/{storage_location_id}",
     response_model=StorageLocationRead,
     summary="Update a storage location",
@@ -144,13 +138,15 @@ def get_storage_location(
 def update_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         storage_location_id: int,
         storage_data: StorageLocationUpdate
 ) -> StorageLocationRead:
-    """Update a storage location.
+    """Update an existing storage location.
     
     Args:
         db: Database session
+        current_user: Currently authenticated user
         storage_location_id: Storage location ID to update
         storage_data: Updated storage location data
         
@@ -160,21 +156,20 @@ def update_storage_location(
     Raises:
         HTTPException: 404 if storage location not found
     """
-    updated_storage = crud_inventory.update_storage_location(
+    storage_location = crud_inventory.update_storage_location(
         db=db,
         storage_location_id=storage_location_id,
         storage_data=storage_data
     )
-    if not updated_storage:
+    if storage_location is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Storage location with ID {storage_location_id} not found"
         )
+    return StorageLocationRead.model_validate(storage_location)
 
-    return StorageLocationRead.model_validate(updated_storage, from_attributes=True)
 
-
-@storage_router.delete(
+@storage_locations_router.delete(
     "/{storage_location_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a storage location",
@@ -182,248 +177,100 @@ def update_storage_location(
 def delete_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         storage_location_id: int
-) -> Response:
+) -> None:
     """Delete a storage location.
     
     Args:
         db: Database session
+        current_user: Currently authenticated user
         storage_location_id: Storage location ID to delete
         
     Raises:
         HTTPException: 404 if storage location not found
     """
-    success = crud_inventory.delete_storage_location(
-        db=db,
-        storage_location_id=storage_location_id
-    )
-    if not success:
+    deleted = crud_inventory.delete_storage_location(db, storage_location_id)
+    if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Storage location with ID {storage_location_id} not found"
         )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
 # Inventory Item Endpoints                                           #
 # ================================================================== #
 
-@kitchen_router.post(
-    "/{kitchen_id}/inventory-items/",
+@inventory_items_router.post(
+    "/",
     response_model=InventoryItemRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Add an inventory item",
+    summary="Create or update an inventory item",
 )
-def add_inventory_item(
+def create_or_update_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int,
         inventory_data: InventoryItemCreate
 ) -> InventoryItemRead:
-    """Add an inventory item to a kitchen.
+    """Create a new inventory item or update existing one.
     
-    If an item for the same food and storage location already exists,
-    quantities will be combined.
+    If an inventory item for the same food item and storage location already
+    exists, the quantities will be combined and other fields updated.
     
     Args:
         db: Database session
-        kitchen_id: Kitchen ID
+        current_user: Currently authenticated user
+        kitchen_id: Kitchen ID to create inventory item for
         inventory_data: Inventory item creation data
         
     Returns:
-        Created or updated inventory item data
+        Created or updated inventory item data with computed properties
         
     Raises:
         HTTPException: 400 if food_item_id or storage_location_id don't exist
     """
-    # Validate that food item exists
-    food_item = crud_food.get_food_item_by_id(
-        db=db,
-        food_item_id=inventory_data.food_item_id
-    )
-    if not food_item:
+    try:
+        inventory_item = crud_inventory.create_or_update_inventory_item(
+            db=db,
+            kitchen_id=kitchen_id,
+            inventory_data=inventory_data
+        )
+        return crud_inventory._build_inventory_item_read(inventory_item)
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Food item with ID {inventory_data.food_item_id} not found"
+            detail=str(e)
         )
 
-    # Validate that storage location exists and belongs to the kitchen
-    storage_location = crud_inventory.get_storage_location_by_id(
-        db=db,
-        storage_location_id=inventory_data.storage_location_id
-    )
-    if not storage_location:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Storage location with ID {inventory_data.storage_location_id} not found"
-        )
 
-    if storage_location.kitchen_id != kitchen_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Storage location {storage_location.id} does not belong to kitchen {kitchen_id}"
-        )
-
-    inventory_item = crud_inventory.create_or_update_inventory_item(
-        db=db,
-        kitchen_id=kitchen_id,
-        inventory_data=inventory_data
-    )
-
-    # Manually build the response with computed properties
-    return _build_inventory_item_read(inventory_item)
-
-
-@kitchen_router.get(
-    "/{kitchen_id}/inventory/",
+@inventory_items_router.get(
+    "/",
     response_model=list[InventoryItemRead],
-    summary="Get kitchen inventory",
+    summary="Get all inventory items for a kitchen",
 )
 def get_kitchen_inventory(
         *,
         db: Annotated[Session, Depends(get_db)],
-        kitchen_id: int,
-        food_item_id: Annotated[int | None, Query(description="Filter by food item")] = None,
-        storage_location_id: Annotated[int | None, Query(description="Filter by storage location")] = None
-) -> list[InventoryItemRead]:
-    """Get inventory items for a kitchen with optional filtering.
-    
-    Args:
-        db: Database session
-        kitchen_id: Kitchen ID
-        food_item_id: Optional food item filter
-        storage_location_id: Optional storage location filter
-        
-    Returns:
-        List of inventory items with computed properties
-    """
-    inventory_items = crud_inventory.get_kitchen_inventory(
-        db=db,
-        kitchen_id=kitchen_id,
-        food_item_id=food_item_id,
-        storage_location_id=storage_location_id
-    )
-
-    return [_build_inventory_item_read(item) for item in inventory_items]
-
-
-@kitchen_router.get(
-    "/{kitchen_id}/inventory/summary/",
-    response_model=KitchenInventorySummary,
-    summary="Get kitchen inventory summary",
-)
-def get_kitchen_inventory_summary(
-        *,
-        db: Annotated[Session, Depends(get_db)],
-        kitchen_id: int
-) -> KitchenInventorySummary:
-    """Get a summary of a kitchen's inventory grouped by storage location.
-    
-    Args:
-        db: Database session
-        kitchen_id: Kitchen ID
-        
-    Returns:
-        Kitchen inventory summary with statistics
-    """
-    grouped_inventory = crud_inventory.get_kitchen_inventory_grouped_by_storage(
-        db=db,
-        kitchen_id=kitchen_id
-    )
-
-    storage_locations = []
-    total_items = 0
-    low_stock_items = 0
-    expired_items = 0
-    expires_soon_items = 0
-
-    for storage_location, items in grouped_inventory.items():
-        inventory_reads = [_build_inventory_item_read(item) for item in items]
-
-        storage_locations.append(StorageLocationWithInventory(
-            **StorageLocationRead.model_validate(
-                storage_location,
-                from_attributes=True
-            ).model_dump(),
-            inventory_items=inventory_reads
-        ))
-
-        # Update statistics
-        total_items += len(items)
-        for item in items:
-            if item.is_low_stock():
-                low_stock_items += 1
-            if item.is_expired():
-                expired_items += 1
-            if item.expires_soon():
-                expires_soon_items += 1
-
-    return KitchenInventorySummary(
-        kitchen_id=kitchen_id,
-        storage_locations=storage_locations,
-        total_items=total_items,
-        low_stock_items=low_stock_items,
-        expired_items=expired_items,
-        expires_soon_items=expires_soon_items
-    )
-
-
-@kitchen_router.get(
-    "/{kitchen_id}/inventory/low-stock/",
-    response_model=list[InventoryItemRead],
-    summary="Get low stock items",
-)
-def get_low_stock_items(
-        *,
-        db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         kitchen_id: int
 ) -> list[InventoryItemRead]:
-    """Get all inventory items that are below their minimum quantity threshold.
+    """Get all inventory items for a kitchen.
+    
+    Returns items with related food item and storage location information.
+    Quantities are shown in the food item's base unit with computed properties.
     
     Args:
         db: Database session
-        kitchen_id: Kitchen ID
+        current_user: Currently authenticated user
+        kitchen_id: Kitchen ID to get inventory for
         
     Returns:
-        List of low-stock inventory items
+        List of inventory item data with computed properties
     """
-    low_stock_items = crud_inventory.get_low_stock_items(
-        db=db,
-        kitchen_id=kitchen_id
-    )
-
-    return [_build_inventory_item_read(item) for item in low_stock_items]
-
-
-@kitchen_router.get(
-    "/{kitchen_id}/inventory/expiring/",
-    response_model=list[InventoryItemRead],
-    summary="Get expiring items",
-)
-def get_expiring_items(
-        *,
-        db: Annotated[Session, Depends(get_db)],
-        kitchen_id: int,
-        threshold_days: Annotated[int, Query(ge=1, le=365, description="Days until expiration")] = 7
-) -> list[InventoryItemRead]:
-    """Get all inventory items that expire within the specified threshold.
-    
-    Args:
-        db: Database session
-        kitchen_id: Kitchen ID
-        threshold_days: Number of days to consider as "expiring soon"
-        
-    Returns:
-        List of expiring inventory items ordered by expiration date
-    """
-    expiring_items = crud_inventory.get_expiring_items(
-        db=db,
-        kitchen_id=kitchen_id,
-        threshold_days=threshold_days
-    )
-
-    return [_build_inventory_item_read(item) for item in expiring_items]
+    return crud_inventory.get_kitchen_inventory(db, kitchen_id)
 
 
 @inventory_items_router.get(
@@ -434,15 +281,17 @@ def get_expiring_items(
 def get_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         inventory_id: int
 ) -> InventoryItemRead:
     """Get an inventory item by its global ID.
 
     Returns the item with related food item and storage location information.
-    Quantity is shown in the food item's base unit.
+    Quantity is shown in the food item's base unit with computed properties.
     
     Args:
         db: Database session
+        current_user: Currently authenticated user
         inventory_id: Inventory item ID to fetch
         
     Returns:
@@ -457,11 +306,10 @@ def get_inventory_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inventory item with ID {inventory_id} not found"
         )
+    return item
 
-    return _build_inventory_item_read(item)
 
-
-@inventory_items_router.patch(
+@inventory_items_router.put(
     "/{inventory_id}",
     response_model=InventoryItemRead,
     summary="Update an inventory item",
@@ -469,58 +317,35 @@ def get_inventory_item(
 def update_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         inventory_id: int,
         inventory_data: InventoryItemUpdate
 ) -> InventoryItemRead:
-    """Update an inventory item.
+    """Update an existing inventory item.
     
     Args:
         db: Database session
+        current_user: Currently authenticated user
         inventory_id: Inventory item ID to update
         inventory_data: Updated inventory item data
         
     Returns:
-        Updated inventory item data
+        Updated inventory item data with computed properties
         
     Raises:
-        HTTPException: 404 if inventory item not found, 400 if referenced entities don't exist
+        HTTPException: 404 if inventory item not found
     """
-    # Validate food_item_id if provided
-    if inventory_data.food_item_id is not None:
-        food_item = crud_food.get_food_item_by_id(
-            db=db,
-            food_item_id=inventory_data.food_item_id
-        )
-        if not food_item:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Food item with ID {inventory_data.food_item_id} not found"
-            )
-
-    # Validate storage_location_id if provided
-    if inventory_data.storage_location_id is not None:
-        storage_location = crud_inventory.get_storage_location_by_id(
-            db=db,
-            storage_location_id=inventory_data.storage_location_id
-        )
-        if not storage_location:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Storage location with ID {inventory_data.storage_location_id} not found"
-            )
-
-    updated_item = crud_inventory.update_inventory_item(
+    inventory_item = crud_inventory.update_inventory_item(
         db=db,
         inventory_item_id=inventory_id,
         inventory_data=inventory_data
     )
-    if not updated_item:
+    if inventory_item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inventory item with ID {inventory_id} not found"
         )
-
-    return _build_inventory_item_read(updated_item)
+    return crud_inventory._build_inventory_item_read(inventory_item)
 
 
 @inventory_items_router.delete(
@@ -531,80 +356,111 @@ def update_inventory_item(
 def delete_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
         inventory_id: int
-) -> Response:
+) -> None:
     """Delete an inventory item.
     
     Args:
         db: Database session
+        current_user: Currently authenticated user
         inventory_id: Inventory item ID to delete
         
     Raises:
         HTTPException: 404 if inventory item not found
     """
-    success = crud_inventory.delete_inventory_item(
-        db=db,
-        inventory_item_id=inventory_id
-    )
-    if not success:
+    deleted = crud_inventory.delete_inventory_item(db, inventory_id)
+    if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inventory item with ID {inventory_id} not found"
         )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
-# Helper Functions                                                   #
+# Inventory Analysis Endpoints                                       #
 # ================================================================== #
 
-def _build_inventory_item_read(item) -> InventoryItemRead:
-    """Build an InventoryItemRead with computed properties.
+@inventory_items_router.get(
+    "/analysis/low-stock",
+    response_model=list[InventoryItemRead],
+    summary="Get items that are low in stock",
+)
+def get_low_stock_items(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
+        kitchen_id: int
+) -> list[InventoryItemRead]:
+    """Get all inventory items that are below their minimum quantity threshold.
     
     Args:
-        item: InventoryItem instance with loaded relationships
+        db: Database session
+        current_user: Currently authenticated user
+        kitchen_id: Kitchen ID to analyze
         
     Returns:
-        InventoryItemRead with all computed properties
+        List of low-stock inventory items with computed properties
     """
-    # Build FoodItemRead
-    food_item_read = FoodItemRead(
-        id=item.food_item.id,
-        name=item.food_item.name,
-        category=item.food_item.category,
-        base_unit_id=item.food_item.base_unit_id,
-        created_at=item.food_item.created_at,
-        updated_at=item.food_item.updated_at,
-        base_unit_name=item.food_item.base_unit.name if item.food_item.base_unit else None
-    )
-
-    # Build StorageLocationRead
-    storage_location_read = StorageLocationRead(
-        id=item.storage_location.id,
-        kitchen_id=item.storage_location.kitchen_id,
-        name=item.storage_location.name
-    )
-
-    return InventoryItemRead(
-        id=item.id,
-        kitchen_id=item.kitchen_id,
-        food_item_id=item.food_item_id,
-        storage_location_id=item.storage_location_id,
-        quantity=item.quantity,
-        min_quantity=item.min_quantity,
-        expiration_date=item.expiration_date,
-        updated_at=item.updated_at,
-        food_item=food_item_read,
-        storage_location=storage_location_read,
-        is_low_stock=item.is_low_stock(),
-        is_expired=item.is_expired(),
-        expires_soon=item.expires_soon(),
-        base_unit_name=item.food_item.base_unit.name if item.food_item.base_unit else None
-    )
+    low_stock_items = crud_inventory.get_low_stock_items(db, kitchen_id)
+    return [crud_inventory._build_inventory_item_read(item) for item in low_stock_items]
 
 
-# Create main router that includes all sub-routers
-router = APIRouter()
-router.include_router(kitchen_router)
-router.include_router(storage_router)
-router.include_router(inventory_items_router)
+@inventory_items_router.get(
+    "/analysis/expiring",
+    response_model=list[InventoryItemRead],
+    summary="Get items that are expiring soon",
+)
+def get_expiring_items(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
+        kitchen_id: int,
+        threshold_days: int = 7
+) -> list[InventoryItemRead]:
+    """Get all inventory items that expire within the specified threshold.
+    
+    Args:
+        db: Database session
+        current_user: Currently authenticated user
+        kitchen_id: Kitchen ID to analyze
+        threshold_days: Number of days to consider as "expiring soon"
+        
+    Returns:
+        List of expiring inventory items with computed properties
+    """
+    expiring_items = crud_inventory.get_expiring_items(db, kitchen_id, threshold_days)
+    return [crud_inventory._build_inventory_item_read(item) for item in expiring_items]
+
+
+@inventory_items_router.get(
+    "/analysis/expired",
+    response_model=list[InventoryItemRead],
+    summary="Get items that have already expired",
+)
+def get_expired_items(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
+        kitchen_id: int
+) -> list[InventoryItemRead]:
+    """Get all inventory items that have already expired.
+    
+    Args:
+        db: Database session
+        current_user: Currently authenticated user
+        kitchen_id: Kitchen ID to analyze
+        
+    Returns:
+        List of expired inventory items with computed properties
+    """
+    expired_items = crud_inventory.get_expired_items(db, kitchen_id)
+    return [crud_inventory._build_inventory_item_read(item) for item in expired_items]
+
+
+# ================================================================== #
+# Register Sub-Routers                                               #
+# ================================================================== #
+
+inventory_router.include_router(storage_locations_router)
+inventory_router.include_router(inventory_items_router)
