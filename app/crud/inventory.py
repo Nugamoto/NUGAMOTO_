@@ -18,16 +18,27 @@ from app.schemas.inventory import (
     InventoryItemRead,
     InventoryItemUpdate,
     StorageLocationCreate,
+    StorageLocationRead,
     StorageLocationUpdate
 )
 
 
 # ================================================================== #
-# Schema Conversion Helper                                           #
+# Schema Conversion Helpers                                          #
 # ================================================================== #
 
 def build_inventory_item_read(item_orm: InventoryItem) -> InventoryItemRead:
-    """Convert ORM to Read schema with computed properties."""
+    """Convert ORM to Read schema with computed properties.
+    
+    Public helper function that converts an InventoryItem ORM object
+    to InventoryItemRead schema with all computed properties.
+    
+    Args:
+        item_orm: InventoryItem ORM object with loaded relationships
+        
+    Returns:
+        InventoryItemRead schema with computed properties
+    """
     return InventoryItemRead(
         # Base fields from ORM
         id=item_orm.id,
@@ -38,30 +49,46 @@ def build_inventory_item_read(item_orm: InventoryItem) -> InventoryItemRead:
         min_quantity=item_orm.min_quantity,
         expiration_date=item_orm.expiration_date,
         updated_at=item_orm.updated_at,
-
-        # Related objects
+        
+        # Related objects (loaded via selectinload)
         food_item=item_orm.food_item,
         storage_location=item_orm.storage_location,
-
-        # Computed properties
+        
+        # Computed properties from ORM methods
         is_low_stock=item_orm.is_low_stock(),
         is_expired=item_orm.is_expired(),
         expires_soon=item_orm.expires_soon(),
-
-        # Base unit name
+        
+        # Base unit name from relationship
         base_unit_name=item_orm.food_item.base_unit.name if item_orm.food_item.base_unit else 'units'
     )
 
 
+def build_storage_location_read(storage_orm: StorageLocation) -> StorageLocationRead:
+    """Convert StorageLocation ORM to Read schema.
+    
+    Args:
+        storage_orm: StorageLocation ORM object
+        
+    Returns:
+        StorageLocationRead schema
+    """
+    return StorageLocationRead(
+        id=storage_orm.id,
+        kitchen_id=storage_orm.kitchen_id,
+        name=storage_orm.name
+    )
+
+
 # ================================================================== #
-# StorageLocation CRUD Operations                                    #
+# StorageLocation CRUD Operations - Schema Returns                  #
 # ================================================================== #
 
 def create_storage_location(
         db: Session,
         kitchen_id: int,
         storage_data: StorageLocationCreate
-) -> StorageLocation:
+) -> StorageLocationRead:
     """Create a new storage location for a kitchen.
     
     Args:
@@ -70,7 +97,7 @@ def create_storage_location(
         storage_data: Storage location creation data
         
     Returns:
-        Created storage location instance
+        Created storage location schema
         
     Raises:
         IntegrityError: If storage location name already exists in kitchen
@@ -84,53 +111,60 @@ def create_storage_location(
     db.commit()
     db.refresh(db_storage)
 
-    return db_storage
+    return build_storage_location_read(db_storage)
 
 
 def get_storage_location_by_id(
         db: Session,
         storage_location_id: int
-) -> StorageLocation | None:
-    """Get storage location by ID.
+) -> StorageLocationRead | None:
+    """Get storage location by ID - returns schema.
     
     Args:
         db: Database session
         storage_location_id: Storage location ID to fetch
         
     Returns:
-        Storage location instance or None if not found
+        Storage location schema or None if not found
     """
-    return db.scalar(
+    storage_orm = db.scalar(
         select(StorageLocation)
         .where(StorageLocation.id == storage_location_id)
     )
+    
+    if not storage_orm:
+        return None
+    
+    return build_storage_location_read(storage_orm)
 
 
 def get_kitchen_storage_locations(
         db: Session,
         kitchen_id: int
-) -> list[StorageLocation]:
-    """Get all storage locations for a kitchen.
+) -> list[StorageLocationRead]:
+    """Get all storage locations for a kitchen - returns schemas.
     
     Args:
         db: Database session
         kitchen_id: Kitchen ID
         
     Returns:
-        List of storage location instances
+        List of storage location schemas
     """
-    return list(db.scalars(
+    storage_orms = db.scalars(
         select(StorageLocation)
         .where(StorageLocation.kitchen_id == kitchen_id)
         .order_by(StorageLocation.name)
-    ).all())
+    ).all()
+    
+    return [build_storage_location_read(storage) for storage in storage_orms]
 
 
 def update_storage_location(
         db: Session,
         storage_location_id: int,
         storage_data: StorageLocationUpdate
-) -> StorageLocation | None:
+) -> StorageLocationRead | None:
     """Update an existing storage location.
     
     Args:
@@ -139,9 +173,14 @@ def update_storage_location(
         storage_data: Updated storage location data
         
     Returns:
-        Updated storage location instance or None if not found
+        Updated storage location schema or None if not found
     """
-    db_storage = get_storage_location_by_id(db, storage_location_id)
+    # Get ORM object first
+    db_storage = db.scalar(
+        select(StorageLocation)
+        .where(StorageLocation.id == storage_location_id)
+    )
+    
     if not db_storage:
         return None
 
@@ -152,7 +191,7 @@ def update_storage_location(
     db.commit()
     db.refresh(db_storage)
 
-    return db_storage
+    return build_storage_location_read(db_storage)
 
 
 def delete_storage_location(db: Session, storage_location_id: int) -> bool:
@@ -165,7 +204,11 @@ def delete_storage_location(db: Session, storage_location_id: int) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    db_storage = get_storage_location_by_id(db, storage_location_id)
+    db_storage = db.scalar(
+        select(StorageLocation)
+        .where(StorageLocation.id == storage_location_id)
+    )
+    
     if not db_storage:
         return False
 
@@ -195,7 +238,7 @@ def create_or_update_inventory_item(
         inventory_data: Inventory item creation data
         
     Returns:
-        Created or updated inventory item with computed properties
+        Created or updated inventory item schema with computed properties
         
     Raises:
         ValueError: If food_item_id or storage_location_id don't exist
@@ -275,7 +318,7 @@ def get_inventory_item_by_id(db: Session, inventory_item_id: int) -> InventoryIt
     
     if not item_orm:
         return None
-
+    
     return build_inventory_item_read(item_orm)
 
 
@@ -295,29 +338,29 @@ def get_kitchen_inventory(db: Session, kitchen_id: int) -> list[InventoryItemRea
         .options(selectinload(InventoryItem.storage_location))
         .where(InventoryItem.kitchen_id == kitchen_id)
     ).all()
-
+    
     return [build_inventory_item_read(item) for item in items_orm]
 
 
 def get_kitchen_inventory_grouped_by_storage(
         db: Session,
         kitchen_id: int
-) -> dict[StorageLocation, list[InventoryItemRead]]:
-    """Get kitchen inventory grouped by storage location.
+) -> dict[StorageLocationRead, list[InventoryItemRead]]:
+    """Get kitchen inventory grouped by storage location - returns schemas.
     
     Args:
         db: Database session
         kitchen_id: Kitchen ID
         
     Returns:
-        Dictionary mapping storage locations to their inventory item schemas
+        Dictionary mapping storage location schemas to their inventory item schemas
     """
-    # Get all storage locations for the kitchen
+    # Get all storage locations for the kitchen (as schemas)
     storage_locations = get_kitchen_storage_locations(db, kitchen_id)
 
     result = {}
 
-    for storage in storage_locations:
+    for storage_schema in storage_locations:
         # Get inventory items for this storage location
         items_orm = db.scalars(
             select(InventoryItem)
@@ -326,13 +369,13 @@ def get_kitchen_inventory_grouped_by_storage(
             .where(
                 and_(
                     InventoryItem.kitchen_id == kitchen_id,
-                    InventoryItem.storage_location_id == storage.id
+                    InventoryItem.storage_location_id == storage_schema.id
                 )
             )
         ).all()
-
+        
         items_schemas = [build_inventory_item_read(item) for item in items_orm]
-        result[storage] = items_schemas
+        result[storage_schema] = items_schemas
 
     return result
 
@@ -432,7 +475,7 @@ def get_low_stock_items(
         )
         .order_by(InventoryItem.food_item_id)
     ).all()
-
+    
     return [build_inventory_item_read(item) for item in items_orm]
 
 
@@ -468,7 +511,7 @@ def get_expiring_items(
         )
         .order_by(InventoryItem.expiration_date)
     ).all()
-
+    
     return [build_inventory_item_read(item) for item in items_orm]
 
 
@@ -499,7 +542,7 @@ def get_expired_items(db: Session, kitchen_id: int) -> list[InventoryItemRead]:
         )
         .order_by(InventoryItem.expiration_date)
     ).all()
-
+    
     return [build_inventory_item_read(item) for item in items_orm]
 
 
@@ -581,70 +624,3 @@ def convert_quantity_to_base_unit(
         f"No conversion path found from '{input_unit_name}' to '{base_unit_name}' "
         f"for food item '{food_item.name}' (ID {food_item_id})"
     )
-
-
-def _get_food_specific_conversion_factor(
-        db: Session,
-        food_item_id: int,
-        from_unit_id: int,
-        to_unit_id: int
-) -> float | None:
-    """Get food-specific conversion factor.
-    
-    Internal helper function to check food_item_unit_conversions table.
-    
-    Args:
-        db: Database session
-        food_item_id: Food item ID
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
-        
-    Returns:
-        Conversion factor or None if not found
-    """
-    from app.models.food import FoodItemUnitConversion
-
-    conversion = db.scalar(
-        select(FoodItemUnitConversion.factor)
-        .where(
-            and_(
-                FoodItemUnitConversion.food_item_id == food_item_id,
-                FoodItemUnitConversion.from_unit_id == from_unit_id,
-                FoodItemUnitConversion.to_unit_id == to_unit_id
-            )
-        )
-    )
-
-    return conversion
-
-
-def _get_generic_conversion_factor(
-        db: Session,
-        from_unit_id: int,
-        to_unit_id: int
-) -> float | None:
-    """Get generic conversion factor between units.
-    
-    Internal helper function to check unit_conversions table.
-    
-    Args:
-        db: Database session
-        from_unit_id: Source unit ID
-        to_unit_id: Target unit ID
-        
-    Returns:
-        Conversion factor or None if not found
-    """
-    from app.models.core import UnitConversion
-
-    conversion = db.scalar(
-        select(UnitConversion.factor)
-        .where(
-            and_(
-                UnitConversion.from_unit_id == from_unit_id,
-                UnitConversion.to_unit_id == to_unit_id
-            )
-        )
-    )
-
-    return conversion
