@@ -20,10 +20,9 @@ from app.schemas.kitchen import (
 router = APIRouter(prefix="/kitchens", tags=["Kitchens"])
 
 
-# --------------------------------------------------------------------- #
-# Routes                                                                #
-# --------------------------------------------------------------------- #
-
+# ================================================================== #
+# Kitchen Management Routes                                          #
+# ================================================================== #
 
 @router.post(
     "/",
@@ -32,7 +31,8 @@ router = APIRouter(prefix="/kitchens", tags=["Kitchens"])
     summary="Create a new kitchen",
 )
 def create_kitchen(
-        kitchen_data: KitchenCreate, db: Session = Depends(get_db)
+        kitchen_data: KitchenCreate,
+        db: Session = Depends(get_db)
 ) -> KitchenRead:
     """Create a new kitchen.
 
@@ -43,8 +43,7 @@ def create_kitchen(
     Returns:
         The newly created kitchen.
     """
-    db_kitchen = crud_kitchen.create_kitchen(db, kitchen_data)
-    return KitchenRead.model_validate(db_kitchen, from_attributes=True)
+    return crud_kitchen.create_kitchen(db, kitchen_data)
 
 
 @router.get(
@@ -62,8 +61,7 @@ def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
     Returns:
         A list of all kitchens.
     """
-    kitchens = crud_kitchen.get_all_kitchens(db)
-    return [KitchenRead.model_validate(kitchen, from_attributes=True) for kitchen in kitchens]
+    return crud_kitchen.get_all_kitchens(db)
 
 
 @router.get(
@@ -83,13 +81,16 @@ def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUs
         The requested kitchen with all associated users.
 
     Raises:
-        HTTPException: *404* if the kitchen does not exist.
+        HTTPException: 404 if the kitchen does not exist.
     """
     kitchen = crud_kitchen.get_kitchen_with_users(db, kitchen_id)
     if kitchen is None:
-        raise HTTPException(status_code=404, detail="Kitchen not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen not found"
+        )
 
-    return KitchenWithUsers.model_validate(kitchen, from_attributes=True)
+    return kitchen
 
 
 @router.patch(
@@ -128,12 +129,14 @@ def update_kitchen(
         ```
         Only the specified fields will be updated, other fields remain unchanged.
     """
-    try:
-        updated_kitchen = crud_kitchen.update_kitchen(db, kitchen_id, kitchen_data)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Kitchen not found.") from exc
+    updated_kitchen = crud_kitchen.update_kitchen(db, kitchen_id, kitchen_data)
+    if updated_kitchen is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen not found"
+        )
 
-    return KitchenRead.model_validate(updated_kitchen, from_attributes=True)
+    return updated_kitchen
 
 
 @router.delete(
@@ -160,16 +163,22 @@ def delete_kitchen(
     Raises:
         HTTPException: 404 if the kitchen does not exist.
     """
-    try:
-        crud_kitchen.delete_kitchen(db, kitchen_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Kitchen not found.") from exc
+    deleted = crud_kitchen.delete_kitchen(db, kitchen_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen not found"
+        )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ================================================================== #
+# User-Kitchen Relationship Routes                                   #
+# ================================================================== #
+
 @router.post(
-    "/{kitchen_id}/add_user/",
+    "/{kitchen_id}/users",
     response_model=UserKitchenRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add user to kitchen",
@@ -195,26 +204,29 @@ def add_user_to_kitchen(
             * 400 – if the user is already a member of this kitchen.
     """
     try:
-        user_kitchen = crud_kitchen.add_user_to_kitchen(
-            db, kitchen_id, user_kitchen_data
-        )
+        return crud_kitchen.add_user_to_kitchen(db, kitchen_id, user_kitchen_data)
     except ValueError as exc:
-        match str(exc):
-            case "Kitchen not found.":
-                raise HTTPException(
-                    status_code=404, detail="Kitchen not found."
-                ) from exc
-            case "User not found.":
-                raise HTTPException(status_code=404, detail="User not found.") from exc
-            case "User is already a member of this kitchen.":
-                raise HTTPException(
-                    status_code=400,
-                    detail="User is already a member of this kitchen.",
-                ) from exc
+        error_msg = str(exc)
+        if "Kitchen not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Kitchen not found"
+            ) from exc
+        elif "User not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            ) from exc
+        elif "already a member" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already a member of this kitchen"
+            ) from exc
         # Re-raise unexpected errors
-        raise
-
-    return UserKitchenRead.model_validate(user_kitchen, from_attributes=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to add user to kitchen: {error_msg}"
+        ) from exc
 
 
 @router.patch(
@@ -229,7 +241,7 @@ def update_user_role_in_kitchen(
         role_data: UserKitchenUpdate,
         db: Session = Depends(get_db),
 ) -> UserKitchenRead:
-    """Partially update a user's role in a kitchen.
+    """Update a user's role in a kitchen.
 
     This endpoint allows updating the role of a user within a specific kitchen.
     Only the role field will be updated as specified in the request body.
@@ -244,8 +256,7 @@ def update_user_role_in_kitchen(
         The updated user-kitchen relationship with the new role.
 
     Raises:
-        HTTPException:
-            * 404 – if the kitchen, user, or relationship does not exist.
+        HTTPException: 404 if the user-kitchen relationship does not exist.
 
     Example:
         ```json
@@ -255,16 +266,16 @@ def update_user_role_in_kitchen(
         ```
         Only the role will be updated, preserving other relationship data.
     """
-    try:
-        user_kitchen = crud_kitchen.update_user_role_in_kitchen(
-            db, kitchen_id, user_id, role_data
-        )
-    except ValueError as exc:
+    user_kitchen = crud_kitchen.update_user_role_in_kitchen(
+        db, kitchen_id, user_id, role_data
+    )
+    if user_kitchen is None:
         raise HTTPException(
-            status_code=404, detail="User is not a member of this kitchen."
-        ) from exc
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a member of this kitchen"
+        )
 
-    return UserKitchenRead.model_validate(user_kitchen, from_attributes=True)
+    return user_kitchen
 
 
 @router.get(
@@ -274,7 +285,9 @@ def update_user_role_in_kitchen(
     summary="Get user's role in kitchen",
 )
 def get_user_role_in_kitchen(
-        kitchen_id: int, user_id: int, db: Session = Depends(get_db)
+        kitchen_id: int,
+        user_id: int,
+        db: Session = Depends(get_db)
 ) -> UserKitchenRead:
     """Get a user's role in a specific kitchen.
 
@@ -292,10 +305,11 @@ def get_user_role_in_kitchen(
     user_kitchen = crud_kitchen.get_user_kitchen_relationship(db, kitchen_id, user_id)
     if user_kitchen is None:
         raise HTTPException(
-            status_code=404, detail="User is not a member of this kitchen."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a member of this kitchen"
         )
 
-    return UserKitchenRead.model_validate(user_kitchen, from_attributes=True)
+    return user_kitchen
 
 
 @router.delete(
@@ -304,7 +318,9 @@ def get_user_role_in_kitchen(
     summary="Remove user from kitchen",
 )
 def remove_user_from_kitchen(
-        kitchen_id: int, user_id: int, db: Session = Depends(get_db)
+        kitchen_id: int,
+        user_id: int,
+        db: Session = Depends(get_db)
 ) -> Response:
     """Remove a user from a kitchen.
 
@@ -319,11 +335,37 @@ def remove_user_from_kitchen(
     Raises:
         HTTPException: 404 if the user-kitchen relationship does not exist.
     """
-    try:
-        crud_kitchen.remove_user_from_kitchen(db, kitchen_id, user_id)
-    except ValueError as exc:
+    removed = crud_kitchen.remove_user_from_kitchen(db, kitchen_id, user_id)
+    if not removed:
         raise HTTPException(
-            status_code=404, detail="User is not a member of this kitchen."
-        ) from exc
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a member of this kitchen"
+        )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ================================================================== #
+# User Kitchen Membership Routes                                     #
+# ================================================================== #
+
+@router.get(
+    "/users/{user_id}/kitchens",
+    response_model=list[UserKitchenRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get all kitchens for a user",
+)
+def get_user_kitchens(
+        user_id: int,
+        db: Session = Depends(get_db)
+) -> list[UserKitchenRead]:
+    """Get all kitchens a user belongs to.
+
+    Args:
+        user_id: Primary key of the user.
+        db: Injected database session.
+
+    Returns:
+        List of user-kitchen relationships for the user.
+    """
+    return crud_kitchen.get_user_kitchens(db, user_id)
