@@ -1,3 +1,4 @@
+
 """API endpoints for user credentials management."""
 
 from __future__ import annotations
@@ -66,12 +67,11 @@ def create_user_credentials(
         )
 
     try:
-        credentials = crud_user_credentials.create_user_credentials(
+        return crud_user_credentials.create_user_credentials(
             db=db,
             user_id=user_id,
             credentials_data=credentials_data
         )
-        return UserCredentialsRead.model_validate(credentials, from_attributes=True)
     except ValueError as e:
         if "does not exist" in str(e):
             raise HTTPException(
@@ -135,7 +135,7 @@ def get_user_credentials(
             detail=f"No credentials found for user {user_id}"
         )
 
-    return UserCredentialsRead.model_validate(credentials, from_attributes=True)
+    return credentials
 
 
 @router.patch(
@@ -193,7 +193,7 @@ def update_user_credentials(
             detail=f"No credentials found for user {user_id}"
         )
 
-    return UserCredentialsRead.model_validate(updated_credentials, from_attributes=True)
+    return updated_credentials
 
 
 @router.get(
@@ -219,13 +219,8 @@ def get_all_user_credentials_summary(
     Example:
         GET /users/credentials/summary?skip=0&limit=50
     """
-    credentials_list = crud_user_credentials.get_all_user_credentials(
+    return crud_user_credentials.get_all_user_credentials(
         db=db,
         skip=skip,
         limit=limit
     )
-
-    return [
-        UserCredentialsSummary.model_validate(credentials, from_attributes=True)
-        for credentials in credentials_list
-    ]
