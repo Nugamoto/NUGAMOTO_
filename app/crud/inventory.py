@@ -23,24 +23,19 @@ from app.schemas.inventory import (
 )
 
 
-# ================================================================== #
-# Schema Conversion Helpers                                          #
-# ================================================================== #
-
 def build_inventory_item_read(item_orm: InventoryItem) -> InventoryItemRead:
-    """Convert ORM to Read schema with computed properties.
-    
-    Public helper function that converts an InventoryItem ORM object
-    to InventoryItemRead schema with all computed properties.
+    """Convert InventoryItem ORM to Read schema.
     
     Args:
         item_orm: InventoryItem ORM object with loaded relationships
         
     Returns:
-        InventoryItemRead schema with computed properties
+        InventoryItemRead schema
     """
+    # Import here to avoid circular imports
+    from app.crud.food import build_food_item_read
+    
     return InventoryItemRead(
-        # Base fields from ORM
         id=item_orm.id,
         kitchen_id=item_orm.kitchen_id,
         food_item_id=item_orm.food_item_id,
@@ -49,18 +44,14 @@ def build_inventory_item_read(item_orm: InventoryItem) -> InventoryItemRead:
         min_quantity=item_orm.min_quantity,
         expiration_date=item_orm.expiration_date,
         updated_at=item_orm.updated_at,
-        
-        # Related objects (loaded via selectinload)
-        food_item=item_orm.food_item,
-        storage_location=item_orm.storage_location,
-        
-        # Computed properties from ORM methods
+        # Convert relationships to schemas using existing functions
+        food_item=build_food_item_read(item_orm.food_item) if item_orm.food_item else None,
+        storage_location=build_storage_location_read(item_orm.storage_location) if item_orm.storage_location else None,
+        # Computed properties using ORM methods
         is_low_stock=item_orm.is_low_stock(),
         is_expired=item_orm.is_expired(),
         expires_soon=item_orm.expires_soon(),
-        
-        # Base unit name from relationship
-        base_unit_name=item_orm.food_item.base_unit.name if item_orm.food_item.base_unit else 'units'
+        base_unit_name=item_orm.food_item.base_unit.name if (item_orm.food_item and item_orm.food_item.base_unit) else None
     )
 
 
