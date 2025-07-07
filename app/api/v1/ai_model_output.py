@@ -66,8 +66,7 @@ def create_ai_output(
         The target_type and target_id fields enable polymorphic associations
         with any entity in the system.
     """
-    db_output = crud_ai.create_ai_output(db, output_data)
-    return AIModelOutputRead.model_validate(db_output, from_attributes=True)
+    return crud_ai.create_ai_output(db, output_data)
 
 
 @router.get(
@@ -109,7 +108,7 @@ def get_ai_output(
             detail=f"AI output with ID {output_id} not found"
         )
 
-    return AIModelOutputRead.model_validate(db_output, from_attributes=True)
+    return db_output
 
 
 @router.delete(
@@ -137,7 +136,7 @@ def delete_ai_output(
 
     Note:
         This operation is irreversible. Use with caution.
-        Typically used for cleanup, privacy compliance (GDPR), 
+        Typically used for cleanup, privacy compliance (GDPR),
         or removing test/invalid data.
     """
     success = crud_ai.delete_ai_output(db, output_id)
@@ -207,8 +206,7 @@ def get_all_ai_outputs(
         prompt_contains=prompt_contains,
     )
 
-    outputs = crud_ai.get_all_ai_outputs(db, search_params, skip, limit)
-    return [AIModelOutputRead.model_validate(output, from_attributes=True) for output in outputs]
+    return crud_ai.get_all_ai_outputs(db, search_params, skip, limit)
 
 
 @router.get(
@@ -249,8 +247,7 @@ def get_ai_outputs_by_target(
         content related to specific entities in the UI, such as showing
         all AI-generated tips or suggestions for a particular recipe.
     """
-    outputs = crud_ai.get_ai_outputs_by_target(db, target_type, target_id, skip, limit)
-    return [AIModelOutputRead.model_validate(output, from_attributes=True) for output in outputs]
+    return crud_ai.get_ai_outputs_by_target(db, target_type, target_id, skip, limit)
 
 
 @router.get(
