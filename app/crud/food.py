@@ -5,32 +5,102 @@ from __future__ import annotations
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.crud.core import get_conversion_factor
+from app.crud.core import get_conversion_factor, build_unit_read
 from app.models.food import FoodItem, FoodItemUnitConversion, FoodItemAlias
 from app.schemas.food import (
-    FoodItemCreate, FoodItemUpdate, FoodItemUnitConversionCreate, FoodItemAliasCreate
+    FoodItemCreate, FoodItemRead, FoodItemUpdate,
+    FoodItemUnitConversionCreate, FoodItemUnitConversionRead,
+    FoodItemAliasCreate, FoodItemAliasRead
 )
 
 
 # ================================================================== #
-# FoodItem CRUD Operations                                           #
+# Helper Functions for Schema Conversion                            #
 # ================================================================== #
 
-def create_food_item(db: Session, food_item_data: FoodItemCreate) -> FoodItem:
-    """Create a new food item.
+def build_food_item_read(food_orm: FoodItem) -> FoodItemRead:
+    """Convert FoodItem ORM to Read schema.
+    
+    Args:
+        food_orm: FoodItem ORM object with loaded relationships
+        
+    Returns:
+        FoodItemRead schema
+    """
+    base_unit_schema = None
+    if food_orm.base_unit:
+        base_unit_schema = build_unit_read(food_orm.base_unit)
+
+    return FoodItemRead(
+        id=food_orm.id,
+        name=food_orm.name,
+        category=food_orm.category,
+        base_unit_id=food_orm.base_unit_id,
+        created_at=food_orm.created_at,
+        updated_at=food_orm.updated_at,
+        base_unit=base_unit_schema,
+        base_unit_name=food_orm.base_unit.name if food_orm.base_unit else None
+    )
+
+
+def build_food_item_alias_read(alias_orm: FoodItemAlias) -> FoodItemAliasRead:
+    """Convert FoodItemAlias ORM to Read schema.
+    
+    Args:
+        alias_orm: FoodItemAlias ORM object with loaded relationships
+        
+    Returns:
+        FoodItemAliasRead schema
+    """
+    return FoodItemAliasRead(
+        id=alias_orm.id,
+        food_item_id=alias_orm.food_item_id,
+        alias=alias_orm.alias,
+        user_id=alias_orm.user_id,
+        created_at=alias_orm.created_at,
+        food_item_name=alias_orm.food_item.name if alias_orm.food_item else None,
+        user_name=alias_orm.user.name if alias_orm.user else None
+    )
+
+
+def build_food_item_unit_conversion_read(conversion_orm: FoodItemUnitConversion) -> FoodItemUnitConversionRead:
+    """Convert FoodItemUnitConversion ORM to Read schema.
+    
+    Args:
+        conversion_orm: FoodItemUnitConversion ORM object with loaded relationships
+        
+    Returns:
+        FoodItemUnitConversionRead schema
+    """
+    return FoodItemUnitConversionRead(
+        food_item_id=conversion_orm.food_item_id,
+        from_unit_id=conversion_orm.from_unit_id,
+        to_unit_id=conversion_orm.to_unit_id,
+        factor=conversion_orm.factor,
+        created_at=conversion_orm.created_at,
+        food_item_name=conversion_orm.food_item.name if conversion_orm.food_item else None,
+        from_unit_name=conversion_orm.from_unit.name if conversion_orm.from_unit else None,
+        to_unit_name=conversion_orm.to_unit.name if conversion_orm.to_unit else None
+    )
+
+
+# ================================================================== #
+# FoodItem CRUD Operations - Schema Returns                         #
+# ================================================================== #
+
+def create_food_item(db: Session, food_item_data: FoodItemCreate) -> FoodItemRead:
+    """Create a new food item - returns schema.
 
     Args:
         db: Database session
         food_item_data: Food item creation data
 
     Returns:
-        Created food item instance
+        Created food item schema
 
     Raises:
         IntegrityError: If food item name already exists or base_unit_id doesn't exist
     """
-    # TODO: Add validation that base_unit_id exists in units table
-
     db_food_item = FoodItem(
         name=food_item_data.name,
         category=food_item_data.category,
@@ -41,41 +111,58 @@ def create_food_item(db: Session, food_item_data: FoodItemCreate) -> FoodItem:
     db.commit()
     db.refresh(db_food_item)
 
-    return db_food_item
+    # Load relationships for schema conversion
+    db_food_item = db.scalar(
+        select(FoodItem)
+        .options(selectinload(FoodItem.base_unit))
+        .where(FoodItem.id == db_food_item.id)
+    )
+
+    return build_food_item_read(db_food_item)
 
 
-def get_food_item_by_id(db: Session, food_item_id: int) -> FoodItem | None:
-    """Get food item by ID.
+def get_food_item_by_id(db: Session, food_item_id: int) -> FoodItemRead | None:
+    """Get food item by ID - returns schema.
 
     Args:
         db: Database session
         food_item_id: Food item ID to fetch
 
     Returns:
-        Food item instance or None if not found
+        Food item schema or None if not found
     """
-    return db.scalar(
+    food_orm = db.scalar(
         select(FoodItem)
         .options(selectinload(FoodItem.base_unit))
         .where(FoodItem.id == food_item_id)
     )
 
+    if not food_orm:
+        return None
 
-def get_food_item_by_name(db: Session, food_item_name: str) -> FoodItem | None:
-    """Get food item by name.
+    return build_food_item_read(food_orm)
+
+
+def get_food_item_by_name(db: Session, food_item_name: str) -> FoodItemRead | None:
+    """Get food item by name - returns schema.
 
     Args:
         db: Database session
         food_item_name: Food item name to search for
 
     Returns:
-        Food item instance or None if not found
+        Food item schema or None if not found
     """
-    return db.scalar(
+    food_orm = db.scalar(
         select(FoodItem)
         .options(selectinload(FoodItem.base_unit))
         .where(FoodItem.name == food_item_name.strip().title())
     )
+
+    if not food_orm:
+        return None
+
+    return build_food_item_read(food_orm)
 
 
 def get_all_food_items(
@@ -83,8 +170,8 @@ def get_all_food_items(
         category: str | None = None,
         skip: int = 0,
         limit: int = 100
-) -> list[FoodItem]:
-    """Get all food items with optional filtering.
+) -> list[FoodItemRead]:
+    """Get all food items with optional filtering - returns schemas.
 
     Args:
         db: Database session
@@ -93,7 +180,7 @@ def get_all_food_items(
         limit: Maximum number of items to return
 
     Returns:
-        List of food item instances
+        List of food item schemas
     """
     query = (
         select(FoodItem)
@@ -106,33 +193,37 @@ def get_all_food_items(
     if category:
         query = query.where(FoodItem.category == category.strip().title())
 
-    return list(db.scalars(query).all())
+    food_orms = db.scalars(query).all()
+
+    return [build_food_item_read(food) for food in food_orms]
 
 
-def get_food_items_by_category(db: Session, category: str) -> list[FoodItem]:
-    """Get all food items in a specific category.
+def get_food_items_by_category(db: Session, category: str) -> list[FoodItemRead]:
+    """Get all food items in a specific category - returns schemas.
 
     Args:
         db: Database session
         category: Category to filter by
 
     Returns:
-        List of food item instances in the specified category
+        List of food item schemas in the specified category
     """
-    return list(db.scalars(
+    food_orms = db.scalars(
         select(FoodItem)
         .options(selectinload(FoodItem.base_unit))
         .where(FoodItem.category == category.strip().title())
         .order_by(FoodItem.name)
-    ).all())
+    ).all()
+
+    return [build_food_item_read(food) for food in food_orms]
 
 
 def update_food_item(
         db: Session,
         food_item_id: int,
         food_item_data: FoodItemUpdate
-) -> FoodItem | None:
-    """Update an existing food item.
+) -> FoodItemRead | None:
+    """Update an existing food item - returns schema.
 
     Args:
         db: Database session
@@ -140,9 +231,15 @@ def update_food_item(
         food_item_data: Updated food item data
 
     Returns:
-        Updated food item instance or None if not found
+        Updated food item schema or None if not found
     """
-    db_food_item = get_food_item_by_id(db, food_item_id)
+    # Get ORM object first
+    db_food_item = db.scalar(
+        select(FoodItem)
+        .options(selectinload(FoodItem.base_unit))
+        .where(FoodItem.id == food_item_id)
+    )
+    
     if not db_food_item:
         return None
 
@@ -153,7 +250,7 @@ def update_food_item(
     db.commit()
     db.refresh(db_food_item)
 
-    return db_food_item
+    return build_food_item_read(db_food_item)
 
 
 def delete_food_item(db: Session, food_item_id: int) -> bool:
@@ -166,7 +263,11 @@ def delete_food_item(db: Session, food_item_id: int) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    db_food_item = get_food_item_by_id(db, food_item_id)
+    db_food_item = db.scalar(
+        select(FoodItem)
+        .where(FoodItem.id == food_item_id)
+    )
+    
     if not db_food_item:
         return False
 
@@ -177,21 +278,21 @@ def delete_food_item(db: Session, food_item_id: int) -> bool:
 
 
 # ================================================================== #
-# FoodItemAlias CRUD Operations                                      #
+# FoodItemAlias CRUD Operations - Schema Returns                    #
 # ================================================================== #
 
 def create_food_item_alias(
         db: Session,
         alias_data: FoodItemAliasCreate
-) -> FoodItemAlias:
-    """Create a new food item alias.
+) -> FoodItemAliasRead:
+    """Create a new food item alias - returns schema.
 
     Args:
         db: Database session
         alias_data: Alias creation data
 
     Returns:
-        Created alias instance
+        Created alias schema
 
     Raises:
         IntegrityError: If alias already exists for the combination of food_item_id, alias, and user_id
@@ -206,15 +307,25 @@ def create_food_item_alias(
     db.commit()
     db.refresh(db_alias)
 
-    return db_alias
+    # Load relationships for schema conversion
+    db_alias = db.scalar(
+        select(FoodItemAlias)
+        .options(
+            selectinload(FoodItemAlias.food_item),
+            selectinload(FoodItemAlias.user)
+        )
+        .where(FoodItemAlias.id == db_alias.id)
+    )
+
+    return build_food_item_alias_read(db_alias)
 
 
 def get_aliases_for_food_item(
         db: Session,
         food_item_id: int,
         user_id: int | None = None
-) -> list[FoodItemAlias]:
-    """Get all aliases for a specific food item.
+) -> list[FoodItemAliasRead]:
+    """Get all aliases for a specific food item - returns schemas.
 
     Args:
         db: Database session
@@ -222,7 +333,7 @@ def get_aliases_for_food_item(
         user_id: Optional user ID to filter user-specific aliases
 
     Returns:
-        List of alias instances for the food item
+        List of alias schemas for the food item
     """
     query = (
         select(FoodItemAlias)
@@ -240,7 +351,9 @@ def get_aliases_for_food_item(
             (FoodItemAlias.user_id == user_id) | (FoodItemAlias.user_id.is_(None))
         )
 
-    return list(db.scalars(query).all())
+    alias_orms = db.scalars(query).all()
+
+    return [build_food_item_alias_read(alias) for alias in alias_orms]
 
 
 def get_all_aliases_for_user(
@@ -248,8 +361,8 @@ def get_all_aliases_for_user(
         user_id: int,
         skip: int = 0,
         limit: int = 100
-) -> list[FoodItemAlias]:
-    """Get all aliases created by a specific user.
+) -> list[FoodItemAliasRead]:
+    """Get all aliases created by a specific user - returns schemas.
 
     Args:
         db: Database session
@@ -258,9 +371,9 @@ def get_all_aliases_for_user(
         limit: Maximum number of items to return
 
     Returns:
-        List of alias instances created by the user
+        List of alias schemas created by the user
     """
-    return list(db.scalars(
+    alias_orms = db.scalars(
         select(FoodItemAlias)
         .options(
             selectinload(FoodItemAlias.food_item),
@@ -270,20 +383,22 @@ def get_all_aliases_for_user(
         .order_by(FoodItemAlias.created_at.desc())
         .offset(skip)
         .limit(limit)
-    ).all())
+    ).all()
+
+    return [build_food_item_alias_read(alias) for alias in alias_orms]
 
 
-def get_alias_by_id(db: Session, alias_id: int) -> FoodItemAlias | None:
-    """Get alias by ID.
+def get_alias_by_id(db: Session, alias_id: int) -> FoodItemAliasRead | None:
+    """Get alias by ID - returns schema.
 
     Args:
         db: Database session
         alias_id: Alias ID to fetch
 
     Returns:
-        Alias instance or None if not found
+        Alias schema or None if not found
     """
-    return db.scalar(
+    alias_orm = db.scalar(
         select(FoodItemAlias)
         .options(
             selectinload(FoodItemAlias.food_item),
@@ -291,6 +406,11 @@ def get_alias_by_id(db: Session, alias_id: int) -> FoodItemAlias | None:
         )
         .where(FoodItemAlias.id == alias_id)
     )
+
+    if not alias_orm:
+        return None
+
+    return build_food_item_alias_read(alias_orm)
 
 
 def delete_alias_by_id(db: Session, alias_id: int) -> bool:
@@ -303,7 +423,11 @@ def delete_alias_by_id(db: Session, alias_id: int) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    db_alias = get_alias_by_id(db, alias_id)
+    db_alias = db.scalar(
+        select(FoodItemAlias)
+        .where(FoodItemAlias.id == alias_id)
+    )
+    
     if not db_alias:
         return False
 
@@ -319,8 +443,8 @@ def search_food_items_by_alias(
         user_id: int | None = None,
         skip: int = 0,
         limit: int = 100
-) -> list[FoodItem]:
-    """Search food items by alias term.
+) -> list[FoodItemRead]:
+    """Search food items by alias term - returns schemas.
 
     Args:
         db: Database session
@@ -330,7 +454,7 @@ def search_food_items_by_alias(
         limit: Maximum number of items to return
 
     Returns:
-        List of food items that have matching aliases
+        List of food item schemas that have matching aliases
     """
     query = (
         select(FoodItem)
@@ -349,25 +473,27 @@ def search_food_items_by_alias(
             (FoodItemAlias.user_id == user_id) | (FoodItemAlias.user_id.is_(None))
         )
 
-    return list(db.scalars(query).all())
+    food_orms = db.scalars(query).all()
+
+    return [build_food_item_read(food) for food in food_orms]
 
 
 # ================================================================== #
-# FoodItemUnitConversion CRUD Operations                             #
+# FoodItemUnitConversion CRUD Operations - Schema Returns           #
 # ================================================================== #
 
 def create_food_unit_conversion(
         db: Session,
         conversion_data: FoodItemUnitConversionCreate
-) -> FoodItemUnitConversion:
-    """Create a new food item unit conversion.
+) -> FoodItemUnitConversionRead:
+    """Create a new food item unit conversion - returns schema.
 
     Args:
         db: Database session
         conversion_data: Unit conversion creation data
 
     Returns:
-        Created unit conversion instance
+        Created unit conversion schema
 
     Raises:
         IntegrityError: If conversion already exists or referenced entities don't exist
@@ -383,7 +509,24 @@ def create_food_unit_conversion(
     db.commit()
     db.refresh(db_conversion)
 
-    return db_conversion
+    # Load relationships for schema conversion
+    db_conversion = db.scalar(
+        select(FoodItemUnitConversion)
+        .options(
+            selectinload(FoodItemUnitConversion.food_item),
+            selectinload(FoodItemUnitConversion.from_unit),
+            selectinload(FoodItemUnitConversion.to_unit)
+        )
+        .where(
+            and_(
+                FoodItemUnitConversion.food_item_id == db_conversion.food_item_id,
+                FoodItemUnitConversion.from_unit_id == db_conversion.from_unit_id,
+                FoodItemUnitConversion.to_unit_id == db_conversion.to_unit_id
+            )
+        )
+    )
+
+    return build_food_item_unit_conversion_read(db_conversion)
 
 
 def get_food_unit_conversion(
@@ -391,8 +534,8 @@ def get_food_unit_conversion(
         food_item_id: int,
         from_unit_id: int,
         to_unit_id: int
-) -> FoodItemUnitConversion | None:
-    """Get specific food item unit conversion.
+) -> FoodItemUnitConversionRead | None:
+    """Get specific food item unit conversion - returns schema.
 
     Args:
         db: Database session
@@ -401,9 +544,9 @@ def get_food_unit_conversion(
         to_unit_id: Target unit ID
 
     Returns:
-        Unit conversion instance or None if not found
+        Unit conversion schema or None if not found
     """
-    return db.scalar(
+    conversion_orm = db.scalar(
         select(FoodItemUnitConversion)
         .options(
             selectinload(FoodItemUnitConversion.food_item),
@@ -418,6 +561,11 @@ def get_food_unit_conversion(
             )
         )
     )
+
+    if not conversion_orm:
+        return None
+
+    return build_food_item_unit_conversion_read(conversion_orm)
 
 
 def get_conversion_factor_for_food_item(
@@ -453,43 +601,44 @@ def get_conversion_factor_for_food_item(
         >>> get_conversion_factor_for_food_item(db, food_item_id, from_unit_id, to_unit_id)
         0.1
     """
-    # 1) direct lookup
-    conv = get_food_unit_conversion(db, food_item_id, from_unit_id, to_unit_id)
-    if conv:
-        return conv.factor
+    # 1) direct lookup - use the schema-returning function but extract the factor
+    conv_schema = get_food_unit_conversion(db, food_item_id, from_unit_id, to_unit_id)
+    if conv_schema:
+        return conv_schema.factor
 
     # 2) reciprocal lookup
-    rev = get_food_unit_conversion(db, food_item_id, to_unit_id, from_unit_id)
-    if rev and rev.factor != 0:
-        return 1.0 / rev.factor
+    rev_schema = get_food_unit_conversion(db, food_item_id, to_unit_id, from_unit_id)
+    if rev_schema and rev_schema.factor != 0:
+        return 1.0 / rev_schema.factor
 
     return None
-
-
 
 
 def get_conversions_for_food_item(
         db: Session,
         food_item_id: int
-) -> list[FoodItemUnitConversion]:
-    """Get all unit conversions for a specific food item.
+) -> list[FoodItemUnitConversionRead]:
+    """Get all unit conversions for a specific food item - returns schemas.
 
     Args:
         db: Database session
         food_item_id: Food item ID
 
     Returns:
-        List of unit conversion instances
+        List of unit conversion schemas
     """
-    return list(db.scalars(
+    conversion_orms = db.scalars(
         select(FoodItemUnitConversion)
         .options(
+            selectinload(FoodItemUnitConversion.food_item),
             selectinload(FoodItemUnitConversion.from_unit),
             selectinload(FoodItemUnitConversion.to_unit)
         )
         .where(FoodItemUnitConversion.food_item_id == food_item_id)
         .order_by(FoodItemUnitConversion.from_unit_id, FoodItemUnitConversion.to_unit_id)
-    ).all())
+    ).all()
+
+    return [build_food_item_unit_conversion_read(conv) for conv in conversion_orms]
 
 
 def delete_food_unit_conversion(
@@ -509,11 +658,21 @@ def delete_food_unit_conversion(
     Returns:
         True if deleted, False if not found
     """
-    conversion = get_food_unit_conversion(db, food_item_id, from_unit_id, to_unit_id)
-    if not conversion:
+    conversion_orm = db.scalar(
+        select(FoodItemUnitConversion)
+        .where(
+            and_(
+                FoodItemUnitConversion.food_item_id == food_item_id,
+                FoodItemUnitConversion.from_unit_id == from_unit_id,
+                FoodItemUnitConversion.to_unit_id == to_unit_id
+            )
+        )
+    )
+
+    if not conversion_orm:
         return False
 
-    db.delete(conversion)
+    db.delete(conversion_orm)
     db.commit()
 
     return True
@@ -605,11 +764,11 @@ def can_convert_food_units(
         # Same unit
         assert can_convert_food_units(db, flour_id, g_id, g_id) is True
 
-        # Food-specific conversion exists (e.g. EL ↔ g for flour)
+        # Food-specific conversion exists (e.g., EL ↔ g for flour)
         assert can_convert_food_units(db, flour_id, el_id, g_id) is True
         assert can_convert_food_units(db, flour_id, g_id, el_id) is True
 
-        # Generic weight conversion (e.g. lb ↔ kg)
+        # Generic weight conversion (e.g., lb ↔ kg)
         assert can_convert_food_units(db, any_id, lb_id, kg_id) is True
 
         # No path between count and volume
