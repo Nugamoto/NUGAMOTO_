@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.kitchen import Kitchen
     from app.models.inventory import FoodItem
     from app.models.user import User
+    from app.models.core import Unit
 
 
 class ShoppingList(Base):
@@ -127,7 +128,7 @@ class ShoppingProduct(Base):
     # Relationships                                                       #
     # ------------------------------------------------------------------ #
     food_item: Mapped[FoodItem] = relationship("FoodItem")
-    # package_unit: Mapped[Unit] = relationship("Unit", foreign_keys=[package_unit_id])
+    package_unit: Mapped[Unit] = relationship("Unit", foreign_keys=[package_unit_id])
     assignments: Mapped[list[ShoppingProductAssignment]] = relationship(
         "ShoppingProductAssignment",
         back_populates="shopping_product",
