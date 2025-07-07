@@ -1,15 +1,20 @@
+
 """Pydantic schemas for recipe input / output."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
 
+from app.core.enums import DifficultyLevel
 from app.schemas.user import UserRead
 
+
+# ================================================================== #
+# Recipe Ingredient Schemas                                          #
+# ================================================================== #
 
 class _RecipeIngredientBase(BaseModel):
     """Fields shared by all recipe ingredient schemas."""
@@ -51,10 +56,10 @@ class RecipeIngredientRead(_RecipeIngredientBase):
     created_at: datetime
     updated_at: datetime
 
+    # Computed fields populated by CRUD builders
     food_item_name: str = Field(..., description="Name of the food item")
     base_unit_name: str = Field(..., description="Base unit of the food item")
     original_unit_name: str | None = Field(None, description="Original unit name if available")
-
     display_amount: float = Field(..., description="Amount to display")
     display_unit: str = Field(..., description="Unit to display")
 
@@ -62,6 +67,7 @@ class RecipeIngredientRead(_RecipeIngredientBase):
 class RecipeIngredientUpdate(_RecipeIngredientBase):
     """Schema for partial ingredient updates (PATCH operations)."""
 
+    food_item_id: int | None = Field(default=None, gt=0)
     amount_in_base_unit: float | None = Field(default=None, gt=0)
     original_unit_id: int | None = Field(default=None, gt=0)
     original_amount: float | None = Field(default=None, gt=0)
@@ -85,6 +91,10 @@ class RecipeIngredientUpdate(_RecipeIngredientBase):
 
         return v
 
+
+# ================================================================== #
+# Recipe Step Schemas                                                #
+# ================================================================== #
 
 class _RecipeStepBase(BaseModel):
     """Fields shared by all recipe step schemas."""
@@ -140,6 +150,10 @@ class RecipeStepUpdate(_RecipeStepBase):
         return v.strip()
 
 
+# ================================================================== #
+# Recipe Nutrition Schemas                                           #
+# ================================================================== #
+
 class _RecipeNutritionBase(BaseModel):
     """Fields shared by all recipe nutrition schemas."""
 
@@ -159,7 +173,7 @@ class _RecipeNutritionBase(BaseModel):
     @field_validator('source')
     def validate_source(cls, v: str) -> str:
         """Validate and normalize source."""
-        allowed_sources = {"manual", "calculated", "api", "imported"}
+        allowed_sources = {"manual", "calculated", "api", "imported", "ai_generated"}
         v_lower = v.lower().strip()
         if v_lower not in allowed_sources:
             raise ValueError(f"Source must be one of: {', '.join(allowed_sources)}")
@@ -177,6 +191,7 @@ class RecipeNutritionRead(_RecipeNutritionBase):
     recipe_id: int
     created_at: datetime
 
+    # Computed fields populated by CRUD builders
     has_complete_macros: bool = Field(..., description="Whether all macros are available")
     calculated_kcal: float | None = Field(None, description="Calculated calories from macros")
 
@@ -202,12 +217,16 @@ class RecipeNutritionUpdate(_RecipeNutritionBase):
         """Validate and normalize source."""
         if v is None:
             return v
-        allowed_sources = {"manual", "calculated", "api", "imported"}
+        allowed_sources = {"manual", "calculated", "api", "imported", "ai_generated"}
         v_lower = v.lower().strip()
         if v_lower not in allowed_sources:
             raise ValueError(f"Source must be one of: {', '.join(allowed_sources)}")
         return v_lower
 
+
+# ================================================================== #
+# Recipe Base and Main Schemas                                       #
+# ================================================================== #
 
 class _RecipeBase(BaseModel):
     """Fields shared by all recipe-related schemas."""
@@ -215,7 +234,7 @@ class _RecipeBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     is_ai_generated: bool = Field(default=False)
     created_by_user_id: int | None = Field(default=None, gt=0)
-    difficulty: str = Field(default="medium")
+    difficulty: DifficultyLevel = Field(default=DifficultyLevel.MEDIUM)
     servings: int = Field(default=1, ge=1, le=20)
     tags: list[str] | None = Field(default=None)
 
@@ -231,15 +250,6 @@ class _RecipeBase(BaseModel):
         if not v or v.isspace():
             raise ValueError("Title cannot be empty or whitespace")
         return v.strip()
-
-    @field_validator('difficulty')
-    def validate_difficulty(cls, v: str) -> str:
-        """Validate and normalize difficulty."""
-        allowed_difficulties = {"easy", "medium", "hard"}
-        v_lower = v.lower().strip()
-        if v_lower not in allowed_difficulties:
-            raise ValueError(f"Difficulty must be one of: {', '.join(allowed_difficulties)}")
-        return v_lower
 
     @field_validator('tags')
     def validate_tags(cls, v: list[str] | None) -> list[str] | None:
@@ -265,7 +275,7 @@ class RecipeCreate(_RecipeBase):
 
     ingredients: list[RecipeIngredientCreate] = Field(..., min_length=1)
     steps: list[RecipeStepCreate] = Field(..., min_length=1)
-    nutrition: Optional[RecipeNutritionCreate] = None
+    nutrition: RecipeNutritionCreate | None = None
 
     @field_validator("steps")
     def validate_steps_sequence(cls, v):
@@ -321,7 +331,7 @@ class RecipeUpdate(_RecipeBase):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     is_ai_generated: bool | None = None
     created_by_user_id: int | None = Field(default=None, gt=0)
-    difficulty: str | None = None
+    difficulty: DifficultyLevel | None = None
     servings: int | None = Field(default=None, ge=1, le=20)
     tags: list[str] | None = None
 
@@ -339,17 +349,6 @@ class RecipeUpdate(_RecipeBase):
         if not v or v.isspace():
             raise ValueError("Title cannot be empty or whitespace")
         return v.strip()
-
-    @field_validator('difficulty')
-    def validate_difficulty(cls, v: str | None) -> str | None:
-        """Validate and normalize difficulty."""
-        if v is None:
-            return v
-        allowed_difficulties = {"easy", "medium", "hard"}
-        v_lower = v.lower().strip()
-        if v_lower not in allowed_difficulties:
-            raise ValueError(f"Difficulty must be one of: {', '.join(allowed_difficulties)}")
-        return v_lower
 
     @field_validator('tags')
     def validate_tags(cls, v: list[str] | None) -> list[str] | None:
@@ -370,15 +369,21 @@ class RecipeUpdate(_RecipeBase):
         return cleaned_tags if cleaned_tags else None
 
 
+# ================================================================== #
+# Search and Filter Parameters                                       #
+# ================================================================== #
+
 class RecipeSearchParams(BaseModel):
     """Parameters for searching recipes."""
 
     title_contains: str | None = None
     is_ai_generated: bool | None = None
     created_by_user_id: int | None = Field(default=None, gt=0)
+    difficulty: DifficultyLevel | None = None
     has_nutrition: bool | None = None
     max_kcal: float | None = Field(default=None, gt=0)
     min_protein_g: float | None = Field(default=None, ge=0)
+    tags_contains: list[str] | None = Field(default=None)
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -394,6 +399,7 @@ class RecipeSummary(BaseModel):
     ai_generated_count: int = Field(..., ge=0)
     manual_count: int = Field(..., ge=0)
     with_nutrition_count: int = Field(..., ge=0)
+    by_difficulty: dict[str, int] = Field(default_factory=dict)
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -401,6 +407,10 @@ class RecipeSummary(BaseModel):
         from_attributes=True
     )
 
+
+# ================================================================== #
+# Recipe Review Schemas                                              #
+# ================================================================== #
 
 class _RecipeReviewBase(BaseModel):
     """Fields shared by all recipe review schemas."""
@@ -480,3 +490,37 @@ class RecipeRatingSummary(BaseModel):
         validate_assignment=True,
         from_attributes=True
     )
+
+
+# ================================================================== #
+# AI Integration Schemas                                             #
+# ================================================================== #
+
+class RecipeCreateFromAI(_RecipeBase):
+    """Schema for creating recipes from AI with additional metadata."""
+
+    ingredients: list[RecipeIngredientCreate] = Field(..., min_length=1)
+    steps: list[RecipeStepCreate] = Field(..., min_length=1)
+    nutrition: RecipeNutritionCreate | None = None
+
+    # AI metadata
+    ai_model_version: str | None = Field(default=None, max_length=100)
+    ai_prompt_used: str | None = Field(default=None)
+    ai_raw_output: str | None = Field(default=None)
+
+    # Override default
+    is_ai_generated: bool = Field(default=True)
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+
+class RecipeWithAIMetadata(RecipeWithDetails):
+    """Recipe with AI generation metadata if available."""
+
+    ai_model_version: str | None = Field(default=None)
+    ai_generation_date: datetime | None = Field(default=None)
+    ai_prompt_summary: str | None = Field(default=None)
