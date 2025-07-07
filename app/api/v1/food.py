@@ -52,11 +52,7 @@ def create_food_item(
         )
 
     try:
-        food_item = crud_food.create_food_item(db=db, food_item_data=food_item_data)
-        return FoodItemRead(
-            **food_item.__dict__,
-            base_unit_name=base_unit.name
-        )
+        return crud_food.create_food_item(db=db, food_item_data=food_item_data)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -84,17 +80,9 @@ def get_food_items(
     Returns:
         List of food items
     """
-    food_items = crud_food.get_all_food_items(
+    return crud_food.get_all_food_items(
         db=db, category=category, skip=skip, limit=limit
     )
-
-    return [
-        FoodItemRead(
-            **food_item.__dict__,
-            base_unit_name=food_item.base_unit.name if food_item.base_unit else None
-        )
-        for food_item in food_items
-    ]
 
 
 @router.get("/{food_item_id}", response_model=FoodItemRead)
@@ -122,10 +110,7 @@ def get_food_item_by_id(
             detail=f"Food item with ID {food_item_id} not found"
         )
 
-    return FoodItemRead(
-        **food_item.__dict__,
-        base_unit_name=food_item.base_unit.name if food_item.base_unit else None
-    )
+    return food_item
 
 
 @router.patch("/{food_item_id}", response_model=FoodItemRead)
@@ -167,10 +152,7 @@ def update_food_item(
                 detail=f"Food item with ID {food_item_id} not found"
             )
 
-        return FoodItemRead(
-            **food_item.__dict__,
-            base_unit_name=food_item.base_unit.name if food_item.base_unit else None
-        )
+        return food_item
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -234,20 +216,9 @@ def get_food_item_with_conversions(
 
     conversions = crud_food.get_conversions_for_food_item(db=db, food_item_id=food_item_id)
 
-    conversion_reads = [
-        FoodItemUnitConversionRead(
-            **conversion.__dict__,
-            food_item_name=food_item.name,
-            from_unit_name=conversion.from_unit.name if conversion.from_unit else None,
-            to_unit_name=conversion.to_unit.name if conversion.to_unit else None
-        )
-        for conversion in conversions
-    ]
-
     return FoodItemWithConversions(
-        **food_item.__dict__,
-        base_unit_name=food_item.base_unit.name if food_item.base_unit else None,
-        unit_conversions=conversion_reads
+        **food_item.model_dump(),
+        unit_conversions=conversions
     )
 
 
@@ -302,12 +273,7 @@ def create_food_item_alias(
             )
 
     try:
-        alias = crud_food.create_food_item_alias(db=db, alias_data=alias_data)
-        return FoodItemAliasRead(
-            **alias.__dict__,
-            food_item_name=food_item.name,
-            user_name=alias.user.name if alias.user else None
-        )
+        return crud_food.create_food_item_alias(db=db, alias_data=alias_data)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -344,18 +310,9 @@ def get_aliases_for_food_item(
             detail=f"Food item with ID {food_item_id} not found"
         )
 
-    aliases = crud_food.get_aliases_for_food_item(
+    return crud_food.get_aliases_for_food_item(
         db=db, food_item_id=food_item_id, user_id=user_id
     )
-
-    return [
-        FoodItemAliasRead(
-            **alias.__dict__,
-            food_item_name=food_item.name,
-            user_name=alias.user.name if alias.user else None
-        )
-        for alias in aliases
-    ]
 
 
 @router.get("/{food_item_id}/with-aliases", response_model=FoodItemWithAliases)
@@ -389,19 +346,9 @@ def get_food_item_with_aliases(
         db=db, food_item_id=food_item_id, user_id=user_id
     )
 
-    alias_reads = [
-        FoodItemAliasRead(
-            **alias.__dict__,
-            food_item_name=food_item.name,
-            user_name=alias.user.name if alias.user else None
-        )
-        for alias in aliases
-    ]
-
     return FoodItemWithAliases(
-        **food_item.__dict__,
-        base_unit_name=food_item.base_unit.name if food_item.base_unit else None,
-        aliases=alias_reads
+        **food_item.model_dump(),
+        aliases=aliases
     )
 
 
@@ -440,18 +387,9 @@ def get_all_aliases_for_user(
             detail=f"User with ID {user_id} not found"
         )
 
-    aliases = crud_food.get_all_aliases_for_user(
+    return crud_food.get_all_aliases_for_user(
         db=db, user_id=user_id, skip=skip, limit=limit
     )
-
-    return [
-        FoodItemAliasRead(
-            **alias.__dict__,
-            food_item_name=alias.food_item.name if alias.food_item else None,
-            user_name=user.name
-        )
-        for alias in aliases
-    ]
 
 
 @router.delete("/food-aliases/{alias_id}")
@@ -507,17 +445,9 @@ def search_food_items_by_alias(
     Returns:
         List of food items that have matching aliases
     """
-    food_items = crud_food.search_food_items_by_alias(
+    return crud_food.search_food_items_by_alias(
         db=db, alias_term=alias_term, user_id=user_id, skip=skip, limit=limit
     )
-
-    return [
-        FoodItemRead(
-            **food_item.__dict__,
-            base_unit_name=food_item.base_unit.name if food_item.base_unit else None
-        )
-        for food_item in food_items
-    ]
 
 
 # ================================================================== #
@@ -566,13 +496,7 @@ def create_food_unit_conversion(
         )
 
     try:
-        conversion = crud_food.create_food_unit_conversion(db=db, conversion_data=conversion_data)
-        return FoodItemUnitConversionRead(
-            **conversion.__dict__,
-            food_item_name=food_item.name,
-            from_unit_name=from_unit.name,
-            to_unit_name=to_unit.name
-        )
+        return crud_food.create_food_unit_conversion(db=db, conversion_data=conversion_data)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -609,17 +533,7 @@ def get_food_unit_conversions(
             detail=f"Food item with ID {food_item_id} not found"
         )
 
-    conversions = crud_food.get_conversions_for_food_item(db=db, food_item_id=food_item_id)
-
-    return [
-        FoodItemUnitConversionRead(
-            **conversion.__dict__,
-            food_item_name=food_item.name,
-            from_unit_name=conversion.from_unit.name if conversion.from_unit else None,
-            to_unit_name=conversion.to_unit.name if conversion.to_unit else None
-        )
-        for conversion in conversions
-    ]
+    return crud_food.get_conversions_for_food_item(db=db, food_item_id=food_item_id)
 
 
 @router.delete("/{food_item_id}/unit-conversions/{from_unit_id}/{to_unit_id}")
