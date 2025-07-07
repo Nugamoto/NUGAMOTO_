@@ -7,6 +7,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.core import UnitRead
+
 
 # ================================================================== #
 # FoodItem Schemas                                                   #
@@ -75,7 +77,13 @@ class FoodItemRead(_FoodItemBase):
     created_at: datetime.datetime
     updated_at: datetime.datetime | None
 
-    # Include base unit information for convenience
+    # Include base unit relationship for convenience
+    base_unit: UnitRead | None = Field(
+        None,
+        description="Base unit information (populated from relationship)"
+    )
+    
+    # Include base unit name for backward compatibility
     base_unit_name: str | None = Field(
         None,
         description="Name of the base unit (populated from related unit)"
