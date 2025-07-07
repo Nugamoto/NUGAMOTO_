@@ -1,80 +1,131 @@
-"""Pydantic schemas for user input / output."""
+"""User related Pydantic schemas."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
-from pydantic.config import ConfigDict
+import datetime
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, EmailStr
 
 
-class _UserBase(BaseModel):
-    """Fields shared by all user-related schemas."""
+class UserBase(BaseModel):
+    """Base user schema with common fields."""
 
-    name: str = Field(..., min_length=1, max_length=100)
-    email: EmailStr
-    diet_type: str | None = Field(default=None, max_length=50)
-    allergies: str | None = Field(default=None)
-    preferences: str | None = Field(default=None)
+    name: Annotated[str, Field(
+        min_length=2,
+        max_length=100,
+        description="Name of the user"
+    )]
+    email: EmailStr = Field(description="Email address")
+    diet_type: Annotated[str | None, Field(
+        None,
+        max_length=50,
+        description="Dietary type preference"
+    )]
+    allergies: Annotated[str | None, Field(
+        None,
+        max_length=500,
+        description="User allergies information"
+    )]
+    preferences: Annotated[str | None, Field(
+        None,
+        max_length=500,
+        description="User food preferences"
+    )]
 
-    # Allow ORM objects to be returned directly from CRUD.
     model_config = ConfigDict(
         str_strip_whitespace=True,
-        validate_assignment=True,
-        from_attributes=True
+        validate_assignment=True
     )
 
     @field_validator('name')
     def validate_name(cls, v: str) -> str:
-        """Validate and normalize user name."""
-        if not v or v.isspace():
-            raise ValueError("User name cannot be empty or whitespace")
+        """Validate name field."""
+        if not v or not v.strip():
+            raise ValueError("Name cannot be empty or whitespace")
+        return v.strip()
 
-        # Normalize to title case for consistency
-        v = v.strip().title()
-
-        if len(v) > 100:
-            raise ValueError("User name must be 100 characters or less")
-
-        return v
-
-    @field_validator('diet_type')
-    def validate_diet_type(cls, v: str | None) -> str | None:
-        """Validate and normalize diet type."""
+    @field_validator('allergies', 'preferences', 'diet_type')
+    def validate_optional_text_fields(cls, v: str | None) -> str | None:
+        """Validate optional text fields - allow empty strings by converting to None."""
         if v is None:
-            return v
-
-        if not v or v.isspace():
-            raise ValueError("Diet type cannot be empty or whitespace")
-
-        # Normalize to lowercase for consistency
-        return v.strip().lower()
-
-    @field_validator('allergies', 'preferences')
-    def validate_text_fields(cls, v: str | None) -> str | None:
-        """Validate and normalize text fields."""
-        if v is None:
-            return v
-
-        if not v or v.isspace():
-            raise ValueError("Text field cannot be empty or whitespace")
-
+            return None
+        # Convert empty strings to None for cleaner data
+        if not v.strip():
+            return None
         return v.strip()
 
 
-class UserCreate(_UserBase):
-    """Schema used on **create** (request body)."""
-
-    # No extra fields required at the moment.
+class UserCreate(UserBase):
+    """Schema for creating a new user."""
     pass
 
 
-class UserRead(_UserBase):
-    """Schema returned to the client."""
+class UserUpdate(BaseModel):
+    """Schema for updating user information."""
+
+    name: Annotated[str | None, Field(
+        None,
+        min_length=2,
+        max_length=100,
+        description="Name of the user"
+    )]
+    email: EmailStr | None = Field(None, description="Email address")
+    diet_type: Annotated[str | None, Field(
+        None,
+        max_length=50,
+        description="Dietary type preference"
+    )]
+    allergies: Annotated[str | None, Field(
+        None,
+        max_length=500,
+        description="User allergies information"
+    )]
+    preferences: Annotated[str | None, Field(
+        None,
+        max_length=500,
+        description="User food preferences"
+    )]
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True
+    )
+
+    @field_validator('name')
+    def validate_name(cls, v: str | None) -> str | None:
+        """Validate name field when provided."""
+        if v is not None and (not v or not v.strip()):
+            raise ValueError("Name cannot be empty or whitespace when provided")
+        return v.strip() if v else None
+
+    @field_validator('allergies', 'preferences', 'diet_type')
+    def validate_optional_text_fields(cls, v: str | None) -> str | None:
+        """Validate optional text fields - allow empty strings by converting to None."""
+        if v is None:
+            return None
+        # Convert empty strings to None for cleaner data
+        if not v.strip():
+            return None
+        return v.strip()
+
+
+class UserRead(UserBase):
+    """Schema for reading user data."""
 
     id: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-class UserUpdate(_UserBase):
-    """Schema for partial user updates (PATCH operations)."""
+class UserSummary(BaseModel):
+    """Schema for user statistics summary."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=100)
-    email: EmailStr | None = None
+    total_users: int
+    users_by_diet_type: dict[str, int]
+    users_with_allergies: int
+    users_with_preferences: int
+
+    model_config = ConfigDict(from_attributes=True)
