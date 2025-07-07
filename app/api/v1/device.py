@@ -1,41 +1,31 @@
-"""API routes for kitchen devices and tools."""
+"""FastAPI router exposing the device management endpoints."""
 
 from __future__ import annotations
-
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app import crud
 from app.core.dependencies import get_db
+from app.crud import device as crud_device
 from app.schemas.device import (
-    ApplianceCreate,
-    ApplianceSearchParams,
-    ApplianceUpdate,
-    ApplianceWithDeviceType,
-    DeviceTypeCreate,
-    DeviceTypeRead,
-    DeviceTypeUpdate,
-    KitchenDeviceSummary,
-    KitchenToolCreate,
-    KitchenToolSearchParams,
-    KitchenToolUpdate,
-    KitchenToolWithDeviceType,
+    DeviceTypeCreate, DeviceTypeRead, DeviceTypeUpdate,
+    ApplianceCreate, ApplianceRead, ApplianceUpdate, ApplianceWithDeviceType,
+    KitchenToolCreate, KitchenToolRead, KitchenToolUpdate, KitchenToolWithDeviceType,
+    ApplianceSearchParams, KitchenToolSearchParams, KitchenDeviceSummary
 )
 
-# Initialize CRUD operations
-crud_device = crud.device
+# ================================================================== #
+# Sub-routers for better organization                               #
+# ================================================================== #
 
-# Create routers
 device_types_router = APIRouter(prefix="/device-types", tags=["Device Types"])
-appliances_router = APIRouter(prefix="/kitchens", tags=["Appliances"])
-tools_router = APIRouter(prefix="/kitchens", tags=["Kitchen Tools"])
-summary_router = APIRouter(prefix="/kitchens", tags=["Kitchen Device Summary"])
+appliances_router = APIRouter(prefix="/kitchens/{kitchen_id}/appliances", tags=["Appliances"])
+tools_router = APIRouter(prefix="/kitchens/{kitchen_id}/tools", tags=["Kitchen Tools"])
+summary_router = APIRouter(prefix="/kitchens/{kitchen_id}/devices", tags=["Device Summary"])
 
 
 # ================================================================== #
-# Device Type Routes                                                 #
+# Device Type Management Routes                                     #
 # ================================================================== #
 
 @device_types_router.post(
@@ -46,7 +36,7 @@ summary_router = APIRouter(prefix="/kitchens", tags=["Kitchen Device Summary"])
 )
 def create_device_type(
         device_type_data: DeviceTypeCreate,
-        db: Annotated[Session, Depends(get_db)]
+        db: Session = Depends(get_db)
 ) -> DeviceTypeRead:
     """Create a new device type.
 
@@ -70,131 +60,108 @@ def create_device_type(
         ```
     """
     try:
-        device_type = crud_device.create_device_type(db, device_type_data)
-        return DeviceTypeRead.model_validate(device_type, from_attributes=True)
-    except ValueError as e:
+        return crud_device.create_device_type(db, device_type_data)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+            detail=str(exc)
+        ) from exc
 
 
 @device_types_router.get(
     "/",
     response_model=list[DeviceTypeRead],
+    status_code=status.HTTP_200_OK,
     summary="Get all device types"
 )
 def get_all_device_types(
-        db: Annotated[Session, Depends(get_db)],
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return")
+        category: str | None = Query(None, description="Filter by category"),
+        db: Session = Depends(get_db)
 ) -> list[DeviceTypeRead]:
-    """Get all device types with pagination.
+    """Get all device types with optional category filtering.
 
     Args:
+        category: Optional category filter (e.g., 'appliance', 'tool').
         db: Database session dependency.
-        skip: Number of records to skip for pagination.
-        limit: Maximum number of records to return.
 
     Returns:
-        List of device types.
-
-    Example:
-        GET /device-types?skip=0&limit=50
+        List of device types, optionally filtered by category.
     """
-    try:
-        device_types = crud_device.get_all_device_types(db, skip=skip, limit=limit)
-        return [DeviceTypeRead.model_validate(dt, from_attributes=True) for dt in device_types]
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    if category:
+        return crud_device.get_device_types_by_category(db, category)
+    return crud_device.get_all_device_types(db)
 
 
 @device_types_router.get(
     "/{device_type_id}",
     response_model=DeviceTypeRead,
+    status_code=status.HTTP_200_OK,
     summary="Get device type by ID"
 )
 def get_device_type(
         device_type_id: int,
-        db: Annotated[Session, Depends(get_db)]
+        db: Session = Depends(get_db)
 ) -> DeviceTypeRead:
-    """Get a specific device type by ID.
+    """Get a device type by ID.
 
     Args:
-        device_type_id: The unique identifier of the device type.
+        device_type_id: Primary key of the device type.
         db: Database session dependency.
 
     Returns:
-        The device type details.
+        The requested device type.
 
     Raises:
-        HTTPException: 404 if device type not found.
-
-    Example:
-        GET /device-types/123
+        HTTPException: 404 if the device type does not exist.
     """
-    try:
-        device_type = crud_device.get_device_type_by_id(db, device_type_id)
-        if not device_type:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Device type with ID {device_type_id} not found"
-            )
-        return DeviceTypeRead.model_validate(device_type, from_attributes=True)
-    except ValueError as e:
+    device_type = crud_device.get_device_type_by_id(db, device_type_id)
+    if device_type is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device type not found"
         )
+    return device_type
 
 
-@device_types_router.put(
+@device_types_router.patch(
     "/{device_type_id}",
     response_model=DeviceTypeRead,
+    status_code=status.HTTP_200_OK,
     summary="Update device type"
 )
 def update_device_type(
         device_type_id: int,
         device_type_data: DeviceTypeUpdate,
-        db: Annotated[Session, Depends(get_db)]
+        db: Session = Depends(get_db)
 ) -> DeviceTypeRead:
     """Update an existing device type.
 
     Args:
-        device_type_id: The unique identifier of the device type.
-        device_type_data: Updated device type data.
+        device_type_id: Primary key of the device type.
+        device_type_data: Partial device type data for updates.
         db: Database session dependency.
 
     Returns:
         The updated device type.
 
     Raises:
-        HTTPException: 404 if device type not found, 400 if validation fails.
-
-    Example:
-        ```json
-        {
-            "name": "Updated Stand Mixer",
-            "default_smart": true
-        }
-        ```
+        HTTPException:
+            * 404 – if the device type does not exist.
+            * 400 – if name conflict occurs.
     """
     try:
         device_type = crud_device.update_device_type(db, device_type_id, device_type_data)
-        return DeviceTypeRead.model_validate(device_type, from_attributes=True)
-    except ValueError as e:
-        if "not found" in str(e):
+        if device_type is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
+                detail="Device type not found"
             )
+        return device_type
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+            detail=str(exc)
+        ) from exc
 
 
 @device_types_router.delete(
@@ -204,620 +171,566 @@ def update_device_type(
 )
 def delete_device_type(
         device_type_id: int,
-        db: Annotated[Session, Depends(get_db)]
+        db: Session = Depends(get_db)
 ) -> Response:
     """Delete a device type.
 
     Args:
-        device_type_id: The unique identifier of the device type.
+        device_type_id: Primary key of the device type.
         db: Database session dependency.
 
     Returns:
-        Empty response with 204 status.
+        Response with 204 status code.
 
     Raises:
-        HTTPException: 404 if device type not found, 400 if still in use.
-
-    Example:
-        DELETE /device-types/123
+        HTTPException:
+            * 404 – if the device type does not exist.
+            * 400 – if the device type is in use.
     """
     try:
-        crud_device.delete_device_type(db, device_type_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except ValueError as e:
-        if "not found" in str(e):
+        deleted = crud_device.delete_device_type(db, device_type_id)
+        if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
+                detail="Device type not found"
             )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+            detail=str(exc)
+        ) from exc
 
 
 # ================================================================== #
-# Appliance Routes                                                   #
+# Appliance Management Routes                                       #
 # ================================================================== #
 
 @appliances_router.post(
-    "/{kitchen_id}/appliances",
-    response_model=ApplianceWithDeviceType,
+    "/",
+    response_model=ApplianceRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create appliance"
 )
 def create_appliance(
         kitchen_id: int,
         appliance_data: ApplianceCreate,
-        db: Annotated[Session, Depends(get_db)]
-) -> ApplianceWithDeviceType:
+        db: Session = Depends(get_db)
+) -> ApplianceRead:
     """Create a new appliance in a kitchen.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
+        kitchen_id: Primary key of the kitchen.
         appliance_data: Appliance data to create.
         db: Database session dependency.
 
     Returns:
-        The created appliance with device type information.
+        The created appliance.
 
     Raises:
-        HTTPException: 400 if validation fails.
-
-    Example:
-        ```json
-        {
-            "name": "My Oven",
-            "device_type_id": 1,
-            "brand": "Samsung",
-            "model": "NV75K5571RM",
-            "power_kw": 3.5,
-            "smart": true
-        }
-        ```
+        HTTPException:
+            * 404 – if kitchen or device type not found.
+            * 400 – for validation errors.
     """
     try:
         return crud_device.create_appliance(db, kitchen_id, appliance_data)
-    except ValueError as e:
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "Kitchen not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Kitchen not found"
+            ) from exc
+        elif "Device type not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Device type not found"
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+            detail=error_msg
+        ) from exc
 
 
 @appliances_router.get(
-    "/{kitchen_id}/appliances",
+    "/",
     response_model=list[ApplianceWithDeviceType],
+    status_code=status.HTTP_200_OK,
     summary="Get kitchen appliances"
 )
 def get_kitchen_appliances(
         kitchen_id: int,
-        db: Annotated[Session, Depends(get_db)],
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return")
+        db: Session = Depends(get_db)
 ) -> list[ApplianceWithDeviceType]:
-    """Get all appliances in a kitchen with pagination.
+    """Get all appliances for a kitchen.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
+        kitchen_id: Primary key of the kitchen.
         db: Database session dependency.
-        skip: Number of records to skip for pagination.
-        limit: Maximum number of records to return.
 
     Returns:
         List of appliances with device type information.
-
-    Example:
-        GET /kitchens/123/appliances?skip=0&limit=50
     """
-    try:
-        return crud_device.get_kitchen_appliances(db, kitchen_id, skip=skip, limit=limit)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    return crud_device.get_kitchen_appliances(db, kitchen_id)
 
 
-@appliances_router.get(
-    "/{kitchen_id}/appliances/search",
+@appliances_router.post(
+    "/search",
     response_model=list[ApplianceWithDeviceType],
+    status_code=status.HTTP_200_OK,
     summary="Search kitchen appliances"
 )
 def search_kitchen_appliances(
         kitchen_id: int,
-        db: Annotated[Session, Depends(get_db)],
-        device_type_id: int | None = Query(None, gt=0, description="Filter by device type"),
-        brand: str | None = Query(None, description="Filter by brand"),
-        smart: bool | None = Query(None, description="Filter by smart capability"),
-        available: bool | None = Query(None, description="Filter by availability"),
-        min_power_watts: float | None = Query(None, gt=0, description="Minimum power consumption in watts"),
-        max_power_watts: float | None = Query(None, gt=0, description="Maximum power consumption in watts"),
-        min_power_kw: float | None = Query(None, gt=0, description="Minimum power consumption in kilowatts"),
-        max_power_kw: float | None = Query(None, gt=0, description="Maximum power consumption in kilowatts"),
-        min_capacity_liters: float | None = Query(None, gt=0, description="Minimum capacity"),
-        max_capacity_liters: float | None = Query(None, gt=0, description="Maximum capacity")
+        search_params: ApplianceSearchParams,
+        db: Session = Depends(get_db)
 ) -> list[ApplianceWithDeviceType]:
-    """Search appliances by various criteria.
+    """Search appliances in a kitchen with advanced filters.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
+        kitchen_id: Primary key of the kitchen.
+        search_params: Search and filter parameters.
         db: Database session dependency.
-        device_type_id: Optional device type filter.
-        brand: Optional brand filter.
-        smart: Optional smart capability filter.
-        available: Optional availability filter.
-        min_power_watts: Optional minimum power filter in watts.
-        max_power_watts: Optional maximum power filter in watts.
-        min_power_kw: Optional minimum power filter in kilowatts.
-        max_power_kw: Optional maximum power filter in kilowatts.
-        min_capacity_liters: Optional minimum capacity filter.
-        max_capacity_liters: Optional maximum capacity filter.
 
     Returns:
-        List of appliances matching the search criteria.
+        List of filtered appliances with device type information.
 
     Example:
-        GET /kitchens/123/appliances/search?min_power_kw=2.0&max_power_kw=5.0&smart=true
+        ```json
+        {
+            "brand": "KitchenAid",
+            "smart": true,
+            "available": true,
+            "min_power_watts": 1000,
+            "max_power_watts": 2000
+        }
+        ```
     """
-    try:
-        search_params = ApplianceSearchParams(
-            device_type_id=device_type_id,
-            brand=brand,
-            smart=smart,
-            available=available,
-            min_power_watts=min_power_watts,
-            max_power_watts=max_power_watts,
-            min_power_kw=min_power_kw,
-            max_power_kw=max_power_kw,
-            min_capacity_liters=min_capacity_liters,
-            max_capacity_liters=max_capacity_liters
-        )
-        return crud_device.search_appliances(db, kitchen_id, search_params)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    return crud_device.search_appliances(db, kitchen_id, search_params)
 
 
 @appliances_router.get(
-    "/{kitchen_id}/appliances/{appliance_id}",
-    response_model=ApplianceWithDeviceType,
+    "/{appliance_id}",
+    response_model=ApplianceRead,
+    status_code=status.HTTP_200_OK,
     summary="Get appliance by ID"
 )
 def get_appliance(
         kitchen_id: int,
         appliance_id: int,
-        db: Annotated[Session, Depends(get_db)]
-) -> ApplianceWithDeviceType:
-    """Get a specific appliance by ID.
+        db: Session = Depends(get_db)
+) -> ApplianceRead:
+    """Get an appliance by ID.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
-        appliance_id: The unique identifier of the appliance.
+        kitchen_id: Primary key of the kitchen (for path consistency).
+        appliance_id: Primary key of the appliance.
         db: Database session dependency.
 
     Returns:
-        The appliance details with device type information.
+        The requested appliance.
 
     Raises:
-        HTTPException: 404 if appliance not found or doesn't belong to kitchen.
-
-    Example:
-        GET /kitchens/123/appliances/456
+        HTTPException: 404 if the appliance does not exist.
     """
-    try:
-        appliance = crud_device.get_appliance_by_id(db, appliance_id, kitchen_id)
-        if not appliance:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Appliance with ID {appliance_id} not found in kitchen {kitchen_id}"
-            )
-        return appliance
-    except ValueError as e:
-        if "does not belong" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
-            )
+    appliance = crud_device.get_appliance_by_id(db, appliance_id)
+    if appliance is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appliance not found"
         )
 
+    # Verify appliance belongs to the specified kitchen
+    if appliance.kitchen_id != kitchen_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appliance not found in this kitchen"
+        )
 
-@appliances_router.put(
-    "/{kitchen_id}/appliances/{appliance_id}",
-    response_model=ApplianceWithDeviceType,
+    return appliance
+
+
+@appliances_router.patch(
+    "/{appliance_id}",
+    response_model=ApplianceRead,
+    status_code=status.HTTP_200_OK,
     summary="Update appliance"
 )
 def update_appliance(
         kitchen_id: int,
         appliance_id: int,
         appliance_data: ApplianceUpdate,
-        db: Annotated[Session, Depends(get_db)]
-) -> ApplianceWithDeviceType:
+        db: Session = Depends(get_db)
+) -> ApplianceRead:
     """Update an existing appliance.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
-        appliance_id: The unique identifier of the appliance.
-        appliance_data: Updated appliance data.
+        kitchen_id: Primary key of the kitchen (for path consistency).
+        appliance_id: Primary key of the appliance.
+        appliance_data: Partial appliance data for updates.
         db: Database session dependency.
 
     Returns:
-        The updated appliance with device type information.
+        The updated appliance.
 
     Raises:
-        HTTPException: 404 if appliance not found, 400 if validation fails.
-
-    Example:
-        ```json
-        {
-            "name": "Updated Oven Name",
-            "available": false,
-            "power_kw": 4.0
-        }
-        ```
+        HTTPException: 404 if the appliance does not exist or doesn't belong to kitchen.
     """
-    try:
-        return crud_device.update_appliance(db, appliance_id, kitchen_id, appliance_data)
-    except ValueError as e:
-        if "not found" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
-            )
+    # First verify the appliance exists and belongs to the kitchen
+    existing_appliance = crud_device.get_appliance_by_id(db, appliance_id)
+    if existing_appliance is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appliance not found"
         )
+
+    if existing_appliance.kitchen_id != kitchen_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appliance not found in this kitchen"
+        )
+
+    # Proceed with update
+    updated_appliance = crud_device.update_appliance(db, appliance_id, appliance_data)
+    if updated_appliance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appliance not found"
+        )
+
+    return updated_appliance
 
 
 @appliances_router.delete(
-    "/{kitchen_id}/appliances/{appliance_id}",
+    "/{appliance_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete appliance"
 )
 def delete_appliance(
         kitchen_id: int,
         appliance_id: int,
-        db: Annotated[Session, Depends(get_db)]
+        db: Session = Depends(get_db)
 ) -> Response:
     """Delete an appliance.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
-        appliance_id: The unique identifier of the appliance.
+        kitchen_id: Primary key of the kitchen (for path consistency).
+        appliance_id: Primary key of the appliance.
         db: Database session dependency.
 
     Returns:
-        Empty response with 204 status.
+        Response with 204 status code.
 
     Raises:
-        HTTPException: 404 if appliance not found or doesn't belong to kitchen.
-
-    Example:
-        DELETE /kitchens/123/appliances/456
+        HTTPException: 404 if the appliance does not exist or doesn't belong to kitchen.
     """
-    try:
-        crud_device.delete_appliance(db, appliance_id, kitchen_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except ValueError as e:
-        if "not found" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
-            )
+    # First verify the appliance exists and belongs to the kitchen
+    existing_appliance = crud_device.get_appliance_by_id(db, appliance_id)
+    if existing_appliance is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appliance not found"
         )
+
+    if existing_appliance.kitchen_id != kitchen_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appliance not found in this kitchen"
+        )
+
+    # Proceed with deletion
+    deleted = crud_device.delete_appliance(db, appliance_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appliance not found"
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
-# Kitchen Tool Routes                                                #
+# Kitchen Tool Management Routes                                    #
 # ================================================================== #
 
 @tools_router.post(
-    "/{kitchen_id}/tools",
-    response_model=KitchenToolWithDeviceType,
+    "/",
+    response_model=KitchenToolRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create kitchen tool"
 )
 def create_kitchen_tool(
         kitchen_id: int,
         tool_data: KitchenToolCreate,
-        db: Annotated[Session, Depends(get_db)]
-) -> KitchenToolWithDeviceType:
+        db: Session = Depends(get_db)
+) -> KitchenToolRead:
     """Create a new kitchen tool.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
-        tool_data: Tool data to create.
+        kitchen_id: Primary key of the kitchen.
+        tool_data: Kitchen tool data to create.
         db: Database session dependency.
 
     Returns:
-        The created tool with device type information.
+        The created kitchen tool.
 
     Raises:
-        HTTPException: 400 if validation fails.
-
-    Example:
-        ```json
-        {
-            "name": "Chef's Knife",
-            "device_type_id": 2,
-            "material": "stainless steel",
-            "size_or_detail": "8 inch",
-            "quantity": 1
-        }
-        ```
+        HTTPException:
+            * 404 – if kitchen or device type not found.
+            * 400 – for validation errors.
     """
     try:
         return crud_device.create_kitchen_tool(db, kitchen_id, tool_data)
-    except ValueError as e:
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "Kitchen not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Kitchen not found"
+            ) from exc
+        elif "Device type not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Device type not found"
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+            detail=error_msg
+        ) from exc
 
 
 @tools_router.get(
-    "/{kitchen_id}/tools",
+    "/",
     response_model=list[KitchenToolWithDeviceType],
+    status_code=status.HTTP_200_OK,
     summary="Get kitchen tools"
 )
 def get_kitchen_tools(
         kitchen_id: int,
-        db: Annotated[Session, Depends(get_db)],
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return")
+        db: Session = Depends(get_db)
 ) -> list[KitchenToolWithDeviceType]:
-    """Get all kitchen tools with pagination.
+    """Get all kitchen tools for a kitchen.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
+        kitchen_id: Primary key of the kitchen.
         db: Database session dependency.
-        skip: Number of records to skip for pagination.
-        limit: Maximum number of records to return.
 
     Returns:
-        List of tools with device type information.
-
-    Example:
-        GET /kitchens/123/tools?skip=0&limit=50
+        List of kitchen tools with device type information.
     """
-    try:
-        return crud_device.get_kitchen_tools(db, kitchen_id, skip=skip, limit=limit)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    return crud_device.get_kitchen_tools(db, kitchen_id)
 
 
-@tools_router.get(
-    "/{kitchen_id}/tools/search",
+@tools_router.post(
+    "/search",
     response_model=list[KitchenToolWithDeviceType],
+    status_code=status.HTTP_200_OK,
     summary="Search kitchen tools"
 )
 def search_kitchen_tools(
         kitchen_id: int,
-        db: Annotated[Session, Depends(get_db)],
-        device_type_id: int | None = Query(None, gt=0, description="Filter by device type"),
-        material: str | None = Query(None, description="Filter by material"),
-        available: bool | None = Query(None, description="Filter by availability"),
-        min_quantity: int | None = Query(None, ge=1, description="Minimum quantity"),
-        is_set: bool | None = Query(None, description="Filter by whether it's a set (quantity > 1)")
+        search_params: KitchenToolSearchParams,
+        db: Session = Depends(get_db)
 ) -> list[KitchenToolWithDeviceType]:
-    """Search kitchen tools by various criteria.
+    """Search kitchen tools with advanced filters.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
+        kitchen_id: Primary key of the kitchen.
+        search_params: Search and filter parameters.
         db: Database session dependency.
-        device_type_id: Optional device type filter.
-        material: Optional material filter.
-        available: Optional availability filter.
-        min_quantity: Optional minimum quantity filter.
-        is_set: Optional filter for sets (quantity > 1).
 
     Returns:
-        List of tools matching the search criteria.
+        List of filtered kitchen tools with device type information.
 
     Example:
-        GET /kitchens/123/tools/search?material=steel&is_set=false
+        ```json
+        {
+            "material": "stainless steel",
+            "available": true,
+            "min_quantity": 2,
+            "is_set": true
+        }
+        ```
     """
-    try:
-        search_params = KitchenToolSearchParams(
-            device_type_id=device_type_id,
-            material=material,
-            available=available,
-            min_quantity=min_quantity,
-            is_set=is_set
-        )
-        return crud_device.search_kitchen_tools(db, kitchen_id, search_params)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    return crud_device.search_kitchen_tools(db, kitchen_id, search_params)
 
 
 @tools_router.get(
-    "/{kitchen_id}/tools/{tool_id}",
-    response_model=KitchenToolWithDeviceType,
+    "/{tool_id}",
+    response_model=KitchenToolRead,
+    status_code=status.HTTP_200_OK,
     summary="Get kitchen tool by ID"
 )
 def get_kitchen_tool(
         kitchen_id: int,
         tool_id: int,
-        db: Annotated[Session, Depends(get_db)]
-) -> KitchenToolWithDeviceType:
-    """Get a specific kitchen tool by ID.
+        db: Session = Depends(get_db)
+) -> KitchenToolRead:
+    """Get a kitchen tool by ID.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
-        tool_id: The unique identifier of the tool.
+        kitchen_id: Primary key of the kitchen (for path consistency).
+        tool_id: Primary key of the kitchen tool.
         db: Database session dependency.
 
     Returns:
-        The tool details with device type information.
+        The requested kitchen tool.
 
     Raises:
-        HTTPException: 404 if tool not found or doesn't belong to kitchen.
-
-    Example:
-        GET /kitchens/123/tools/456
+        HTTPException: 404 if the tool does not exist or doesn't belong to kitchen.
     """
-    try:
-        tool = crud_device.get_kitchen_tool_by_id(db, tool_id, kitchen_id)
-        if not tool:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Kitchen tool with ID {tool_id} not found in kitchen {kitchen_id}"
-            )
-        return tool
-    except ValueError as e:
-        if "does not belong" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
-            )
+    tool = crud_device.get_kitchen_tool_by_id(db, tool_id)
+    if tool is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen tool not found"
         )
 
+    # Verify tool belongs to the specified kitchen
+    if tool.kitchen_id != kitchen_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen tool not found in this kitchen"
+        )
 
-@tools_router.put(
-    "/{kitchen_id}/tools/{tool_id}",
-    response_model=KitchenToolWithDeviceType,
+    return tool
+
+
+@tools_router.patch(
+    "/{tool_id}",
+    response_model=KitchenToolRead,
+    status_code=status.HTTP_200_OK,
     summary="Update kitchen tool"
 )
 def update_kitchen_tool(
         kitchen_id: int,
         tool_id: int,
         tool_data: KitchenToolUpdate,
-        db: Annotated[Session, Depends(get_db)]
-) -> KitchenToolWithDeviceType:
+        db: Session = Depends(get_db)
+) -> KitchenToolRead:
     """Update an existing kitchen tool.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
-        tool_id: The unique identifier of the tool.
-        tool_data: Updated tool data.
+        kitchen_id: Primary key of the kitchen (for path consistency).
+        tool_id: Primary key of the kitchen tool.
+        tool_data: Partial tool data for updates.
         db: Database session dependency.
 
     Returns:
-        The updated tool with device type information.
+        The updated kitchen tool.
 
     Raises:
-        HTTPException: 404 if tool not found, 400 if validation fails.
-
-    Example:
-        ```json
-        {
-            "available": false,
-            "quantity": 2
-        }
-        ```
+        HTTPException: 404 if the tool does not exist or doesn't belong to kitchen.
     """
-    try:
-        return crud_device.update_kitchen_tool(db, tool_id, kitchen_id, tool_data)
-    except ValueError as e:
-        if "not found" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
-            )
+    # First verify the tool exists and belongs to the kitchen
+    existing_tool = crud_device.get_kitchen_tool_by_id(db, tool_id)
+    if existing_tool is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen tool not found"
         )
+
+    if existing_tool.kitchen_id != kitchen_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen tool not found in this kitchen"
+        )
+
+    # Proceed with update
+    updated_tool = crud_device.update_kitchen_tool(db, tool_id, tool_data)
+    if updated_tool is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen tool not found"
+        )
+
+    return updated_tool
 
 
 @tools_router.delete(
-    "/{kitchen_id}/tools/{tool_id}",
+    "/{tool_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete kitchen tool"
 )
 def delete_kitchen_tool(
         kitchen_id: int,
         tool_id: int,
-        db: Annotated[Session, Depends(get_db)]
+        db: Session = Depends(get_db)
 ) -> Response:
     """Delete a kitchen tool.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
-        tool_id: The unique identifier of the tool.
+        kitchen_id: Primary key of the kitchen (for path consistency).
+        tool_id: Primary key of the kitchen tool.
         db: Database session dependency.
 
     Returns:
-        Empty response with 204 status.
+        Response with 204 status code.
 
     Raises:
-        HTTPException: 404 if tool not found or doesn't belong to kitchen.
-
-    Example:
-        DELETE /kitchens/123/tools/456
+        HTTPException: 404 if the tool does not exist or doesn't belong to kitchen.
     """
-    try:
-        crud_device.delete_kitchen_tool(db, tool_id, kitchen_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except ValueError as e:
-        if "not found" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
-            )
+    # First verify the tool exists and belongs to the kitchen
+    existing_tool = crud_device.get_kitchen_tool_by_id(db, tool_id)
+    if existing_tool is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen tool not found"
         )
+
+    if existing_tool.kitchen_id != kitchen_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen tool not found in this kitchen"
+        )
+
+    # Proceed with deletion
+    deleted = crud_device.delete_kitchen_tool(db, tool_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kitchen tool not found"
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
-# Summary Routes                                                     #
+# Device Summary and Analytics Routes                               #
 # ================================================================== #
 
 @summary_router.get(
-    "/{kitchen_id}/summary",
+    "/summary",
     response_model=KitchenDeviceSummary,
+    status_code=status.HTTP_200_OK,
     summary="Get kitchen device summary"
 )
 def get_kitchen_device_summary(
         kitchen_id: int,
-        db: Annotated[Session, Depends(get_db)]
+        db: Session = Depends(get_db)
 ) -> KitchenDeviceSummary:
-    """Get summary statistics for all devices in a kitchen.
+    """Get a summary of all devices in a kitchen.
+
+    Provides statistics about appliances, tools, availability,
+    smart devices, and device type diversity.
 
     Args:
-        kitchen_id: The unique identifier of the kitchen.
+        kitchen_id: Primary key of the kitchen.
         db: Database session dependency.
 
     Returns:
-        Summary statistics including counts of appliances, tools, and device types.
-
-    Example:
-        GET /kitchens/123/summary
+        Summary statistics for the kitchen's devices.
     """
-    try:
-        return crud_device.get_kitchen_device_summary(db, kitchen_id)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    return crud_device.get_kitchen_device_summary(db, kitchen_id)
 
 
 # ================================================================== #
-# Main Router                                                        #
+# Main Router Assembly                                               #
 # ================================================================== #
 
-router = APIRouter()
+router = APIRouter(prefix="/devices", tags=["Devices"])
+
+# Include all sub-routers
 router.include_router(device_types_router)
 router.include_router(appliances_router)
 router.include_router(tools_router)
