@@ -25,42 +25,26 @@ from app.schemas.core import (
 
 def build_unit_read(unit_orm: Unit) -> UnitRead:
     """Convert Unit ORM to Read schema.
-    
+
     Args:
         unit_orm: Unit ORM object
-        
+
     Returns:
         UnitRead schema
     """
-    return UnitRead(
-        id=unit_orm.id,
-        name=unit_orm.name,
-        type=unit_orm.type,
-        to_base_factor=unit_orm.to_base_factor,
-        created_at=unit_orm.created_at
-    )
+    return UnitRead.model_validate(unit_orm, from_attributes=True)
 
 
-def build_unit_conversion_read(
-        conversion_orm: UnitConversion,
-        include_unit_names: bool = True
-) -> UnitConversionRead:
+def build_unit_conversion_read(conversion_orm: UnitConversion) -> UnitConversionRead:
     """Convert UnitConversion ORM to Read schema.
-    
+
     Args:
         conversion_orm: UnitConversion ORM object with loaded relationships
-        include_unit_names: Whether to include unit names (requires loaded relationships)
-        
+
     Returns:
         UnitConversionRead schema
     """
-    return UnitConversionRead(
-        from_unit_id=conversion_orm.from_unit_id,
-        to_unit_id=conversion_orm.to_unit_id,
-        factor=conversion_orm.factor,
-        from_unit_name=conversion_orm.from_unit.name if include_unit_names and conversion_orm.from_unit else None,
-        to_unit_name=conversion_orm.to_unit.name if include_unit_names and conversion_orm.to_unit else None
-    )
+    return UnitConversionRead.model_validate(conversion_orm, from_attributes=True)
 
 
 # ================================================================== #
