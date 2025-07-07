@@ -10,7 +10,7 @@ from app.crud import device as crud_device
 from app.crud import inventory as crud_inventory
 from app.crud import user as crud_user
 from app.models.inventory import InventoryItem
-from app.models.user import User
+from app.schemas.user import UserRead
 from app.schemas.ai_service import RecipeGenerationRequest
 
 
@@ -41,7 +41,6 @@ class PromptBuilder:
         Returns:
             Tuple of (system_prompt, user_prompt).
         """
-        # Get user data using correct CRUD function
         user = crud_user.get_user_by_id(self.db, user_id=user_id)
         if not user:
             raise ValueError(f"User {user_id} not found")
@@ -95,7 +94,7 @@ Always respond with practical, achievable recipes that consider:
     def _build_user_prompt(
             self,
             request: RecipeGenerationRequest,
-            user: User,
+            user: UserRead,
             inventory_items: list[InventoryItem],
             appliances: list,  # Any type, could be ApplianceWithDeviceType
             tools: list       # Any type, could be KitchenToolWithDeviceType
@@ -136,7 +135,7 @@ Please respond with a complete recipe in JSON format."""
 
         return prompt
 
-    def _build_user_context(self, user: User) -> str:
+    def _build_user_context(self, user: UserRead) -> str:
         """Build user-specific context section."""
         context = f"USER PROFILE:\n- Name: {user.name}"
 
