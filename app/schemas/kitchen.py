@@ -84,6 +84,7 @@ class UserKitchenRead(UserKitchenBase):
     user_id: int
     kitchen_id: int
     user: UserRead
+    kitchen: KitchenRead
 
 
 class KitchenWithUsers(KitchenRead):
