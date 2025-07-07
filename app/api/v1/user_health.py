@@ -1,3 +1,4 @@
+
 """API endpoints for user health profiles management."""
 
 from __future__ import annotations
@@ -66,12 +67,11 @@ def create_health_profile(
         )
 
     try:
-        profile = crud_user_health.create_user_health_profile(
+        return crud_user_health.create_user_health_profile(
             db=db,
             user_id=user_id,
             profile_data=profile_data
         )
-        return UserHealthProfileRead.model_validate(profile, from_attributes=True)
     except ValueError as e:
         if "does not exist" in str(e):
             raise HTTPException(
@@ -135,7 +135,7 @@ def get_user_health_profile(
             detail=f"No health profile found for user {user_id}"
         )
 
-    return UserHealthProfileRead.model_validate(profile, from_attributes=True)
+    return profile
 
 
 @router.patch(
@@ -193,7 +193,7 @@ def update_health_profile(
             detail=f"No health profile found for user {user_id}"
         )
 
-    return UserHealthProfileRead.model_validate(updated_profile, from_attributes=True)
+    return updated_profile
 
 
 @router.get(
@@ -219,16 +219,11 @@ def get_all_health_profiles_summary(
     Example:
         GET /users/health-profiles/summary?skip=0&limit=50
     """
-    profiles = crud_user_health.get_all_health_profiles(
+    return crud_user_health.get_all_health_profiles(
         db=db,
         skip=skip,
         limit=limit
     )
-
-    return [
-        UserHealthProfileSummary.model_validate(profile, from_attributes=True)
-        for profile in profiles
-    ]
 
 
 @router.get(
@@ -262,7 +257,7 @@ def search_health_profiles(
     Example:
         GET /users/health-profiles/search?min_age=25&max_age=35&gender=female&activity_level=very%20active
     """
-    profiles = crud_user_health.search_health_profiles(
+    return crud_user_health.search_health_profiles(
         db=db,
         min_age=min_age,
         max_age=max_age,
@@ -271,8 +266,3 @@ def search_health_profiles(
         min_bmi=min_bmi,
         max_bmi=max_bmi
     )
-
-    return [
-        UserHealthProfileSummary.model_validate(profile, from_attributes=True)
-        for profile in profiles
-    ]
