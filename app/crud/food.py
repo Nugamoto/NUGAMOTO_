@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.crud.core import get_conversion_factor, build_unit_read
+from app.crud.core import get_conversion_factor
 from app.models.food import FoodItem, FoodItemUnitConversion, FoodItemAlias
 from app.schemas.food import (
     FoodItemCreate, FoodItemRead, FoodItemUpdate,
@@ -20,68 +20,38 @@ from app.schemas.food import (
 
 def build_food_item_read(food_orm: FoodItem) -> FoodItemRead:
     """Convert FoodItem ORM to Read schema.
-    
+
     Args:
         food_orm: FoodItem ORM object with loaded relationships
-        
+
     Returns:
         FoodItemRead schema
     """
-    base_unit_schema = None
-    if food_orm.base_unit:
-        base_unit_schema = build_unit_read(food_orm.base_unit)
-
-    return FoodItemRead(
-        id=food_orm.id,
-        name=food_orm.name,
-        category=food_orm.category,
-        base_unit_id=food_orm.base_unit_id,
-        created_at=food_orm.created_at,
-        updated_at=food_orm.updated_at,
-        base_unit=base_unit_schema,
-        base_unit_name=food_orm.base_unit.name if food_orm.base_unit else None
-    )
+    return FoodItemRead.model_validate(food_orm, from_attributes=True)
 
 
 def build_food_item_alias_read(alias_orm: FoodItemAlias) -> FoodItemAliasRead:
     """Convert FoodItemAlias ORM to Read schema.
-    
+
     Args:
         alias_orm: FoodItemAlias ORM object with loaded relationships
-        
+
     Returns:
         FoodItemAliasRead schema
     """
-    return FoodItemAliasRead(
-        id=alias_orm.id,
-        food_item_id=alias_orm.food_item_id,
-        alias=alias_orm.alias,
-        user_id=alias_orm.user_id,
-        created_at=alias_orm.created_at,
-        food_item_name=alias_orm.food_item.name if alias_orm.food_item else None,
-        user_name=alias_orm.user.name if alias_orm.user else None
-    )
+    return FoodItemAliasRead.model_validate(alias_orm, from_attributes=True)
 
 
 def build_food_item_unit_conversion_read(conversion_orm: FoodItemUnitConversion) -> FoodItemUnitConversionRead:
     """Convert FoodItemUnitConversion ORM to Read schema.
-    
+
     Args:
         conversion_orm: FoodItemUnitConversion ORM object with loaded relationships
-        
+
     Returns:
         FoodItemUnitConversionRead schema
     """
-    return FoodItemUnitConversionRead(
-        food_item_id=conversion_orm.food_item_id,
-        from_unit_id=conversion_orm.from_unit_id,
-        to_unit_id=conversion_orm.to_unit_id,
-        factor=conversion_orm.factor,
-        created_at=conversion_orm.created_at,
-        food_item_name=conversion_orm.food_item.name if conversion_orm.food_item else None,
-        from_unit_name=conversion_orm.from_unit.name if conversion_orm.from_unit else None,
-        to_unit_name=conversion_orm.to_unit.name if conversion_orm.to_unit else None
-    )
+    return FoodItemUnitConversionRead.model_validate(conversion_orm, from_attributes=True)
 
 
 # ================================================================== #
