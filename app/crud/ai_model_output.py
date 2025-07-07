@@ -1,22 +1,40 @@
-"""CRUD operations for AI-related functionality."""
+"""CRUD operations for AI-related functionality v2.0 - Schema Returns."""
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import AIOutputTargetType
 from app.models.ai_model_output import AIModelOutput, OutputFormat, OutputType
-from app.schemas.ai_model_output import AIModelOutputCreate, AIOutputSearchParams, AIOutputSummary
+from app.schemas.ai_model_output import (
+    AIModelOutputCreate,
+    AIModelOutputRead,
+    AIOutputSearchParams,
+    AIOutputSummary
+)
 
 
-def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOutput:
-    """Create a new AI model output record.
+# ================================================================== #
+# Helper Functions for Schema Conversion                            #
+# ================================================================== #
+
+def build_ai_model_output_read(output_orm: AIModelOutput) -> AIModelOutputRead:
+    """Convert AIModelOutput ORM to Read schema."""
+    return AIModelOutputRead.model_validate(output_orm, from_attributes=True)
+
+
+# ================================================================== #
+# AI Model Output CRUD - Schema Returns                             #
+# ================================================================== #
+
+def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOutputRead:
+    """Create a new AI model output record - returns schema.
 
     Args:
         db: Database session.
         output_data: Validated AI output data.
 
     Returns:
-        The newly created AI model output.
+        The newly created AI model output schema.
 
     Example:
         >>> data = AIModelOutputCreate(
@@ -48,18 +66,18 @@ def create_ai_output(db: Session, output_data: AIModelOutputCreate) -> AIModelOu
     db.commit()
     db.refresh(db_output)
 
-    return db_output
+    return build_ai_model_output_read(db_output)
 
 
-def get_ai_output_by_id(db: Session, output_id: int) -> AIModelOutput | None:
-    """Retrieve a single AI output by its ID.
+def get_ai_output_by_id(db: Session, output_id: int) -> AIModelOutputRead | None:
+    """Retrieve a single AI output by its ID - returns schema.
 
     Args:
         db: Database session.
         output_id: The unique identifier of the AI output.
 
     Returns:
-        The AI output if found, None otherwise.
+        The AI output schema if found, None otherwise.
 
     Example:
         >>> output = get_ai_output_by_id(db, 123)
@@ -67,7 +85,12 @@ def get_ai_output_by_id(db: Session, output_id: int) -> AIModelOutput | None:
         ...     print(f"Found output for user: {output.user_id}")
         ...     print(f"Target: {output.target_type} (ID: {output.target_id})")
     """
-    return db.scalar(select(AIModelOutput).where(AIModelOutput.id == output_id))
+    output_orm = get_ai_output_orm_by_id(db, output_id)
+
+    if not output_orm:
+        return None
+
+    return build_ai_model_output_read(output_orm)
 
 
 def delete_ai_output(db: Session, output_id: int) -> bool:
@@ -85,12 +108,12 @@ def delete_ai_output(db: Session, output_id: int) -> bool:
         >>> if success:
         ...     print("Output deleted successfully")
     """
-    output = db.scalar(select(AIModelOutput).where(AIModelOutput.id == output_id))
+    output_orm = get_ai_output_orm_by_id(db, output_id)
 
-    if output is None:
+    if output_orm is None:
         return False
 
-    db.delete(output)
+    db.delete(output_orm)
     db.commit()
     return True
 
@@ -100,8 +123,8 @@ def get_all_ai_outputs(
         search_params: AIOutputSearchParams,
         skip: int = 0,
         limit: int = 100
-) -> list[AIModelOutput]:
-    """Retrieve all AI outputs with optional filtering and pagination.
+) -> list[AIModelOutputRead]:
+    """Retrieve all AI outputs with optional filtering and pagination - returns schemas.
 
     Args:
         db: Database session.
@@ -110,7 +133,7 @@ def get_all_ai_outputs(
         limit: Maximum number of records to return.
 
     Returns:
-        A list of AI outputs matching the criteria, ordered by creation time (newest first).
+        A list of AI output schemas matching the criteria, ordered by creation time (newest first).
 
     Example:
         >>> params = AIOutputSearchParams(
@@ -148,7 +171,8 @@ def get_all_ai_outputs(
     # Order by creation time (newest first) and apply pagination
     query = query.order_by(AIModelOutput.created_at.desc()).offset(skip).limit(limit)
 
-    return list(db.scalars(query).all())
+    outputs_list = db.scalars(query).all()
+    return [build_ai_model_output_read(output) for output in outputs_list]
 
 
 def get_ai_output_summary(db: Session) -> AIOutputSummary:
@@ -219,8 +243,8 @@ def get_ai_outputs_by_target(
         target_id: int,
         skip: int = 0,
         limit: int = 100
-) -> list[AIModelOutput]:
-    """Retrieve all AI outputs for a specific target entity.
+) -> list[AIModelOutputRead]:
+    """Retrieve all AI outputs for a specific target entity - returns schemas.
 
     Args:
         db: Database session.
@@ -230,7 +254,7 @@ def get_ai_outputs_by_target(
         limit: Maximum number of records to return.
 
     Returns:
-        A list of AI outputs for the specified target, ordered by creation time (newest first).
+        A list of AI output schemas for the specified target, ordered by creation time (newest first).
 
     Example:
         >>> outputs = get_ai_outputs_by_target(
@@ -249,4 +273,14 @@ def get_ai_outputs_by_target(
         .limit(limit)
     )
 
-    return list(db.scalars(query).all())
+    outputs_list = db.scalars(query).all()
+    return [build_ai_model_output_read(output) for output in outputs_list]
+
+
+# ================================================================== #
+# ORM Helper Functions (for internal use)                           #
+# ================================================================== #
+
+def get_ai_output_orm_by_id(db: Session, output_id: int) -> AIModelOutput | None:
+    """Get AIModelOutput ORM object by ID - for internal use."""
+    return db.scalar(select(AIModelOutput).where(AIModelOutput.id == output_id))
