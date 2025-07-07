@@ -1,4 +1,4 @@
-"""CRUD operations for user credentials and authentication data."""
+"""CRUD operations for user credentials and authentication data v2.0 - Schema Returns."""
 
 from __future__ import annotations
 
@@ -9,15 +9,38 @@ from sqlalchemy.orm import Session
 
 from app.crud import user as crud_user
 from app.models.user_credentials import UserCredentials
-from app.schemas.user_credentials import UserCredentialsCreate, UserCredentialsUpdate
+from app.schemas.user_credentials import (
+    UserCredentialsCreate,
+    UserCredentialsRead,
+    UserCredentialsSummary,
+    UserCredentialsUpdate
+)
 
+
+# ================================================================== #
+# Helper Functions for Schema Conversion                            #
+# ================================================================== #
+
+def build_user_credentials_read(credentials_orm: UserCredentials) -> UserCredentialsRead:
+    """Convert UserCredentials ORM to Read schema."""
+    return UserCredentialsRead.model_validate(credentials_orm, from_attributes=True)
+
+
+def build_user_credentials_summary(credentials_orm: UserCredentials) -> UserCredentialsSummary:
+    """Convert UserCredentials ORM to Summary schema."""
+    return UserCredentialsSummary.model_validate(credentials_orm, from_attributes=True)
+
+
+# ================================================================== #
+# User Credentials CRUD - Schema Returns                            #
+# ================================================================== #
 
 def create_user_credentials(
         db: Session,
         user_id: int,
         credentials_data: UserCredentialsCreate
-) -> UserCredentials:
-    """Create new user credentials.
+) -> UserCredentialsRead:
+    """Create new user credentials - returns schema.
 
     Args:
         db: Database session.
@@ -25,7 +48,7 @@ def create_user_credentials(
         credentials_data: Validated credential creation data.
 
     Returns:
-        The newly created and persisted user credentials instance.
+        The newly created user credentials schema.
 
     Raises:
         ValueError: If user_id is invalid or user doesn't exist.
@@ -38,7 +61,7 @@ def create_user_credentials(
     if not user:
         raise ValueError(f"User with ID {user_id} does not exist")
 
-    existing_credentials = get_user_credentials_by_user_id(db, user_id)
+    existing_credentials = get_user_credentials_orm_by_user_id(db, user_id)
     if existing_credentials:
         raise ValueError("Credentials already exist for this user")
 
@@ -60,30 +83,33 @@ def create_user_credentials(
     db.commit()
     db.refresh(db_credentials)
 
-    return db_credentials
+    return build_user_credentials_read(db_credentials)
 
 
-def get_user_credentials_by_user_id(db: Session, user_id: int) -> UserCredentials | None:
-    """Retrieve user credentials by user ID.
+def get_user_credentials_by_user_id(db: Session, user_id: int) -> UserCredentialsRead | None:
+    """Retrieve user credentials by user ID - returns schema.
 
     Args:
         db: Database session.
         user_id: ID of the user whose credentials are to retrieve.
 
     Returns:
-        UserCredentials instance if found, None otherwise.
+        UserCredentials schema if found, None otherwise.
     """
-    return db.scalar(
-        select(UserCredentials).where(UserCredentials.user_id == user_id)
-    )
+    credentials_orm = get_user_credentials_orm_by_user_id(db, user_id)
+
+    if not credentials_orm:
+        return None
+
+    return build_user_credentials_read(credentials_orm)
 
 
 def get_all_user_credentials(
         db: Session,
         skip: int = 0,
         limit: int = 100
-) -> list[UserCredentials]:
-    """Retrieve all user credentials with pagination.
+) -> list[UserCredentialsSummary]:
+    """Retrieve all user credentials with pagination - returns schemas.
 
     Args:
         db: Database session.
@@ -91,22 +117,24 @@ def get_all_user_credentials(
         limit: Maximum number of records to return.
 
     Returns:
-        List of UserCredentials instances, ordered by user_id.
+        List of UserCredentials summary schemas, ordered by user_id.
     """
-    return list(db.scalars(
+    credentials_list = db.scalars(
         select(UserCredentials)
         .offset(skip)
         .limit(limit)
         .order_by(UserCredentials.user_id)
-    ).all())
+    ).all()
+
+    return [build_user_credentials_summary(cred) for cred in credentials_list]
 
 
 def update_user_credentials(
         db: Session,
         user_id: int,
         credentials_data: UserCredentialsUpdate
-) -> UserCredentials | None:
-    """Update existing user credentials with partial data.
+) -> UserCredentialsRead | None:
+    """Update existing user credentials with partial data - returns schema.
 
     Args:
         db: Database session.
@@ -114,26 +142,24 @@ def update_user_credentials(
         credentials_data: Partial credentials data to update (only non-None fields are updated).
 
     Returns:
-        Updated UserCredentials instance if found, None otherwise.
+        Updated UserCredentials schema if found, None otherwise.
     """
-    credentials = get_user_credentials_by_user_id(db, user_id)
-    if not credentials:
+    credentials_orm = get_user_credentials_orm_by_user_id(db, user_id)
+    if not credentials_orm:
         return None
 
     # Update only the fields that are not None
     update_data = credentials_data.model_dump(exclude_unset=True)
 
     for field, value in update_data.items():
-        setattr(credentials, field, value)
+        setattr(credentials_orm, field, value)
 
-    credentials.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    credentials_orm.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
     db.commit()
-    db.refresh(credentials)
+    db.refresh(credentials_orm)
 
-    return credentials
-
-
+    return build_user_credentials_read(credentials_orm)
 
 
 def search_user_credentials(
@@ -142,8 +168,8 @@ def search_user_credentials(
         last_name_contains: str | None = None,
         city: str | None = None,
         country: str | None = None
-) -> list[UserCredentials]:
-    """Search user credentials by various criteria.
+) -> list[UserCredentialsSummary]:
+    """Search user credentials by various criteria - returns schemas.
 
     Args:
         db: Database session.
@@ -153,7 +179,7 @@ def search_user_credentials(
         country: Filter by exact country match.
 
     Returns:
-        List of UserCredentials instances matching the criteria.
+        List of UserCredentials summary schemas matching the criteria.
     """
     stmt = select(UserCredentials)
 
@@ -166,4 +192,16 @@ def search_user_credentials(
     if country:
         stmt = stmt.where(UserCredentials.country == country.strip())
 
-    return list(db.scalars(stmt).all())
+    credentials_list = db.scalars(stmt).all()
+    return [build_user_credentials_summary(cred) for cred in credentials_list]
+
+
+# ================================================================== #
+# ORM Helper Functions (for internal use)                           #
+# ================================================================== #
+
+def get_user_credentials_orm_by_user_id(db: Session, user_id: int) -> UserCredentials | None:
+    """Get UserCredentials ORM object by user ID - for internal use."""
+    return db.scalar(
+        select(UserCredentials).where(UserCredentials.user_id == user_id)
+    )
