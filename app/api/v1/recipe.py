@@ -19,6 +19,10 @@ from app.schemas.recipe import (
 router = APIRouter(prefix="/recipes", tags=["Recipes"])
 
 
+# ================================================================== #
+# Recipe CRUD Endpoints                                              #
+# ================================================================== #
+
 @router.post(
     "/",
     response_model=RecipeRead,
@@ -32,7 +36,7 @@ def create_recipe(
     """Create a new recipe with ingredients and steps."""
     try:
         db_recipe = crud_recipe.create_recipe(db, recipe_data)
-        return RecipeRead.model_validate(db_recipe, from_attributes=True)
+        return crud_recipe.build_recipe_read(db_recipe)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -65,7 +69,7 @@ def get_all_recipes(
     )
 
     recipes = crud_recipe.get_all_recipes(db, search_params, skip, limit)
-    return [RecipeRead.model_validate(recipe, from_attributes=True) for recipe in recipes]
+    return [crud_recipe.build_recipe_read(recipe) for recipe in recipes]
 
 
 @router.get(
@@ -95,7 +99,7 @@ def get_recipe(
     recipe = crud_recipe.get_recipe_with_details(db, recipe_id)
     if recipe is None:
         raise HTTPException(404, f"Recipe with ID {recipe_id} not found")
-    return RecipeWithDetails.model_validate(recipe, from_attributes=True)
+    return crud_recipe.build_recipe_with_details(recipe)
 
 
 @router.patch(
@@ -113,7 +117,7 @@ def update_recipe(
     updated_recipe = crud_recipe.update_recipe(db, recipe_id, recipe_data)
     if updated_recipe is None:
         raise HTTPException(404, f"Recipe with ID {recipe_id} not found")
-    return RecipeRead.model_validate(updated_recipe, from_attributes=True)
+    return crud_recipe.build_recipe_read(updated_recipe)
 
 
 @router.delete(
@@ -134,6 +138,10 @@ def delete_recipe(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ================================================================== #
+# Recipe Ingredient Endpoints                                       #
+# ================================================================== #
+
 @router.post(
     "/{recipe_id}/ingredients",
     response_model=RecipeIngredientRead,
@@ -148,7 +156,7 @@ def add_recipe_ingredient(
     """Add an ingredient to a recipe."""
     try:
         ingredient = crud_recipe.add_recipe_ingredient(db, recipe_id, ingredient_data)
-        return RecipeIngredientRead.model_validate(ingredient, from_attributes=True)
+        return crud_recipe.build_recipe_ingredient_read(ingredient)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -164,7 +172,7 @@ def get_recipe_ingredients(
 ) -> list[RecipeIngredientRead]:
     """Get all ingredients for a recipe."""
     ingredients = crud_recipe.get_ingredients_for_recipe(db, recipe_id)
-    return [RecipeIngredientRead.model_validate(ingredient, from_attributes=True) for ingredient in ingredients]
+    return [crud_recipe.build_recipe_ingredient_read(ingredient) for ingredient in ingredients]
 
 
 @router.patch(
@@ -183,7 +191,7 @@ def update_recipe_ingredient(
         ingredient = crud_recipe.update_recipe_ingredient(db, recipe_id, food_item_id, ingredient_data)
         if ingredient is None:
             raise HTTPException(404, "Ingredient not found")
-        return RecipeIngredientRead.model_validate(ingredient, from_attributes=True)
+        return crud_recipe.build_recipe_ingredient_read(ingredient)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -207,6 +215,10 @@ def delete_recipe_ingredient(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ================================================================== #
+# Recipe Nutrition Endpoints                                        #
+# ================================================================== #
+
 @router.post(
     "/{recipe_id}/nutrition",
     response_model=RecipeNutritionRead,
@@ -221,7 +233,7 @@ def create_or_update_recipe_nutrition(
     """Create or update nutrition information for a recipe."""
     try:
         nutrition = crud_recipe.create_or_update_recipe_nutrition(db, recipe_id, nutrition_data)
-        return RecipeNutritionRead.model_validate(nutrition, from_attributes=True)
+        return crud_recipe.build_recipe_nutrition_read(nutrition)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -240,7 +252,7 @@ def update_recipe_nutrition(
     nutrition = crud_recipe.update_recipe_nutrition(db, recipe_id, nutrition_data)
     if nutrition is None:
         raise HTTPException(404, "Nutrition information not found")
-    return RecipeNutritionRead.model_validate(nutrition, from_attributes=True)
+    return crud_recipe.build_recipe_nutrition_read(nutrition)
 
 
 @router.delete(
@@ -261,6 +273,10 @@ def delete_recipe_nutrition(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ================================================================== #
+# Recipe Advanced Query Endpoints                                   #
+# ================================================================== #
+
 @router.get(
     "/suggestions/by-ingredients",
     response_model=list[RecipeRead],
@@ -273,7 +289,7 @@ def get_recipe_suggestions_by_ingredients(
 ) -> list[RecipeRead]:
     """Get recipes that can be made with available ingredients."""
     recipes = crud_recipe.get_recipes_by_available_ingredients(db, food_item_ids, min_match_percentage)
-    return [RecipeRead.model_validate(recipe, from_attributes=True) for recipe in recipes]
+    return [crud_recipe.build_recipe_read(recipe) for recipe in recipes]
 
 
 @router.get(
@@ -288,8 +304,12 @@ def get_ai_generated_recipes(
 ) -> list[RecipeRead]:
     """Get all AI-generated recipes."""
     recipes = crud_recipe.get_ai_generated_recipes(db, skip, limit)
-    return [RecipeRead.model_validate(recipe, from_attributes=True) for recipe in recipes]
+    return [crud_recipe.build_recipe_read(recipe) for recipe in recipes]
 
+
+# ================================================================== #
+# Recipe Review Endpoints                                           #
+# ================================================================== #
 
 @router.post(
     "/{recipe_id}/reviews",
@@ -306,7 +326,7 @@ def create_or_update_recipe_review(
     """Create or update a recipe review."""
     try:
         review = crud_recipe.create_or_update_recipe_review(db, user_id, recipe_id, review_data)
-        return RecipeReviewRead.model_validate(review, from_attributes=True)
+        return crud_recipe.build_recipe_review_read(review)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -324,7 +344,7 @@ def get_recipe_reviews(
 ) -> list[RecipeReviewRead]:
     """Get all reviews for a recipe."""
     reviews = crud_recipe.get_recipe_reviews(db, recipe_id, skip, limit)
-    return [RecipeReviewRead.model_validate(review, from_attributes=True) for review in reviews]
+    return [crud_recipe.build_recipe_review_read(review) for review in reviews]
 
 
 @router.get(
@@ -355,7 +375,7 @@ def update_recipe_review(
     review = crud_recipe.update_recipe_review(db, user_id, recipe_id, review_data)
     if review is None:
         raise HTTPException(404, "Review not found")
-    return RecipeReviewRead.model_validate(review, from_attributes=True)
+    return crud_recipe.build_recipe_review_read(review)
 
 
 @router.delete(
