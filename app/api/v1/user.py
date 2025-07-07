@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -12,75 +15,103 @@ from app.schemas.user import UserCreate, UserRead, UserUpdate
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-# --------------------------------------------------------------------- #
-# Endpoints                                                             #
-# --------------------------------------------------------------------- #
+# ================================================================== #
+# User Endpoints                                                     #
+# ================================================================== #
 
-@router.post(
-    "/",
-    response_model=UserRead,
-    status_code=201,
-    summary="Create a new user"
-)
-def create_user(user_data: UserCreate, db: Session = Depends(get_db)) -> UserRead:
-    if crud_user.get_user_by_email(db, user_data.email):
-        raise HTTPException(status_code=400, detail="Email already registered.")
-    db_user = crud_user.create_user(db, user_data)
-    return UserRead.model_validate(db_user, from_attributes=True)
-
-
-@router.get("/",
-            response_model=list[UserRead],
-            status_code=200,
-            summary="Get all users"
-            )
-def read_all_users(db: Session = Depends(get_db)) -> list[UserRead]:
-    """Retrieve all users from the database.
+@router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+def create_user(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        user_data: UserCreate
+) -> UserRead:
+    """Create a new user.
 
     Args:
-        db: Injected database session.
+        db: Database session
+        user_data: User creation data
 
     Returns:
-        A list of all users.
-    """
-    users = crud_user.get_all_users(db)
-    return [UserRead.model_validate(user, from_attributes=True) for user in users]
-
-@router.get(
-    "/{user_id}",
-    response_model=UserRead,
-    status_code=status.HTTP_200_OK,
-    summary="Get a user by ID",
-)
-def read_user(user_id: int, db: Session = Depends(get_db)) -> UserRead:
-    """Retrieve a single user by primary key.
-
-    Args:
-        user_id: Primary key of the user.
-        db: Injected database session.
-
-    Returns:
-        The requested user.
+        Created user data
 
     Raises:
-        HTTPException: *404* if the user does not exist.
+        HTTPException: 400 if email already registered
     """
-    user = crud_user.get_user_by_id(db, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-    return UserRead.model_validate(user, from_attributes=True)
+    # Check if email already exists
+    existing_user = crud_user.get_user_by_email(db=db, email=user_data.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+
+    try:
+        # crud_user.create_user now returns UserRead schema
+        return crud_user.create_user(db=db, user_data=user_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
 
 
-@router.patch(
-    "/{user_id}",
-    response_model=UserRead,
-    status_code=status.HTTP_200_OK,
-    summary="Update an existing user",
-)
+@router.get("/", response_model=list[UserRead])
+def get_users(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        skip: int = 0,
+        limit: int = 100
+) -> list[UserRead]:
+    """Get all users.
+
+    Args:
+        db: Database session
+        skip: Number of users to skip
+        limit: Maximum number of users to return
+
+    Returns:
+        List of users
+    """
+    # crud_user.get_all_users now returns list[UserRead]
+    return crud_user.get_all_users(db=db, skip=skip, limit=limit)
+
+
+@router.get("/{user_id}", response_model=UserRead)
+def get_user_by_id(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        user_id: int
+) -> UserRead:
+    """Get user by ID.
+
+    Args:
+        db: Database session
+        user_id: User ID
+
+    Returns:
+        User data
+
+    Raises:
+        HTTPException: 404 if user not found
+    """
+    # crud_user.get_user_by_id now returns UserRead or None
+    user = crud_user.get_user_by_id(db=db, user_id=user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found"
+        )
+
+    return user
+
+
+@router.patch("/{user_id}", response_model=UserRead)
 def update_user(
-    user_id: int,
-        user_data: UserUpdate,
-    db: Session = Depends(get_db),
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        user_id: int,
+        user_data: UserUpdate
 ) -> UserRead:
     """Update an existing user with partial data (PATCH operation).
 
@@ -89,17 +120,17 @@ def update_user(
     are optional, enabling granular updates.
 
     Args:
-        user_id: Primary key of the user to update.
-        user_data: Partial user data containing only fields to be updated.
-        db: Injected database session.
+        db: Database session
+        user_id: Primary key of the user to update
+        user_data: Partial user data containing only fields to be updated
 
     Returns:
-        The updated user with all current field values.
+        The updated user with all current field values
 
     Raises:
         HTTPException:
-            * 404 – if the user does not exist.
-            * 400 – if another user already takes the e-mail address.
+            * 404 – if the user does not exist
+            * 400 – if another user already has the email address
 
     Example:
         ```json
@@ -111,41 +142,82 @@ def update_user(
         Only the specified fields will be updated, other fields remain unchanged.
     """
     try:
-        updated_user = crud_user.update_user(db, user_id, user_data)
+        # crud_user.update_user now returns UserRead or None
+        updated_user = crud_user.update_user(db=db, user_id=user_id, user_data=user_data)
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with ID {user_id} not found"
+            )
+
+        return updated_user
     except ValueError as exc:
-        match str(exc):
-            case "User not found.":
-                raise HTTPException(status_code=404, detail="User not found.") from exc
-            case "Email already registered.":
-                raise HTTPException(status_code=400, detail="Email already registered.") from exc
-        raise
+        if "Email is already taken" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        ) from exc
 
-    if updated_user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
 
-    return UserRead.model_validate(updated_user, from_attributes=True)
-
-@router.delete(
-    "/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a user",
-)
+@router.delete("/{user_id}")
 def delete_user(
-        user_id: int,
-        db: Session = Depends(get_db),
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        user_id: int
 ) -> Response:
     """Delete a user by primary key.
 
     Args:
-        user_id: ID of the user to delete.
-        db: Injected database session.
+        db: Database session
+        user_id: ID of the user to delete
+
+    Returns:
+        Empty response with 204 status
 
     Raises:
-        HTTPException: 404 if the user does not exist.
+        HTTPException: 404 if the user does not exist
     """
-    try:
-        crud_user.delete_user(db, user_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="User not found.") from exc
+    success = crud_user.delete_user(db=db, user_id=user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found"
+        )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ================================================================== #
+# Additional User Endpoints                                          #
+# ================================================================== #
+
+@router.get("/by-email/{email}", response_model=UserRead)
+def get_user_by_email(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        email: str
+) -> UserRead:
+    """Get user by email address.
+
+    Args:
+        db: Database session
+        email: Email address to search for
+
+    Returns:
+        User data
+
+    Raises:
+        HTTPException: 404 if user not found
+    """
+    user = crud_user.get_user_by_email(db=db, email=email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with email '{email}' not found"
+        )
+
+    return user
