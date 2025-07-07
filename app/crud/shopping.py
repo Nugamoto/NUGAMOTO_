@@ -8,6 +8,7 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql import Select
 
+from app.models.food import FoodItem
 from app.models.kitchen import Kitchen
 from app.models.shopping import (
     ShoppingList,
@@ -44,9 +45,15 @@ def build_shopping_product_read(product_orm: ShoppingProduct) -> ShoppingProduct
     # Build computed fields
     food_item_name = product_orm.food_item.name if product_orm.food_item else "Unknown"
 
-    # Note: These would need Unit relationships to be properly loaded
-    package_unit_name = "Unknown"  # TODO: Load unit relationship
-    base_unit_name = "Unknown"  # TODO: Load base unit through food_item
+    # Load package unit name via relationship
+    package_unit_name = "Unknown"
+    if product_orm.package_unit:
+        package_unit_name = product_orm.package_unit.name
+
+    # Load base unit name via food_item.base_unit relationship
+    base_unit_name = "Unknown"
+    if product_orm.food_item and product_orm.food_item.base_unit:
+        base_unit_name = product_orm.food_item.base_unit.name
 
     # Calculate unit price
     unit_price = None
@@ -74,7 +81,6 @@ def build_shopping_product_assignment_read(
         assignment_orm: ShoppingProductAssignment
 ) -> ShoppingProductAssignmentRead:
     """Convert ShoppingProductAssignment ORM to Read schema."""
-    # Build shopping product data
     shopping_product = build_shopping_product_read(assignment_orm.shopping_product) \
         if assignment_orm.shopping_product else None
 
@@ -291,8 +297,8 @@ def create_shopping_product(
     Raises:
         ValueError: If food_item or units don't exist.
     """
-    # TODO: Add validation that food_item_id and package_unit_id exist
-    from app.models.inventory import FoodItem
+    # Import here to avoid circular imports
+    from app.models.food import FoodItem
     from app.models.core import Unit
 
     # Verify food item exists
@@ -318,8 +324,10 @@ def create_shopping_product(
     db.commit()
     db.refresh(db_product)
 
-    # Load the related food_item for schema building
-    db.refresh(db_product, attribute_names=['food_item'])
+    # Load the related data for schema building
+    db.refresh(db_product, attribute_names=['food_item', 'package_unit'])
+    if db_product.food_item:
+        db.refresh(db_product.food_item, attribute_names=['base_unit'])
 
     return build_shopping_product_read(db_product)
 
@@ -336,7 +344,10 @@ def get_shopping_product_by_id(db: Session, product_id: int) -> ShoppingProductR
     """
     product_orm = db.scalar(
         select(ShoppingProduct)
-        .options(selectinload(ShoppingProduct.food_item))
+        .options(
+            selectinload(ShoppingProduct.food_item).selectinload(FoodItem.base_unit),
+            selectinload(ShoppingProduct.package_unit)
+        )
         .where(ShoppingProduct.id == product_id)
     )
 
@@ -365,7 +376,10 @@ def get_all_shopping_products(
     """
     query: Select = (
         select(ShoppingProduct)
-        .options(selectinload(ShoppingProduct.food_item))
+        .options(
+            selectinload(ShoppingProduct.food_item).selectinload(FoodItem.base_unit),
+            selectinload(ShoppingProduct.package_unit)
+        )
         .order_by(ShoppingProduct.created_at.desc())
         .offset(skip)
         .limit(limit)
@@ -404,7 +418,10 @@ def update_shopping_product(
     """
     product_orm = db.scalar(
         select(ShoppingProduct)
-        .options(selectinload(ShoppingProduct.food_item))
+        .options(
+            selectinload(ShoppingProduct.food_item).selectinload(FoodItem.base_unit),
+            selectinload(ShoppingProduct.package_unit)
+        )
         .where(ShoppingProduct.id == product_id)
     )
 
@@ -511,10 +528,12 @@ def assign_product_to_list(
     db.commit()
     db.refresh(db_assignment)
 
-    # Load related data for schema building
+    # Load related data for schema building with full relationships
     db.refresh(db_assignment, attribute_names=['shopping_product'])
     if db_assignment.shopping_product:
-        db.refresh(db_assignment.shopping_product, attribute_names=['food_item'])
+        db.refresh(db_assignment.shopping_product, attribute_names=['food_item', 'package_unit'])
+        if db_assignment.shopping_product.food_item:
+            db.refresh(db_assignment.shopping_product.food_item, attribute_names=['base_unit'])
 
     return build_shopping_product_assignment_read(db_assignment)
 
@@ -566,6 +585,9 @@ def get_shopping_list_product_assignments(
         .options(
             selectinload(ShoppingProductAssignment.shopping_product)
             .selectinload(ShoppingProduct.food_item)
+            .selectinload(FoodItem.base_unit),
+            selectinload(ShoppingProductAssignment.shopping_product)
+            .selectinload(ShoppingProduct.package_unit)
         )
         .where(ShoppingProductAssignment.shopping_list_id == list_id)
         .order_by(ShoppingProductAssignment.created_at.desc())
@@ -608,7 +630,7 @@ def update_product_assignment(
     Returns:
         The updated assignment schema if found, None otherwise.
     """
-    assignment_orm = get_product_assignment_orm(db, list_id, product_id)
+    assignment_orm = get_product_assignment_orm_with_relationships(db, list_id, product_id)
 
     if not assignment_orm:
         return None
@@ -623,10 +645,6 @@ def update_product_assignment(
 
     db.commit()
     db.refresh(assignment_orm)
-
-    # Ensure related data is loaded
-    if assignment_orm.shopping_product:
-        db.refresh(assignment_orm.shopping_product, attribute_names=['food_item'])
 
     return build_shopping_product_assignment_read(assignment_orm)
 
@@ -675,7 +693,10 @@ def get_products_for_food_item(
     """
     products = db.scalars(
         select(ShoppingProduct)
-        .options(selectinload(ShoppingProduct.food_item))
+        .options(
+            selectinload(ShoppingProduct.food_item).selectinload(FoodItem.base_unit),
+            selectinload(ShoppingProduct.package_unit)
+        )
         .where(ShoppingProduct.food_item_id == food_item_id)
         .order_by(ShoppingProduct.package_quantity)
         .offset(skip)
@@ -746,6 +767,30 @@ def get_product_assignment_orm(
         .options(
             selectinload(ShoppingProductAssignment.shopping_product)
             .selectinload(ShoppingProduct.food_item)
+        )
+        .where(
+            and_(
+                ShoppingProductAssignment.shopping_list_id == list_id,
+                ShoppingProductAssignment.shopping_product_id == product_id
+            )
+        )
+    )
+
+
+def get_product_assignment_orm_with_relationships(
+        db: Session,
+        list_id: int,
+        product_id: int
+) -> ShoppingProductAssignment | None:
+    """Get ShoppingProductAssignment ORM object with full relationships - for internal use."""
+    return db.scalar(
+        select(ShoppingProductAssignment)
+        .options(
+            selectinload(ShoppingProductAssignment.shopping_product)
+            .selectinload(ShoppingProduct.food_item)
+            .selectinload(FoodItem.base_unit),
+            selectinload(ShoppingProductAssignment.shopping_product)
+            .selectinload(ShoppingProduct.package_unit)
         )
         .where(
             and_(
