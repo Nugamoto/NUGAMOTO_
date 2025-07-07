@@ -1,3 +1,4 @@
+
 """CRUD helper functions for the *Kitchen* and *UserKitchen* models."""
 
 from __future__ import annotations
@@ -7,73 +8,134 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.kitchen import Kitchen, UserKitchen
 from app.models.user import User
-from app.schemas.kitchen import KitchenCreate, KitchenUpdate, UserKitchenCreate, UserKitchenUpdate
+from app.schemas.kitchen import (
+    KitchenCreate, KitchenRead, KitchenUpdate, KitchenWithUsers,
+    UserKitchenCreate, UserKitchenRead, UserKitchenUpdate
+)
 
 
-def create_kitchen(db: Session, kitchen_data: KitchenCreate) -> Kitchen:
-    """Create and persist a new kitchen.
+# ================================================================== #
+# Helper Functions for Schema Conversion                            #
+# ================================================================== #
+
+def build_kitchen_read(kitchen_orm: Kitchen) -> KitchenRead:
+    """Convert Kitchen ORM to Read schema.
+
+    Args:
+        kitchen_orm: Kitchen ORM object
+
+    Returns:
+        KitchenRead schema
+    """
+    return KitchenRead.model_validate(kitchen_orm, from_attributes=True)
+
+
+def build_kitchen_with_users(kitchen_orm: Kitchen) -> KitchenWithUsers:
+    """Convert Kitchen ORM with users to KitchenWithUsers schema.
+
+    Args:
+        kitchen_orm: Kitchen ORM object with loaded user_kitchens relationship
+
+    Returns:
+        KitchenWithUsers schema
+    """
+    return KitchenWithUsers.model_validate(kitchen_orm, from_attributes=True)
+
+
+def build_user_kitchen_read(user_kitchen_orm: UserKitchen) -> UserKitchenRead:
+    """Convert UserKitchen ORM to Read schema.
+
+    Args:
+        user_kitchen_orm: UserKitchen ORM object with loaded relationships
+
+    Returns:
+        UserKitchenRead schema
+    """
+    return UserKitchenRead.model_validate(user_kitchen_orm, from_attributes=True)
+
+
+# ================================================================== #
+# Kitchen CRUD Operations - Schema Returns                          #
+# ================================================================== #
+
+def create_kitchen(db: Session, kitchen_data: KitchenCreate) -> KitchenRead:
+    """Create and persist a new kitchen - returns schema.
 
     Args:
         db: Database session.
         kitchen_data: Validated kitchen payload.
 
     Returns:
-        The newly created, *refreshed* kitchen instance.
+        Created kitchen schema.
     """
     new_kitchen = Kitchen(name=kitchen_data.name)
     db.add(new_kitchen)
     db.commit()
     db.refresh(new_kitchen)
-    return new_kitchen
+
+    return build_kitchen_read(new_kitchen)
 
 
-def get_kitchen_by_id(db: Session, kitchen_id: int) -> Kitchen | None:
-    """Return a kitchen by primary key.
-
-    Args:
-        db: Database session.
-        kitchen_id: Primary key of the kitchen.
-
-    Returns:
-        The matching :class:`~app.models.kitchen.Kitchen` or ``None``.
-    """
-    stmt = select(Kitchen).where(Kitchen.id == kitchen_id)
-    return db.scalar(stmt)
-
-
-def get_kitchen_with_users(db: Session, kitchen_id: int) -> Kitchen | None:
-    """Return a kitchen by primary key with all associated users.
+def get_kitchen_by_id(db: Session, kitchen_id: int) -> KitchenRead | None:
+    """Return a kitchen by primary key - returns schema.
 
     Args:
         db: Database session.
         kitchen_id: Primary key of the kitchen.
 
     Returns:
-        The matching kitchen with users loaded, or ``None``.
+        Kitchen schema or None if not found.
     """
-    stmt = (
+    kitchen_orm = db.scalar(
+        select(Kitchen).where(Kitchen.id == kitchen_id)
+    )
+
+    if not kitchen_orm:
+        return None
+
+    return build_kitchen_read(kitchen_orm)
+
+
+def get_kitchen_with_users(db: Session, kitchen_id: int) -> KitchenWithUsers | None:
+    """Return a kitchen by primary key with all associated users - returns schema.
+
+    Args:
+        db: Database session.
+        kitchen_id: Primary key of the kitchen.
+
+    Returns:
+        Kitchen with users schema or None if not found.
+    """
+    kitchen_orm = db.scalar(
         select(Kitchen)
         .options(selectinload(Kitchen.user_kitchens).selectinload(UserKitchen.user))
         .where(Kitchen.id == kitchen_id)
     )
-    return db.scalar(stmt)
+
+    if not kitchen_orm:
+        return None
+
+    return build_kitchen_with_users(kitchen_orm)
 
 
-def get_all_kitchens(db: Session) -> list[Kitchen]:
-    """Return all kitchens from the database.
+def get_all_kitchens(db: Session) -> list[KitchenRead]:
+    """Return all kitchens from the database - returns schemas.
 
     Args:
         db: Database session.
 
     Returns:
-        A list of all kitchens in the database.
+        List of kitchen schemas.
     """
-    stmt = select(Kitchen)
-    return list(db.scalars(stmt).all())
+    kitchen_orms = db.scalars(
+        select(Kitchen).order_by(Kitchen.name)
+    ).all()
+
+    return [build_kitchen_read(kitchen) for kitchen in kitchen_orms]
 
 
-def update_kitchen(db: Session, kitchen_id: int, kitchen_data: KitchenUpdate) -> Kitchen:
-    """Update an existing kitchen with partial data.
+def update_kitchen(db: Session, kitchen_id: int, kitchen_data: KitchenUpdate) -> KitchenRead | None:
+    """Update an existing kitchen with partial data - returns schema.
 
     Args:
         db: Active database session.
@@ -81,45 +143,58 @@ def update_kitchen(db: Session, kitchen_id: int, kitchen_data: KitchenUpdate) ->
         kitchen_data: Validated payload containing partial kitchen data.
 
     Returns:
-        The updated and refreshed kitchen instance.
-
-    Raises:
-        ValueError: If the kitchen does not exist.
+        Updated kitchen schema or None if not found.
     """
-    kitchen = get_kitchen_by_id(db, kitchen_id)
-    if kitchen is None:
-        raise ValueError("Kitchen not found.")
+    kitchen_orm = db.scalar(
+        select(Kitchen).where(Kitchen.id == kitchen_id)
+    )
 
-    if kitchen_data.name is not None:
-        kitchen.name = kitchen_data.name
+    if not kitchen_orm:
+        return None
+
+    # Only update fields that were provided (exclude_unset=True)
+    update_data = kitchen_data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(kitchen_orm, field, value)
 
     db.commit()
-    db.refresh(kitchen)
-    return kitchen
+    db.refresh(kitchen_orm)
+
+    return build_kitchen_read(kitchen_orm)
 
 
-def delete_kitchen(db: Session, kitchen_id: int) -> None:
+def delete_kitchen(db: Session, kitchen_id: int) -> bool:
     """Remove a kitchen from the database.
 
     Args:
         db: Active database session.
         kitchen_id: Primary key of the kitchen to delete.
 
-    Raises:
-        ValueError: If the kitchen does not exist.
+    Returns:
+        True if deleted, False if not found.
     """
-    kitchen = get_kitchen_by_id(db, kitchen_id)
-    if kitchen is None:
-        raise ValueError("Kitchen not found.")
+    kitchen_orm = db.scalar(
+        select(Kitchen).where(Kitchen.id == kitchen_id)
+    )
 
-    db.delete(kitchen)
+    if not kitchen_orm:
+        return False
+
+    db.delete(kitchen_orm)
     db.commit()
 
+    return True
+
+
+# ================================================================== #
+# UserKitchen CRUD Operations - Schema Returns                      #
+# ================================================================== #
 
 def add_user_to_kitchen(
     db: Session, kitchen_id: int, user_kitchen_data: UserKitchenCreate
-) -> UserKitchen:
-    """Add a user to a kitchen with a specific role.
+) -> UserKitchenRead:
+    """Add a user to a kitchen with a specific role - returns schema.
 
     Args:
         db: Database session.
@@ -127,46 +202,62 @@ def add_user_to_kitchen(
         user_kitchen_data: Validated payload containing user_id and role.
 
     Returns:
-        The newly created UserKitchen relationship.
+        Created UserKitchen relationship schema.
 
     Raises:
         ValueError: If the kitchen or user does not exist, or if the relationship already exists.
     """
     # Check if kitchen exists
-    kitchen = get_kitchen_by_id(db, kitchen_id)
-    if kitchen is None:
+    kitchen_orm = db.scalar(
+        select(Kitchen).where(Kitchen.id == kitchen_id)
+    )
+    if not kitchen_orm:
         raise ValueError("Kitchen not found.")
 
     # Check if user exists
-    user_stmt = select(User).where(User.id == user_kitchen_data.user_id)
-    user = db.scalar(user_stmt)
-    if user is None:
+    user_orm = db.scalar(
+        select(User).where(User.id == user_kitchen_data.user_id)
+    )
+    if not user_orm:
         raise ValueError("User not found.")
 
     # Check if relationship already exists
-    existing_stmt = select(UserKitchen).where(
-        UserKitchen.user_id == user_kitchen_data.user_id,
-        UserKitchen.kitchen_id == kitchen_id,
+    existing_orm = db.scalar(
+        select(UserKitchen).where(
+            UserKitchen.user_id == user_kitchen_data.user_id,
+            UserKitchen.kitchen_id == kitchen_id,
+        )
     )
-    if db.scalar(existing_stmt) is not None:
+    if existing_orm:
         raise ValueError("User is already a member of this kitchen.")
 
     # Create the relationship
-    user_kitchen = UserKitchen(
+    user_kitchen_orm = UserKitchen(
         user_id=user_kitchen_data.user_id,
         kitchen_id=kitchen_id,
         role=user_kitchen_data.role,
     )
-    db.add(user_kitchen)
+    db.add(user_kitchen_orm)
     db.commit()
-    db.refresh(user_kitchen)
-    return user_kitchen
+    db.refresh(user_kitchen_orm)
+
+    # Load relationships for schema conversion
+    user_kitchen_orm = db.scalar(
+        select(UserKitchen)
+        .options(selectinload(UserKitchen.user))
+        .where(
+            UserKitchen.user_id == user_kitchen_data.user_id,
+            UserKitchen.kitchen_id == kitchen_id,
+        )
+    )
+
+    return build_user_kitchen_read(user_kitchen_orm)
 
 
 def update_user_role_in_kitchen(
     db: Session, kitchen_id: int, user_id: int, role_data: UserKitchenUpdate
-) -> UserKitchen:
-    """Update a user's role in a kitchen.
+) -> UserKitchenRead | None:
+    """Update a user's role in a kitchen - returns schema.
 
     Args:
         db: Database session.
@@ -175,41 +266,10 @@ def update_user_role_in_kitchen(
         role_data: Validated payload containing the new role.
 
     Returns:
-        The updated UserKitchen relationship.
-
-    Raises:
-        ValueError: If the kitchen, user, or relationship does not exist.
+        Updated UserKitchen relationship schema or None if not found.
     """
     # Get the existing relationship
-    stmt = select(UserKitchen).where(
-        UserKitchen.user_id == user_id,
-        UserKitchen.kitchen_id == kitchen_id,
-    )
-    user_kitchen = db.scalar(stmt)
-    if user_kitchen is None:
-        raise ValueError("User is not a member of this kitchen.")
-
-    # Update the role
-    user_kitchen.role = role_data.role
-    db.commit()
-    db.refresh(user_kitchen)
-    return user_kitchen
-
-
-def get_user_kitchen_relationship(
-    db: Session, kitchen_id: int, user_id: int
-) -> UserKitchen | None:
-    """Get a specific user-kitchen relationship.
-
-    Args:
-        db: Database session.
-        kitchen_id: Primary key of the kitchen.
-        user_id: Primary key of the user.
-
-    Returns:
-        The UserKitchen relationship or ``None``.
-    """
-    stmt = (
+    user_kitchen_orm = db.scalar(
         select(UserKitchen)
         .options(selectinload(UserKitchen.user))
         .where(
@@ -217,10 +277,47 @@ def get_user_kitchen_relationship(
             UserKitchen.kitchen_id == kitchen_id,
         )
     )
-    return db.scalar(stmt)
+
+    if not user_kitchen_orm:
+        return None
+
+    # Update the role
+    user_kitchen_orm.role = role_data.role
+    db.commit()
+    db.refresh(user_kitchen_orm)
+
+    return build_user_kitchen_read(user_kitchen_orm)
 
 
-def remove_user_from_kitchen(db: Session, kitchen_id: int, user_id: int) -> None:
+def get_user_kitchen_relationship(
+    db: Session, kitchen_id: int, user_id: int
+) -> UserKitchenRead | None:
+    """Get a specific user-kitchen relationship - returns schema.
+
+    Args:
+        db: Database session.
+        kitchen_id: Primary key of the kitchen.
+        user_id: Primary key of the user.
+
+    Returns:
+        UserKitchen relationship schema or None if not found.
+    """
+    user_kitchen_orm = db.scalar(
+        select(UserKitchen)
+        .options(selectinload(UserKitchen.user))
+        .where(
+            UserKitchen.user_id == user_id,
+            UserKitchen.kitchen_id == kitchen_id,
+        )
+    )
+
+    if not user_kitchen_orm:
+        return None
+
+    return build_user_kitchen_read(user_kitchen_orm)
+
+
+def remove_user_from_kitchen(db: Session, kitchen_id: int, user_id: int) -> bool:
     """Remove a user from a kitchen.
 
     Args:
@@ -228,34 +325,62 @@ def remove_user_from_kitchen(db: Session, kitchen_id: int, user_id: int) -> None
         kitchen_id: Primary key of the kitchen.
         user_id: Primary key of the user.
 
-    Raises:
-        ValueError: If the relationship does not exist.
+    Returns:
+        True if removed, False if relationship not found.
     """
-    stmt = select(UserKitchen).where(
-        UserKitchen.user_id == user_id,
-        UserKitchen.kitchen_id == kitchen_id,
+    user_kitchen_orm = db.scalar(
+        select(UserKitchen).where(
+            UserKitchen.user_id == user_id,
+            UserKitchen.kitchen_id == kitchen_id,
+        )
     )
-    user_kitchen = db.scalar(stmt)
-    if user_kitchen is None:
-        raise ValueError("User is not a member of this kitchen.")
 
-    db.delete(user_kitchen)
+    if not user_kitchen_orm:
+        return False
+
+    db.delete(user_kitchen_orm)
     db.commit()
 
+    return True
 
-def get_user_kitchens(db: Session, user_id: int) -> list[UserKitchen]:
-    """Get all kitchens a user belongs to.
+
+def get_user_kitchens(db: Session, user_id: int) -> list[UserKitchenRead]:
+    """Get all kitchens a user belongs to - returns schemas.
 
     Args:
         db: Database session.
         user_id: Primary key of the user.
 
     Returns:
-        A list of UserKitchen relationships for the user.
+        List of UserKitchen relationship schemas for the user.
     """
-    stmt = (
+    user_kitchen_orms = db.scalars(
         select(UserKitchen)
         .options(selectinload(UserKitchen.kitchen))
         .where(UserKitchen.user_id == user_id)
+        .order_by(UserKitchen.kitchen_id)
+    ).all()
+
+    return [build_user_kitchen_read(uk) for uk in user_kitchen_orms]
+
+
+# ================================================================== #
+# ORM-based Functions (for internal use when ORM objects needed)     #
+# ================================================================== #
+
+def get_kitchen_orm_by_id(db: Session, kitchen_id: int) -> Kitchen | None:
+    """Return a kitchen ORM object by primary key.
+
+    This function is for internal use when other CRUD operations need
+    the actual ORM object (e.g., for relationships).
+
+    Args:
+        db: Database session.
+        kitchen_id: Primary key of the kitchen.
+
+    Returns:
+        Kitchen ORM object or None if not found.
+    """
+    return db.scalar(
+        select(Kitchen).where(Kitchen.id == kitchen_id)
     )
-    return list(db.scalars(stmt).all())
