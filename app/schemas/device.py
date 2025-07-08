@@ -88,6 +88,7 @@ class DeviceTypeRead(_DeviceTypeBase):
 
     id: int
     created_at: datetime.datetime
+    updated_at: datetime.datetime
     total_instances: int = Field(
         description="Total number of appliances and tools of this type"
     )

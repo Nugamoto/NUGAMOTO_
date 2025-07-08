@@ -1,3 +1,4 @@
+
 """SQLAlchemy models for kitchen devices and tools."""
 
 from __future__ import annotations
@@ -47,6 +48,13 @@ class DeviceType(Base):
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
         comment="Timestamp when device type was created"
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        comment="Timestamp of last device type update"
     )
 
     # ------------------------------------------------------------------ #
