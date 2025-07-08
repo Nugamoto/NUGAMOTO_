@@ -22,7 +22,10 @@ from app.schemas.core import (
     UnitWithConversions
 )
 
-# Create routers with appropriate tags
+# ================================================================== #
+# Sub-routers for better organization                               #
+# ================================================================== #
+
 units_router = APIRouter(prefix="/units", tags=["Unit Management"])
 conversions_router = APIRouter(prefix="/units", tags=["Unit Conversion"])
 
@@ -371,10 +374,10 @@ def check_conversion_possibility(
 
 
 # ================================================================== #
-# Combined Router                                                     #
+# Main Router Assembly                                               #
 # ================================================================== #
-
-# Create main router that includes both sub-routers
 router = APIRouter()
+
+# Include all sub-routers
 router.include_router(units_router)
 router.include_router(conversions_router)
