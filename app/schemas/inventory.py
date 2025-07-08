@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from app.schemas.food import FoodItemRead
 
@@ -154,22 +154,43 @@ class InventoryItemRead(_InventoryItemBase):
     food_item: FoodItemRead
     storage_location: StorageLocationRead
 
-    # Computed properties
-    is_low_stock: bool = Field(
-        description="True if quantity is below min_quantity"
-    )
-    is_expired: bool = Field(
-        description="True if expiration_date is in the past"
-    )
-    expires_soon: bool = Field(
-        description="True if expiration_date is within configured threshold days"
-    )
+    # Computed properties using computed_field
+    @computed_field
+    @property
+    def is_low_stock(self) -> bool:
+        """True if quantity is below min_quantity."""
+        if self.min_quantity is None:
+            return False
+        return self.quantity < self.min_quantity
 
-    # Optional unit information for display
-    base_unit_name: str | None = Field(
-        None,
-        description="Name of the base unit for this item (from food_item.base_unit)"
-    )
+    @computed_field
+    @property
+    def is_expired(self) -> bool:
+        """True if expiration_date is in the past."""
+        if self.expiration_date is None:
+            return False
+        return self.expiration_date < datetime.date.today()
+
+    @computed_field
+    @property
+    def expires_soon(self) -> bool:
+        """True if expiration_date is within configured threshold days."""
+        if self.expiration_date is None:
+            return False
+
+        from app.core.config import settings
+        threshold_days = settings.expiring_items_threshold_days
+        threshold_date = datetime.date.today() + datetime.timedelta(days=threshold_days)
+        return self.expiration_date <= threshold_date
+
+    # Computed fields for derived data
+    @computed_field
+    @property
+    def base_unit_name(self) -> str | None:
+        """Name of the base unit for this item (from food_item.base_unit)."""
+        if hasattr(self.food_item, 'base_unit') and self.food_item.base_unit:
+            return self.food_item.base_unit.name
+        return None
 
     model_config = ConfigDict(from_attributes=True)
 
