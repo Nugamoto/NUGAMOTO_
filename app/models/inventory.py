@@ -1,4 +1,3 @@
-
 """SQLAlchemy ORM models for inventory management."""
 
 from __future__ import annotations
@@ -180,7 +179,7 @@ class InventoryItem(Base):
     # ------------------------------------------------------------------ #
     def is_low_stock(self) -> bool:
         """Check if this inventory item is below its minimum quantity threshold.
-        
+
         Returns:
             True if quantity is below min_quantity, False otherwise.
             If min_quantity is not set, returns False.
@@ -191,7 +190,7 @@ class InventoryItem(Base):
 
     def is_expired(self) -> bool:
         """Check if this inventory item has expired.
-        
+
         Returns:
             True if expiration_date is in the past, False otherwise.
             If expiration_date is not set, returns False.
@@ -202,10 +201,10 @@ class InventoryItem(Base):
 
     def expires_soon(self, threshold_days: int = EXPIRING_ITEMS_THRESHOLD_DAYS) -> bool:
         """Check if this inventory item will expire within the specified threshold.
-        
+
         Args:
             threshold_days: Number of days to consider as "expiring soon"
-            
+
         Returns:
             True if expiration_date is within threshold_days from today, False otherwise.
             If expiration_date is not set, returns False.
