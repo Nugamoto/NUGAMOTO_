@@ -48,6 +48,8 @@ class StorageLocationRead(_StorageLocationBase):
 
     id: int
     kitchen_id: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,7 +77,7 @@ class StorageLocationUpdate(BaseModel):
 
         if not v or v.isspace():
             raise ValueError("Storage location name cannot be empty or whitespace")
-        
+
         return v.strip().title()
 
 
@@ -116,13 +118,13 @@ class _InventoryItemBase(BaseModel):
     @field_validator('expiration_date')
     def validate_expiration_date(cls, v: datetime.date | None) -> datetime.date | None:
         """Validate that expiration date is not in the past.
-        
+
         Args:
             v: The expiration date to validate.
-            
+
         Returns:
             The validated expiration date.
-            
+
         Raises:
             ValueError: If the expiration date is in the past.
         """
@@ -133,7 +135,7 @@ class _InventoryItemBase(BaseModel):
 
 class InventoryItemCreate(_InventoryItemBase):
     """Schema for creating a new inventory item.
-    
+
     Note: Quantities are expected to be provided in the food item's base unit.
     Future versions may support unit conversion from alternative input units.
     """
@@ -145,6 +147,7 @@ class InventoryItemRead(_InventoryItemBase):
 
     id: int
     kitchen_id: int
+    created_at: datetime.datetime
     updated_at: datetime.datetime
 
     # Include related objects for convenience
@@ -202,13 +205,13 @@ class InventoryItemUpdate(_InventoryItemBase):
     @field_validator('expiration_date')
     def validate_expiration_date(cls, v: datetime.date | None) -> datetime.date | None:
         """Validate that expiration date is not in the past.
-        
+
         Args:
             v: The expiration date to validate.
-            
+
         Returns:
             The validated expiration date.
-            
+
         Raises:
             ValueError: If the expiration date is in the past.
         """
@@ -254,7 +257,7 @@ class KitchenInventorySummary(BaseModel):
 
 class InventoryItemCreateWithConversion(BaseModel):
     """Future schema for creating inventory items with unit conversion support.
-    
+
     This schema would allow users to input quantities in alternative units
     that would then be converted to the base unit before storage.
     """
