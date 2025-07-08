@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import datetime
+
 from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
 
 from app.models.kitchen import KitchenRole
 from app.schemas.user import UserRead
 
+
+# ================================================================== #
+# Kitchen Base and Main Schemas                                     #
+# ================================================================== #
 
 class _KitchenBase(BaseModel):
     """Fields shared by all kitchen-related schemas."""
@@ -47,6 +53,8 @@ class KitchenRead(_KitchenBase):
     """Schema returned to the client."""
 
     id: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
 
 
 class KitchenUpdate(_KitchenBase):
@@ -54,6 +62,10 @@ class KitchenUpdate(_KitchenBase):
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
 
+
+# ================================================================== #
+# User-Kitchen Association Schemas                                  #
+# ================================================================== #
 
 class UserKitchenBase(BaseModel):
     """Fields shared by all user-kitchen-related schemas."""
@@ -83,9 +95,15 @@ class UserKitchenRead(UserKitchenBase):
 
     user_id: int
     kitchen_id: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
     user: UserRead
     kitchen: KitchenRead
 
+
+# ================================================================== #
+# Convenience Schemas                                                #
+# ================================================================== #
 
 class KitchenWithUsers(KitchenRead):
     """Kitchen schema that includes related users."""
