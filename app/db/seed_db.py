@@ -1,3 +1,4 @@
+
 """Seed script for the NUGAMOTO SQLite database."""
 # Ausführen:  python -m app.db.seed_db
 
@@ -66,17 +67,17 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
             "box": ("package", 1),
             "tube": ("package", 1),
             "jar": ("package", 1),
-            "can": ("package", 1),  # neu
-            "pack": ("package", 1),  # neu
-            "cup": ("package", 1),  # neu
-            "block": ("package", 1),  # neu
+            "can": ("package", 1),
+            "pack": ("package", 1),
+            "cup": ("package", 1),
+            "block": ("package", 1),
             "package": ("package", 1),
             "bulk": ("package", 1),
         }
 
         all_units = {**base_units, **extra_units, **package_units}
         conn.execute(insert(units), [
-            {"name": name, "type": unit_type, "to_base_factor": factor, "created_at": now}
+            {"name": name, "type": unit_type, "to_base_factor": factor, "created_at": now, "updated_at": now}
             for name, (unit_type, factor) in all_units.items()
         ])
 
@@ -85,7 +86,8 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
 
         # ---------- conversions ----------
         conn.execute(insert(unit_conversions), [
-            {"from_unit_id": unit_id_map[frm], "to_unit_id": unit_id_map[to], "factor": fac}
+            {"from_unit_id": unit_id_map[frm], "to_unit_id": unit_id_map[to], "factor": fac,
+             "created_at": now, "updated_at": now}
             for frm, to, fac in [
                 ("kg", "g", 1000), ("lb", "g", 453.592), ("oz", "g", 28.3495),
                 ("l", "ml", 1000), ("cup", "ml", 240), ("tbsp", "ml", 15),
@@ -219,7 +221,10 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
         conn.execute(insert(user_health_profiles), health_profiles)
 
         # ---------- kitchen & storage ----------
-        kitchen_id = conn.execute(insert(kitchens).values(name="Demo Kitchen")).inserted_primary_key[0]
+        kitchen_id = conn.execute(insert(kitchens).values(
+            name="Demo Kitchen", created_at=now, updated_at=now
+        )).inserted_primary_key[0]
+        
         sl_names = ["Refrigerator (Kühlschrank)", "Freezer (Gefrierschrank)",
                     "Pantry Cabinet (Apothekerschrank)", "Larder (Speisekammer)",
                     "Drawer Unit (Schubladenschrank)"]
@@ -249,7 +254,7 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
             ("Baking Utensils (Backwerkzeug)", "TOOL", False),
         ]
         conn.execute(insert(device_types), [
-            {"name": n, "category": cat, "default_smart": dsmart, "created_at": now}
+            {"name": n, "category": cat, "default_smart": dsmart, "created_at": now, "updated_at": now}
             for n, cat, dsmart in device_types_raw
         ])
         dt_id_map = {r.name: r.id for r in conn.execute(select(device_types.c.name, device_types.c.id))}
@@ -408,6 +413,7 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
                         "alias": alias,
                         "user_id": None,
                         "created_at": now,
+                        "updated_at": now,
                     })
 
         if alias_rows:
@@ -550,7 +556,7 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
         # ---------- shopping list ----------
         shopping_list_id = conn.execute(insert(shopping_lists).values(
             kitchen_id=kitchen_id, name="Wocheneinkauf", type="supermarket",
-            created_at=now
+            created_at=now, updated_at=now
         )).inserted_primary_key[0]
 
         # ---- Hilfsmaps für Umrechnung ----
@@ -598,7 +604,7 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
             ]
 
             if not fiuc_match:
-                continue  # kein passendes Package gefunden
+                continue
 
             from_unit_id, factor = fiuc_match[0]
             from_unit_name = [k for k, v in unit_id_map.items() if v == from_unit_id][0]
