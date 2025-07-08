@@ -379,6 +379,269 @@ def delete_recipe_ingredient(db: Session, recipe_id: int, food_item_id: int) -> 
 
 
 # ================================================================== #
+# Recipe Step CRUD Operations                                        #
+# ================================================================== #
+
+def add_recipe_step(
+        db: Session,
+        recipe_id: int,
+        step_data: RecipeStepCreate,
+        current_user_id: int | None = None
+) -> RecipeStepRead:
+    """
+    Add a new step to a recipe.
+
+    Args:
+        db: Database session
+        recipe_id: ID of the recipe
+        step_data: Step data to create
+        current_user_id: ID of the current user (for authorization)
+
+    Returns:
+        RecipeStepRead: The created step
+
+    Raises:
+        HTTPException: If recipe not found, step number already exists, or permission denied
+    """
+    from fastapi import HTTPException, status
+
+    # Check if recipe exists and user has permission
+    recipe = get_recipe_orm_by_id(db, recipe_id)
+    if not recipe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recipe with ID {recipe_id} not found"
+        )
+
+    # Check if user owns the recipe (if user authentication is enabled)
+    if current_user_id is not None and recipe.created_by_user_id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only add steps to your own recipes"
+        )
+
+    # Check if step number already exists for this recipe
+    existing_step = db.query(RecipeStep).filter(
+        RecipeStep.recipe_id == recipe_id,
+        RecipeStep.step_number == step_data.step_number
+    ).first()
+
+    if existing_step:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Step number {step_data.step_number} already exists for this recipe"
+        )
+
+    # Create the new step
+    db_step = RecipeStep(
+        recipe_id=recipe_id,
+        step_number=step_data.step_number,
+        instruction=step_data.instruction
+    )
+
+    db.add(db_step)
+    db.commit()
+    db.refresh(db_step)
+
+    return build_recipe_step_read(db_step)
+
+
+def get_steps_for_recipe(
+        db: Session,
+        recipe_id: int,
+        skip: int = 0,
+        limit: int = 100
+) -> list[RecipeStepRead]:
+    """
+    Get all steps for a specific recipe, ordered by step number.
+
+    Args:
+        db: Database session
+        recipe_id: ID of the recipe
+        skip: Number of steps to skip
+        limit: Maximum number of steps to return
+
+    Returns:
+        list[RecipeStepRead]: List of recipe steps
+
+    Raises:
+        HTTPException: If recipe not found
+    """
+    from fastapi import HTTPException, status
+
+    # Check if recipe exists
+    recipe = get_recipe_orm_by_id(db, recipe_id)
+    if not recipe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recipe with ID {recipe_id} not found"
+        )
+
+    # Get steps ordered by step number
+    steps = db.query(RecipeStep).filter(
+        RecipeStep.recipe_id == recipe_id
+    ).order_by(RecipeStep.step_number).offset(skip).limit(limit).all()
+
+    return [build_recipe_step_read(step) for step in steps]
+
+
+def update_recipe_step(
+        db: Session,
+        recipe_id: int,
+        step_id: int,
+        step_data: RecipeStepUpdate,
+        current_user_id: int | None = None
+) -> RecipeStepRead:
+    """
+    Update a specific recipe step.
+
+    Args:
+        db: Database session
+        recipe_id: ID of the recipe
+        step_id: ID of the step to update
+        step_data: Updated step data
+        current_user_id: ID of the current user (for authorization)
+
+    Returns:
+        RecipeStepRead: The updated step
+
+    Raises:
+        HTTPException: If recipe or step not found, step number conflict, or permission denied
+    """
+    from fastapi import HTTPException, status
+
+    # Check if recipe exists and user has permission
+    recipe = get_recipe_orm_by_id(db, recipe_id)
+    if not recipe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recipe with ID {recipe_id} not found"
+        )
+
+    # Check if user owns the recipe (if user authentication is enabled)
+    if current_user_id is not None and recipe.created_by_user_id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update steps in your own recipes"
+        )
+
+    # Get the step to update
+    db_step = db.query(RecipeStep).filter(
+        RecipeStep.id == step_id,
+        RecipeStep.recipe_id == recipe_id
+    ).first()
+
+    if not db_step:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Step with ID {step_id} not found in recipe {recipe_id}"
+        )
+
+    # Check if step number is being changed and doesn't conflict
+    if step_data.step_number is not None and step_data.step_number != db_step.step_number:
+        existing_step = db.query(RecipeStep).filter(
+            RecipeStep.recipe_id == recipe_id,
+            RecipeStep.step_number == step_data.step_number,
+            RecipeStep.id != step_id
+        ).first()
+
+        if existing_step:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Step number {step_data.step_number} already exists for this recipe"
+            )
+
+    # Update the step fields
+    update_data = step_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_step, field, value)
+
+    db.commit()
+    db.refresh(db_step)
+
+    return build_recipe_step_read(db_step)
+
+
+def delete_recipe_step(
+        db: Session,
+        recipe_id: int,
+        step_id: int,
+        current_user_id: int | None = None
+) -> dict[str, str]:
+    """
+    Delete a specific recipe step.
+
+    Args:
+        db: Database session
+        recipe_id: ID of the recipe
+        step_id: ID of the step to delete
+        current_user_id: ID of the current user (for authorization)
+
+    Returns:
+        dict[str, str]: Success message
+
+    Raises:
+        HTTPException: If recipe or step not found, or permission denied
+    """
+    from fastapi import HTTPException, status
+
+    # Check if recipe exists and user has permission
+    recipe = get_recipe_orm_by_id(db, recipe_id)
+    if not recipe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recipe with ID {recipe_id} not found"
+        )
+
+    # Check if user owns the recipe (if user authentication is enabled)
+    if current_user_id is not None and recipe.created_by_user_id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete steps from your own recipes"
+        )
+
+    # Get the step to delete
+    db_step = db.query(RecipeStep).filter(
+        RecipeStep.id == step_id,
+        RecipeStep.recipe_id == recipe_id
+    ).first()
+
+    if not db_step:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Step with ID {step_id} not found in recipe {recipe_id}"
+        )
+
+    # Delete the step
+    db.delete(db_step)
+    db.commit()
+
+    return {"message": f"Step {step_id} successfully deleted from recipe {recipe_id}"}
+
+
+def get_recipe_step_orm_with_relationships(
+        db: Session,
+        recipe_id: int,
+        step_id: int
+) -> RecipeStep | None:
+    """
+    Get a recipe step ORM object with relationships loaded.
+
+    Args:
+        db: Database session
+        recipe_id: ID of the recipe
+        step_id: ID of the step
+
+    Returns:
+        RecipeStep | None: The step ORM object or None if not found
+    """
+    return db.query(RecipeStep).filter(
+        RecipeStep.id == step_id,
+        RecipeStep.recipe_id == recipe_id
+    ).first()
+
+
+# ================================================================== #
 # Recipe Nutrition Operations                                        #
 # ================================================================== #
 
