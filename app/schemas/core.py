@@ -96,6 +96,7 @@ class UnitRead(_UnitBase):
 
     id: int
     created_at: datetime.datetime
+    updated_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -129,14 +130,14 @@ class _UnitConversionBase(BaseModel):
     @field_validator('to_unit_id')
     def validate_different_units(cls, v: int, info) -> int:
         """Ensure from_unit_id and to_unit_id are different.
-        
+
         Args:
             v: Target unit ID.
             info: Validation info containing other field values.
-            
+
         Returns:
             Validated target unit ID.
-            
+
         Raises:
             ValueError: If attempting to create self-conversion.
         """
@@ -168,6 +169,8 @@ class UnitConversionUpdate(BaseModel):
 class UnitConversionRead(_UnitConversionBase):
     """Schema for reading unit conversion data with related unit names."""
 
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
     from_unit_name: str | None = Field(
         None,
         description="Name of the source unit"
@@ -233,5 +236,5 @@ class ConversionPossibilityCheck(BaseModel):
     can_convert: bool = Field(
         description="Whether conversion between the specified units is possible"
     )
-    
+
     model_config = ConfigDict(from_attributes=True)
