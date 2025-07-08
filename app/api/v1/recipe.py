@@ -18,14 +18,23 @@ from app.schemas.recipe import (
     RecipeSearchParams, RecipeSummary, RecipeRatingSummary
 )
 
-router = APIRouter(prefix="/recipes", tags=["Recipes"])
+# ================================================================== #
+# Sub-routers for better organization                               #
+# ================================================================== #
+
+recipe_router = APIRouter(tags=["Recipes"])
+ingredients_router = APIRouter(prefix="/{recipe_id}/ingredients", tags=["Recipe Ingredients"])
+steps_router = APIRouter(prefix="/{recipe_id}/steps", tags=["Recipe Steps"])
+nutrition_router = APIRouter(prefix="/{recipe_id}/nutrition", tags=["Recipe Nutrition"])
+reviews_router = APIRouter(prefix="/{recipe_id}/reviews", tags=["Recipe Reviews"])
 
 
 # ================================================================== #
-# Recipe CRUD Endpoints                                              #
+# Recipe CRUD Endpoints                                         #
 # ================================================================== #
 
-@router.post(
+
+@recipe_router.post(
     "/",
     response_model=RecipeRead,
     status_code=status.HTTP_201_CREATED,
@@ -56,7 +65,7 @@ def create_recipe(
         )
 
 
-@router.get(
+@recipe_router.get(
     "/",
     response_model=list[RecipeRead],
     summary="Get all recipes with optional filtering"
@@ -115,7 +124,7 @@ def get_all_recipes(
     )
 
 
-@router.get(
+@recipe_router.get(
     "/summary",
     response_model=RecipeSummary,
     summary="Get recipe statistics summary"
@@ -134,7 +143,64 @@ def get_recipe_summary(
     return crud_recipe.get_recipe_summary(db=db)
 
 
-@router.get(
+@recipe_router.get(
+    "/suggestions/by-ingredients",
+    response_model=list[RecipeRead],
+    summary="Get recipe suggestions by available ingredients"
+)
+def get_recipe_suggestions_by_ingredients(
+        food_item_ids: Annotated[list[int], Query(description="List of available food item IDs")],
+        db: Annotated[Session, Depends(get_db)],
+        min_match_percentage: Annotated[
+            float, Query(description="Minimum match percentage (0.0-1.0)", ge=0.0, le=1.0)] = 0.7
+) -> list[RecipeRead]:
+    """Get recipe suggestions based on available ingredients.
+
+    Args:
+        food_item_ids: List of available food item IDs.
+        min_match_percentage: Minimum match percentage (0.0-1.0).
+        db: Database session dependency.
+
+    Returns:
+        List of recipe suggestions ordered by match percentage.
+    """
+    if not food_item_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one food item ID is required"
+        )
+
+    return crud_recipe.get_recipes_by_available_ingredients(
+        db=db,
+        food_item_ids=food_item_ids,
+        min_match_percentage=min_match_percentage
+    )
+
+
+@recipe_router.get(
+    "/ai-generated",
+    response_model=list[RecipeRead],
+    summary="Get AI-generated recipes"
+)
+def get_ai_generated_recipes(
+        db: Annotated[Session, Depends(get_db)],
+        skip: int = 0,
+        limit: int = 100
+) -> list[RecipeRead]:
+    """Get all AI-generated recipes.
+
+    Args:
+        db: Database session dependency.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+
+    Returns:
+        List of AI-generated recipes.
+    """
+    return crud_recipe.get_ai_generated_recipes(db=db, skip=skip, limit=limit)
+
+
+@recipe_router.get(
     "/{recipe_id}",
     response_model=RecipeRead,
     summary="Get a recipe by ID"
@@ -171,7 +237,7 @@ def get_recipe(
     return recipe
 
 
-@router.get(
+@recipe_router.get(
     "/{recipe_id}/details",
     response_model=RecipeWithDetails,
     summary="Get a recipe with full details"
@@ -208,7 +274,7 @@ def get_recipe_details(
     return recipe
 
 
-@router.patch(
+@recipe_router.patch(
     "/{recipe_id}",
     response_model=RecipeRead,
     summary="Update an existing recipe"
@@ -252,7 +318,7 @@ def update_recipe(
     return updated_recipe
 
 
-@router.delete(
+@recipe_router.delete(
     "/{recipe_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a recipe"
@@ -293,8 +359,8 @@ def delete_recipe(
 # Recipe Ingredient Endpoints                                        #
 # ================================================================== #
 
-@router.post(
-    "/{recipe_id}/ingredients",
+@ingredients_router.post(
+    "",
     response_model=RecipeIngredientRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add an ingredient to a recipe"
@@ -342,8 +408,8 @@ def add_recipe_ingredient(
             )
 
 
-@router.get(
-    "/{recipe_id}/ingredients",
+@ingredients_router.get(
+    "",
     response_model=list[RecipeIngredientRead],
     summary="Get all ingredients for a recipe"
 )
@@ -369,8 +435,8 @@ def get_recipe_ingredients(
     return crud_recipe.get_ingredients_for_recipe(db=db, recipe_id=recipe_id)
 
 
-@router.patch(
-    "/{recipe_id}/ingredients/{food_item_id}",
+@ingredients_router.patch(
+    "/{food_item_id}",
     response_model=RecipeIngredientRead,
     summary="Update a recipe ingredient"
 )
@@ -422,8 +488,8 @@ def update_recipe_ingredient(
     return updated_ingredient
 
 
-@router.delete(
-    "/{recipe_id}/ingredients/{food_item_id}",
+@ingredients_router.delete(
+    "/{food_item_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a recipe ingredient"
 )
@@ -475,8 +541,8 @@ def delete_recipe_ingredient(
 # Recipe Step Endpoints                                              #
 # ================================================================== #
 
-@router.post(
-    "/{recipe_id}/steps",
+@steps_router.post(
+    "",
     response_model=RecipeStepRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add a step to a recipe"
@@ -518,8 +584,8 @@ def add_recipe_step(
         )
 
 
-@router.get(
-    "/{recipe_id}/steps",
+@steps_router.get(
+    "",
     response_model=list[RecipeStepRead],
     summary="Get all steps for a recipe"
 )
@@ -554,8 +620,8 @@ def get_recipe_steps(
     )
 
 
-@router.patch(
-    "/{recipe_id}/steps/{step_id}",
+@steps_router.patch(
+    "/{step_id}",
     response_model=RecipeStepRead,
     summary="Update a recipe step"
 )
@@ -607,8 +673,8 @@ def update_recipe_step(
     return updated_step
 
 
-@router.delete(
-    "/{recipe_id}/steps/{step_id}",
+@steps_router.delete(
+    "/{step_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a recipe step"
 )
@@ -660,8 +726,8 @@ def delete_recipe_step(
 # Recipe Nutrition Endpoints                                         #
 # ================================================================== #
 
-@router.post(
-    "/{recipe_id}/nutrition",
+@nutrition_router.post(
+    "",
     response_model=RecipeNutritionRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create or update recipe nutrition"
@@ -703,8 +769,8 @@ def create_recipe_nutrition(
         )
 
 
-@router.patch(
-    "/{recipe_id}/nutrition",
+@nutrition_router.patch(
+    "",
     response_model=RecipeNutritionRead,
     summary="Update recipe nutrition"
 )
@@ -747,8 +813,8 @@ def update_recipe_nutrition(
     return updated_nutrition
 
 
-@router.delete(
-    "/{recipe_id}/nutrition",
+@nutrition_router.delete(
+    "",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete recipe nutrition"
 )
@@ -785,72 +851,11 @@ def delete_recipe_nutrition(
 
 
 # ================================================================== #
-# Recipe Advanced Query Endpoints                                    #
-# ================================================================== #
-
-@router.get(
-    "/suggestions/by-ingredients",
-    response_model=list[RecipeRead],
-    summary="Get recipe suggestions by available ingredients"
-)
-def get_recipe_suggestions_by_ingredients(
-        food_item_ids: Annotated[list[int], Query(description="List of available food item IDs")],
-        db: Annotated[Session, Depends(get_db)],
-        min_match_percentage: Annotated[
-            float, Query(description="Minimum match percentage (0.0-1.0)", ge=0.0, le=1.0)] = 0.7
-) -> list[RecipeRead]:
-    """Get recipe suggestions based on available ingredients.
-
-    Args:
-        food_item_ids: List of available food item IDs.
-        min_match_percentage: Minimum match percentage (0.0-1.0).
-        db: Database session dependency.
-
-    Returns:
-        List of recipe suggestions ordered by match percentage.
-    """
-    if not food_item_ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one food item ID is required"
-        )
-
-    return crud_recipe.get_recipes_by_available_ingredients(
-        db=db,
-        food_item_ids=food_item_ids,
-        min_match_percentage=min_match_percentage
-    )
-
-
-@router.get(
-    "/ai-generated",
-    response_model=list[RecipeRead],
-    summary="Get AI-generated recipes"
-)
-def get_ai_generated_recipes(
-        db: Annotated[Session, Depends(get_db)],
-        skip: int = 0,
-        limit: int = 100
-) -> list[RecipeRead]:
-    """Get all AI-generated recipes.
-
-    Args:
-        db: Database session dependency.
-        skip: Number of records to skip.
-        limit: Maximum number of records to return.
-
-    Returns:
-        List of AI-generated recipes.
-    """
-    return crud_recipe.get_ai_generated_recipes(db=db, skip=skip, limit=limit)
-
-
-# ================================================================== #
 # Recipe Review Endpoints                                            #
 # ================================================================== #
 
-@router.post(
-    "/{recipe_id}/reviews",
+@reviews_router.post(
+    "",
     response_model=RecipeReviewRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create or update a recipe review"
@@ -892,8 +897,8 @@ def create_recipe_review(
     )
 
 
-@router.get(
-    "/{recipe_id}/reviews",
+@reviews_router.get(
+    "",
     response_model=list[RecipeReviewRead],
     summary="Get all reviews for a recipe"
 )
@@ -928,8 +933,8 @@ def get_recipe_reviews(
     )
 
 
-@router.get(
-    "/{recipe_id}/reviews/rating-summary",
+@reviews_router.get(
+    "/rating-summary",
     response_model=RecipeRatingSummary,
     summary="Get rating summary for a recipe"
 )
@@ -955,8 +960,8 @@ def get_recipe_rating_summary(
     return crud_recipe.get_recipe_rating_summary(db=db, recipe_id=recipe_id)
 
 
-@router.patch(
-    "/{recipe_id}/reviews/{user_id}",
+@reviews_router.patch(
+    "/{user_id}",
     response_model=RecipeReviewRead,
     summary="Update a recipe review"
 )
@@ -1008,8 +1013,8 @@ def update_recipe_review(
     return updated_review
 
 
-@router.delete(
-    "/{recipe_id}/reviews/{user_id}",
+@reviews_router.delete(
+    "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a recipe review"
 )
@@ -1055,3 +1060,16 @@ def delete_recipe_review(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
+
+
+# ================================================================== #
+# Main Router Assembly                                               #
+# ================================================================== #
+
+router = APIRouter(prefix="/recipes")
+
+# Include all sub-routers
+router.include_router(ingredients_router)
+router.include_router(steps_router)
+router.include_router(nutrition_router)
+router.include_router(reviews_router)
