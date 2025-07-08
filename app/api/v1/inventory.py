@@ -90,7 +90,7 @@ def get_storage_location(
     return storage_location
 
 
-@storage_locations_router.put(
+@storage_locations_router.patch(
     "/{storage_location_id}",
     response_model=StorageLocationRead,
     summary="Update a storage location",
