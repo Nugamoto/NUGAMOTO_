@@ -1,4 +1,3 @@
-
 """Pydantic schemas for recipe input / output."""
 
 from __future__ import annotations
@@ -108,16 +107,17 @@ class _RecipeStepBase(BaseModel):
         from_attributes=True
     )
 
-
-class RecipeStepCreate(_RecipeStepBase):
-    """Schema used on **create** (request body)."""
-
     @field_validator('instruction')
     def validate_instruction(cls, v: str) -> str:
         """Validate and normalize instruction."""
         if not v or v.isspace():
             raise ValueError("Instruction cannot be empty or whitespace")
         return v.strip()
+
+
+class RecipeStepCreate(_RecipeStepBase):
+    """Schema used on **create** (request body)."""
+    pass
 
 
 class RecipeStepRead(_RecipeStepBase):
@@ -128,6 +128,28 @@ class RecipeStepRead(_RecipeStepBase):
     created_at: datetime
     updated_at: datetime
 
+
+class RecipeStepUpdate(BaseModel):
+    """Schema for partial step updates (PATCH operations)."""
+
+    step_number: int | None = Field(default=None, ge=1)
+    instruction: str | None = Field(default=None, min_length=1)
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+    @field_validator('instruction')
+    def validate_instruction(cls, v: str | None) -> str | None:
+        """Validate and normalize instruction for optional updates."""
+        if v is None:
+            return v
+        # Reuse the same validation logic from base class
+        if not v or v.isspace():
+            raise ValueError("Instruction cannot be empty or whitespace")
+        return v.strip()
 
 
 # ================================================================== #
