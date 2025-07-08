@@ -23,7 +23,7 @@ from app.schemas.kitchen import (
 # ================================================================== #
 
 kitchens_router = APIRouter(tags=["Kitchens"])
-users_router = APIRouter(prefix="/users", tags=["Kitchen Users & Memberships"])
+users_router = APIRouter(prefix="/users", tags=["Kitchen Users"])
 
 
 # ================================================================== #
