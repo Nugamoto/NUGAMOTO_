@@ -271,6 +271,7 @@ def get_shopping_list_with_products(
         name=shopping_list_orm.name,
         type=shopping_list_orm.type,
         created_at=shopping_list_orm.created_at,
+        updated_at=shopping_list_orm.updated_at,
         product_assignments=assignments,
         total_products=total_products,
         estimated_total=estimated_total
