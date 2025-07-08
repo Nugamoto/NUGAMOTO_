@@ -18,6 +18,82 @@ from app.schemas.recipe import (
 
 
 # ================================================================== #
+# Schema Builder Functions                                           #
+# ================================================================== #
+
+def build_recipe_read(recipe_orm: Recipe) -> RecipeRead:
+    """Convert Recipe ORM to Read schema.
+
+    Args:
+        recipe_orm: Recipe ORM object with loaded relationships
+
+    Returns:
+        RecipeRead schema
+    """
+    return RecipeRead.model_validate(recipe_orm, from_attributes=True)
+
+
+def build_recipe_with_details(recipe_orm: Recipe) -> RecipeWithDetails:
+    """Convert Recipe ORM to WithDetails schema.
+
+    Args:
+        recipe_orm: Recipe ORM object with loaded relationships
+
+    Returns:
+        RecipeWithDetails schema
+    """
+    return RecipeWithDetails.model_validate(recipe_orm, from_attributes=True)
+
+
+def build_recipe_ingredient_read(ingredient_orm: RecipeIngredient) -> RecipeIngredientRead:
+    """Convert RecipeIngredient ORM to Read schema.
+
+    Args:
+        ingredient_orm: RecipeIngredient ORM object with loaded relationships
+
+    Returns:
+        RecipeIngredientRead schema
+    """
+    return RecipeIngredientRead.model_validate(ingredient_orm, from_attributes=True)
+
+
+def build_recipe_step_read(step_orm: RecipeStep) -> RecipeStepRead:
+    """Convert RecipeStep ORM to Read schema.
+
+    Args:
+        step_orm: RecipeStep ORM object
+
+    Returns:
+        RecipeStepRead schema
+    """
+    return RecipeStepRead.model_validate(step_orm, from_attributes=True)
+
+
+def build_recipe_nutrition_read(nutrition_orm: RecipeNutrition) -> RecipeNutritionRead:
+    """Convert RecipeNutrition ORM to Read schema.
+
+    Args:
+        nutrition_orm: RecipeNutrition ORM object
+
+    Returns:
+        RecipeNutritionRead schema
+    """
+    return RecipeNutritionRead.model_validate(nutrition_orm, from_attributes=True)
+
+
+def build_recipe_review_read(review_orm: RecipeReview) -> RecipeReviewRead:
+    """Convert RecipeReview ORM to Read schema.
+
+    Args:
+        review_orm: RecipeReview ORM object with loaded relationships
+
+    Returns:
+        RecipeReviewRead schema
+    """
+    return RecipeReviewRead.model_validate(review_orm, from_attributes=True)
+
+
+# ================================================================== #
 # Recipe CRUD Operations                                             #
 # ================================================================== #
 
@@ -72,7 +148,7 @@ def create_recipe(db: Session, recipe_data: RecipeCreate) -> RecipeRead:
 
     # Get the recipe with relationships and convert to RecipeRead
     recipe_with_relationships = get_recipe_orm_with_relationships(db, recipe_orm.id)
-    return RecipeRead.model_validate(recipe_with_relationships)
+    return build_recipe_read(recipe_with_relationships)
 
 
 def get_recipe_by_id(db: Session, recipe_id: int) -> RecipeRead | None:
@@ -80,7 +156,7 @@ def get_recipe_by_id(db: Session, recipe_id: int) -> RecipeRead | None:
     recipe_orm = get_recipe_orm_with_relationships(db, recipe_id)
     if not recipe_orm:
         return None
-    return RecipeRead.model_validate(recipe_orm)
+    return build_recipe_read(recipe_orm)
 
 
 def get_recipe_with_details(db: Session, recipe_id: int) -> RecipeWithDetails | None:
@@ -88,7 +164,7 @@ def get_recipe_with_details(db: Session, recipe_id: int) -> RecipeWithDetails | 
     recipe_orm = get_recipe_orm_with_relationships(db, recipe_id)
     if not recipe_orm:
         return None
-    return RecipeWithDetails.model_validate(recipe_orm)
+    return build_recipe_with_details(recipe_orm)
 
 
 def get_all_recipes(
@@ -132,7 +208,7 @@ def get_all_recipes(
     result = db.execute(query)
     recipes = result.scalars().all()
 
-    return [RecipeRead.model_validate(recipe) for recipe in recipes]
+    return [build_recipe_read(recipe) for recipe in recipes]
 
 
 def update_recipe(db: Session, recipe_id: int, recipe_data: RecipeUpdate) -> RecipeRead | None:
@@ -150,7 +226,7 @@ def update_recipe(db: Session, recipe_id: int, recipe_data: RecipeUpdate) -> Rec
 
     # Get updated recipe with relationships and convert
     updated_recipe = get_recipe_orm_with_relationships(db, recipe_id)
-    return RecipeRead.model_validate(updated_recipe)
+    return build_recipe_read(updated_recipe)
 
 
 def delete_recipe(db: Session, recipe_id: int) -> None:
@@ -244,7 +320,7 @@ def add_recipe_ingredient(
     # Get ingredient with relationships and convert
     ingredient_with_relationships = get_recipe_ingredient_orm_with_relationships(db, recipe_id,
                                                                                  ingredient_data.food_item_id)
-    return RecipeIngredientRead.model_validate(ingredient_with_relationships)
+    return build_recipe_ingredient_read(ingredient_with_relationships)
 
 
 def get_ingredients_for_recipe(db: Session, recipe_id: int) -> list[RecipeIngredientRead]:
@@ -257,7 +333,7 @@ def get_ingredients_for_recipe(db: Session, recipe_id: int) -> list[RecipeIngred
     result = db.execute(query)
     ingredients = result.scalars().all()
 
-    return [RecipeIngredientRead.model_validate(ingredient) for ingredient in ingredients]
+    return [build_recipe_ingredient_read(ingredient) for ingredient in ingredients]
 
 
 def update_recipe_ingredient(
@@ -287,7 +363,7 @@ def update_recipe_ingredient(
 
     # Get updated ingredient with relationships and convert
     updated_ingredient = get_recipe_ingredient_orm_with_relationships(db, recipe_id, food_item_id)
-    return RecipeIngredientRead.model_validate(updated_ingredient)
+    return build_recipe_ingredient_read(updated_ingredient)
 
 
 def delete_recipe_ingredient(db: Session, recipe_id: int, food_item_id: int) -> None:
@@ -331,7 +407,7 @@ def add_recipe_step(
     db.add(step_orm)
     db.commit()
 
-    return RecipeStepRead.model_validate(step_orm)
+    return build_recipe_step_read(step_orm)
 
 
 def get_steps_for_recipe(db: Session, recipe_id: int, skip: int = 0, limit: int = 100) -> list[RecipeStepRead]:
@@ -341,7 +417,7 @@ def get_steps_for_recipe(db: Session, recipe_id: int, skip: int = 0, limit: int 
     result = db.execute(query)
     steps = result.scalars().all()
 
-    return [RecipeStepRead.model_validate(step) for step in steps]
+    return [build_recipe_step_read(step) for step in steps]
 
 
 def update_recipe_step(
@@ -369,7 +445,7 @@ def update_recipe_step(
 
     db.commit()
 
-    return RecipeStepRead.model_validate(step_orm)
+    return build_recipe_step_read(step_orm)
 
 
 def delete_recipe_step(db: Session, recipe_id: int, step_id: int) -> None:
@@ -414,7 +490,7 @@ def create_or_update_recipe_nutrition(
         for field, value in nutrition_data.model_dump(exclude_unset=True).items():
             setattr(existing_nutrition, field, value)
         db.commit()
-        return RecipeNutritionRead.model_validate(existing_nutrition)
+        return build_recipe_nutrition_read(existing_nutrition)
     else:
         # Create new nutrition
         nutrition_orm = RecipeNutrition(
@@ -428,7 +504,7 @@ def create_or_update_recipe_nutrition(
         )
         db.add(nutrition_orm)
         db.commit()
-        return RecipeNutritionRead.model_validate(nutrition_orm)
+        return build_recipe_nutrition_read(nutrition_orm)
 
 
 def update_recipe_nutrition(
@@ -450,7 +526,7 @@ def update_recipe_nutrition(
 
     db.commit()
 
-    return RecipeNutritionRead.model_validate(nutrition_orm)
+    return build_recipe_nutrition_read(nutrition_orm)
 
 
 def delete_recipe_nutrition(db: Session, recipe_id: int) -> None:
@@ -501,7 +577,7 @@ def get_recipes_by_available_ingredients(
     result = db.execute(query)
     recipes = result.scalars().all()
 
-    return [RecipeRead.model_validate(recipe) for recipe in recipes]
+    return [build_recipe_read(recipe) for recipe in recipes]
 
 
 def get_ai_generated_recipes(db: Session, skip: int = 0, limit: int = 100) -> list[RecipeRead]:
@@ -513,7 +589,7 @@ def get_ai_generated_recipes(db: Session, skip: int = 0, limit: int = 100) -> li
     result = db.execute(query)
     recipes = result.scalars().all()
 
-    return [RecipeRead.model_validate(recipe) for recipe in recipes]
+    return [build_recipe_read(recipe) for recipe in recipes]
 
 
 # ================================================================== #
@@ -545,7 +621,7 @@ def create_or_update_recipe_review(
 
         # Get updated review with relationships and convert
         updated_review = get_recipe_review_orm_with_relationships(db, user_id, recipe_id)
-        return RecipeReviewRead.model_validate(updated_review)
+        return build_recipe_review_read(updated_review)
     else:
         # Create new review
         review_orm = RecipeReview(
@@ -559,7 +635,7 @@ def create_or_update_recipe_review(
 
         # Get new review with relationships and convert
         new_review = get_recipe_review_orm_with_relationships(db, user_id, recipe_id)
-        return RecipeReviewRead.model_validate(new_review)
+        return build_recipe_review_read(new_review)
 
 
 def get_recipe_reviews(db: Session, recipe_id: int, skip: int = 0, limit: int = 100) -> list[RecipeReviewRead]:
@@ -571,7 +647,7 @@ def get_recipe_reviews(db: Session, recipe_id: int, skip: int = 0, limit: int = 
     result = db.execute(query)
     reviews = result.scalars().all()
 
-    return [RecipeReviewRead.model_validate(review) for review in reviews]
+    return [build_recipe_review_read(review) for review in reviews]
 
 
 def update_recipe_review(
@@ -601,7 +677,7 @@ def update_recipe_review(
 
     # Get updated review with relationships and convert
     updated_review = get_recipe_review_orm_with_relationships(db, user_id, recipe_id)
-    return RecipeReviewRead.model_validate(updated_review)
+    return build_recipe_review_read(updated_review)
 
 
 def delete_recipe_review(db: Session, user_id: int, recipe_id: int) -> None:
