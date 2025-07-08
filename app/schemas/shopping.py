@@ -53,6 +53,7 @@ class ShoppingListRead(_ShoppingListBase):
     id: int
     kitchen_id: int
     created_at: datetime.datetime
+    updated_at: datetime.datetime
 
 
 class ShoppingListUpdate(BaseModel):
@@ -142,11 +143,11 @@ class ShoppingProductRead(_ShoppingProductBase):
 
     id: int
     created_at: datetime.datetime
-    updated_at: datetime.datetime | None
+    updated_at: datetime.datetime
 
     # Optional nested details
     food_item_name: str | None = Field(
-        default=None, 
+        default=None,
         description="Name of the associated food item"
     )
     package_unit_name: str | None = Field(
@@ -251,7 +252,7 @@ class ShoppingProductAssignmentRead(_ShoppingProductAssignmentBase):
     shopping_list_id: int
     shopping_product_id: int
     created_at: datetime.datetime
-    updated_at: datetime.datetime | None
+    updated_at: datetime.datetime
 
     # Nested product details
     shopping_product: ShoppingProductRead
