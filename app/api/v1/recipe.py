@@ -1,8 +1,10 @@
-"""FastAPI router exposing the recipe endpoints."""
+"""Recipe API endpoints."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -11,10 +13,9 @@ from app.schemas.recipe import (
     RecipeCreate, RecipeRead, RecipeUpdate, RecipeWithDetails,
     RecipeIngredientCreate, RecipeIngredientRead, RecipeIngredientUpdate,
     RecipeStepCreate, RecipeStepRead, RecipeStepUpdate,
-    RecipeSearchParams, RecipeSummary,
     RecipeNutritionCreate, RecipeNutritionRead, RecipeNutritionUpdate,
     RecipeReviewUpsert, RecipeReviewRead, RecipeReviewUpdate,
-    RecipeRatingSummary
+    RecipeSearchParams, RecipeSummary, RecipeRatingSummary
 )
 
 router = APIRouter(prefix="/recipes", tags=["Recipes"])
@@ -28,436 +29,1029 @@ router = APIRouter(prefix="/recipes", tags=["Recipes"])
     "/",
     response_model=RecipeRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new recipe",
+    summary="Create a new recipe"
 )
 def create_recipe(
         recipe_data: RecipeCreate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeRead:
-    """Create a new recipe with ingredients and steps."""
-    db_recipe = crud_recipe.create_recipe(db, recipe_data)
-    return crud_recipe.build_recipe_read(db_recipe)
+    """Create a new recipe with ingredients, steps, and optional nutrition.
+
+    Args:
+        recipe_data: Recipe creation data with ingredients, steps, and optional nutrition.
+        db: Database session dependency.
+
+    Returns:
+        The created recipe with all properties.
+
+    Raises:
+        HTTPException: 400 if validation fails or required entities don't exist.
+    """
+    try:
+        return crud_recipe.create_recipe(db=db, recipe_data=recipe_data)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.get(
     "/",
     response_model=list[RecipeRead],
-    status_code=status.HTTP_200_OK,
-    summary="Get all recipes with filtering",
+    summary="Get all recipes with optional filtering"
 )
 def get_all_recipes(
-        title_contains: str | None = Query(None, description="Filter by title containing text"),
-        is_ai_generated: bool | None = Query(None, description="Filter by AI generation status"),
-        created_by_user_id: int | None = Query(None, gt=0, description="Filter by creator"),
-        has_nutrition: bool | None = Query(None, description="Filter by nutrition availability"),
-        max_kcal: float | None = Query(None, gt=0, description="Maximum calories"),
-        min_protein_g: float | None = Query(None, ge=0, description="Minimum protein"),
-        skip: int = Query(0, ge=0, description="Number of recipes to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of recipes to return"),
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)],
+        title_contains: Annotated[str | None, Query(description="Filter by title containing text")] = None,
+        is_ai_generated: Annotated[bool | None, Query(description="Filter by AI generated flag")] = None,
+        created_by_user_id: Annotated[int | None, Query(description="Filter by creator user ID")] = None,
+        difficulty: Annotated[str | None, Query(description="Filter by difficulty")] = None,
+        has_nutrition: Annotated[bool | None, Query(description="Filter by nutrition availability")] = None,
+        max_kcal: Annotated[int | None, Query(description="Filter by max calories")] = None,
+        min_protein_g: Annotated[float | None, Query(description="Filter by min protein (g)")] = None,
+        tags_contains: Annotated[list[str] | None, Query(description="Filter by tags containing")] = None,
+        skip: int = 0,
+        limit: int = 100
 ) -> list[RecipeRead]:
-    """Get all recipes with optional filtering and pagination."""
-    search_params = RecipeSearchParams(
-        title_contains=title_contains,
-        is_ai_generated=is_ai_generated,
-        created_by_user_id=created_by_user_id,
-        has_nutrition=has_nutrition,
-        max_kcal=max_kcal,
-        min_protein_g=min_protein_g
-    )
+    """Get all recipes with pagination and optional filtering.
 
-    recipes = crud_recipe.get_all_recipes(db, search_params, skip, limit)
-    return [crud_recipe.build_recipe_read(recipe) for recipe in recipes]
+    Args:
+        db: Database session dependency.
+        title_contains: Filter by title containing text.
+        is_ai_generated: Filter by AI generated flag.
+        created_by_user_id: Filter by creator user ID.
+        difficulty: Filter by difficulty level.
+        has_nutrition: Filter by nutrition availability.
+        max_kcal: Filter by maximum calories.
+        min_protein_g: Filter by minimum protein (g).
+        tags_contains: Filter by tags containing specified values.
+        skip: Number of records to skip (for pagination).
+        limit: Maximum number of records to return.
+
+    Returns:
+        List of recipes matching the criteria.
+    """
+    # Build search parameters
+    search_params = None
+    if any([title_contains, is_ai_generated is not None, created_by_user_id, difficulty,
+            has_nutrition is not None, max_kcal, min_protein_g, tags_contains]):
+        search_params = RecipeSearchParams(
+            title_contains=title_contains,
+            is_ai_generated=is_ai_generated,
+            created_by_user_id=created_by_user_id,
+            difficulty=difficulty,
+            has_nutrition=has_nutrition,
+            max_kcal=max_kcal,
+            min_protein_g=min_protein_g,
+            tags_contains=tags_contains
+        )
+
+    return crud_recipe.get_all_recipes(
+        db=db,
+        search_params=search_params,
+        skip=skip,
+        limit=limit
+    )
 
 
 @router.get(
     "/summary",
     response_model=RecipeSummary,
-    status_code=status.HTTP_200_OK,
-    summary="Get recipe statistics",
+    summary="Get recipe statistics summary"
 )
 def get_recipe_summary(
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeSummary:
-    """Get summary statistics for all recipes."""
-    return crud_recipe.get_recipe_summary(db)
+    """Get recipe statistics summary.
+
+    Args:
+        db: Database session dependency.
+
+    Returns:
+        Recipe statistics summary.
+    """
+    return crud_recipe.get_recipe_summary(db=db)
 
 
 @router.get(
     "/{recipe_id}",
-    response_model=RecipeWithDetails,
-    status_code=status.HTTP_200_OK,
-    summary="Get a recipe with all details",
+    response_model=RecipeRead,
+    summary="Get a recipe by ID"
 )
 def get_recipe(
         recipe_id: int,
-        db: Session = Depends(get_db),
-) -> RecipeWithDetails:
-    """Get a specific recipe with all ingredients, steps, and nutrition."""
-    recipe = crud_recipe.get_recipe_with_details(db, recipe_id)
-    if recipe is None:
+        db: Annotated[Session, Depends(get_db)]
+) -> RecipeRead:
+    """Get a recipe by ID.
+
+    Args:
+        recipe_id: Recipe ID.
+        db: Database session dependency.
+
+    Returns:
+        The recipe with basic information.
+
+    Raises:
+        HTTPException: 404 if recipe not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    recipe = crud_recipe.get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if not recipe:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Recipe with ID {recipe_id} not found"
         )
-    return crud_recipe.build_recipe_with_details(recipe)
+
+    return recipe
+
+
+@router.get(
+    "/{recipe_id}/details",
+    response_model=RecipeWithDetails,
+    summary="Get a recipe with full details"
+)
+def get_recipe_details(
+        recipe_id: int,
+        db: Annotated[Session, Depends(get_db)]
+) -> RecipeWithDetails:
+    """Get a recipe with full details including ingredients, steps, and nutrition.
+
+    Args:
+        recipe_id: Recipe ID.
+        db: Database session dependency.
+
+    Returns:
+        The recipe with all details.
+
+    Raises:
+        HTTPException: 404 if recipe not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    recipe = crud_recipe.get_recipe_with_details(db=db, recipe_id=recipe_id)
+    if not recipe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recipe with ID {recipe_id} not found"
+        )
+
+    return recipe
 
 
 @router.patch(
     "/{recipe_id}",
     response_model=RecipeRead,
-    status_code=status.HTTP_200_OK,
-    summary="Update a recipe",
+    summary="Update an existing recipe"
 )
 def update_recipe(
         recipe_id: int,
         recipe_data: RecipeUpdate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeRead:
-    """Update an existing recipe."""
-    updated_recipe = crud_recipe.update_recipe(db, recipe_id, recipe_data)
-    if updated_recipe is None:
+    """Update an existing recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        recipe_data: Recipe update data.
+        db: Database session dependency.
+
+    Returns:
+        The updated recipe.
+
+    Raises:
+        HTTPException: 404 if recipe not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    updated_recipe = crud_recipe.update_recipe(
+        db=db,
+        recipe_id=recipe_id,
+        recipe_data=recipe_data
+    )
+
+    if not updated_recipe:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Recipe with ID {recipe_id} not found"
         )
-    return crud_recipe.build_recipe_read(updated_recipe)
+
+    return updated_recipe
 
 
 @router.delete(
     "/{recipe_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a recipe",
+    summary="Delete a recipe"
 )
 def delete_recipe(
         recipe_id: int,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> Response:
-    """Delete a recipe and all its related data."""
-    crud_recipe.delete_recipe(db, recipe_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    """Delete a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        db: Database session dependency.
+
+    Returns:
+        Empty response.
+
+    Raises:
+        HTTPException: 404 if recipe not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    try:
+        crud_recipe.delete_recipe(db=db, recipe_id=recipe_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
 
 
 # ================================================================== #
-# Recipe Ingredient Endpoints                                       #
+# Recipe Ingredient Endpoints                                        #
 # ================================================================== #
 
 @router.post(
     "/{recipe_id}/ingredients",
     response_model=RecipeIngredientRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Add an ingredient to a recipe",
+    summary="Add an ingredient to a recipe"
 )
 def add_recipe_ingredient(
         recipe_id: int,
         ingredient_data: RecipeIngredientCreate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeIngredientRead:
-    """Add an ingredient to a recipe."""
-    ingredient = crud_recipe.add_recipe_ingredient(db, recipe_id, ingredient_data)
-    return crud_recipe.build_recipe_ingredient_read(ingredient)
+    """Add an ingredient to a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        ingredient_data: Ingredient creation data.
+        db: Database session dependency.
+
+    Returns:
+        The created ingredient.
+
+    Raises:
+        HTTPException: 400 if validation fails, 404 if recipe not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    try:
+        return crud_recipe.add_recipe_ingredient(
+            db=db,
+            recipe_id=recipe_id,
+            ingredient_data=ingredient_data
+        )
+    except ValueError as e:
+        if "not found" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
 
 
 @router.get(
     "/{recipe_id}/ingredients",
     response_model=list[RecipeIngredientRead],
-    status_code=status.HTTP_200_OK,
-    summary="Get recipe ingredients",
+    summary="Get all ingredients for a recipe"
 )
 def get_recipe_ingredients(
         recipe_id: int,
-        skip: int = Query(0, ge=0, description="Number of ingredients to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of ingredients to return"),
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> list[RecipeIngredientRead]:
-    """Get all ingredients for a recipe."""
-    ingredients = crud_recipe.get_ingredients_for_recipe(db, recipe_id, skip, limit)
-    return [crud_recipe.build_recipe_ingredient_read(ingredient) for ingredient in ingredients]
+    """Get all ingredients for a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        db: Database session dependency.
+
+    Returns:
+        List of recipe ingredients.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    return crud_recipe.get_ingredients_for_recipe(db=db, recipe_id=recipe_id)
 
 
 @router.patch(
     "/{recipe_id}/ingredients/{food_item_id}",
     response_model=RecipeIngredientRead,
-    status_code=status.HTTP_200_OK,
-    summary="Update a recipe ingredient",
+    summary="Update a recipe ingredient"
 )
 def update_recipe_ingredient(
         recipe_id: int,
         food_item_id: int,
         ingredient_data: RecipeIngredientUpdate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeIngredientRead:
-    """Update a recipe ingredient."""
-    ingredient = crud_recipe.update_recipe_ingredient(db, recipe_id, food_item_id, ingredient_data)
-    if ingredient is None:
+    """Update a recipe ingredient.
+
+    Args:
+        recipe_id: Recipe ID.
+        food_item_id: Food item ID.
+        ingredient_data: Ingredient update data.
+        db: Database session dependency.
+
+    Returns:
+        The updated ingredient.
+
+    Raises:
+        HTTPException: 404 if ingredient not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    if food_item_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Food item ID must be a positive integer"
+        )
+
+    updated_ingredient = crud_recipe.update_recipe_ingredient(
+        db=db,
+        recipe_id=recipe_id,
+        food_item_id=food_item_id,
+        ingredient_data=ingredient_data
+    )
+
+    if not updated_ingredient:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ingredient with food_item_id {food_item_id} not found in recipe {recipe_id}"
+            detail=f"Ingredient with food item ID {food_item_id} not found in recipe {recipe_id}"
         )
-    return crud_recipe.build_recipe_ingredient_read(ingredient)
+
+    return updated_ingredient
 
 
 @router.delete(
     "/{recipe_id}/ingredients/{food_item_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Remove an ingredient from a recipe",
+    summary="Delete a recipe ingredient"
 )
 def delete_recipe_ingredient(
         recipe_id: int,
         food_item_id: int,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> Response:
-    """Remove an ingredient from a recipe."""
-    crud_recipe.delete_recipe_ingredient(db, recipe_id, food_item_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    """Remove an ingredient from a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        food_item_id: Food item ID.
+        db: Database session dependency.
+
+    Returns:
+        Empty response.
+
+    Raises:
+        HTTPException: 404 if ingredient not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    if food_item_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Food item ID must be a positive integer"
+        )
+
+    try:
+        crud_recipe.delete_recipe_ingredient(
+            db=db,
+            recipe_id=recipe_id,
+            food_item_id=food_item_id
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
 
 
 # ================================================================== #
-# Recipe Step Endpoints                                             #
+# Recipe Step Endpoints                                              #
 # ================================================================== #
 
 @router.post(
     "/{recipe_id}/steps",
     response_model=RecipeStepRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Add a step to a recipe",
+    summary="Add a step to a recipe"
 )
 def add_recipe_step(
         recipe_id: int,
         step_data: RecipeStepCreate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeStepRead:
-    """Add a step to a recipe."""
-    step = crud_recipe.add_recipe_step(db, recipe_id, step_data)
-    return step
+    """Add a step to a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        step_data: Step creation data.
+        db: Database session dependency.
+
+    Returns:
+        The created step.
+
+    Raises:
+        HTTPException: 400 if validation fails, 404 if recipe not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    try:
+        return crud_recipe.add_recipe_step(
+            db=db,
+            recipe_id=recipe_id,
+            step_data=step_data
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
 
 
 @router.get(
     "/{recipe_id}/steps",
     response_model=list[RecipeStepRead],
-    status_code=status.HTTP_200_OK,
-    summary="Get recipe steps",
+    summary="Get all steps for a recipe"
 )
 def get_recipe_steps(
         recipe_id: int,
-        skip: int = Query(0, ge=0, description="Number of steps to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of steps to return"),
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)],
+        skip: int = 0,
+        limit: int = 100
 ) -> list[RecipeStepRead]:
-    """Get all steps for a recipe, ordered by step number."""
-    steps = crud_recipe.get_steps_for_recipe(db, recipe_id, skip, limit)
-    return steps
+    """Get all steps for a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        db: Database session dependency.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+
+    Returns:
+        List of recipe steps ordered by step number.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    return crud_recipe.get_steps_for_recipe(
+        db=db,
+        recipe_id=recipe_id,
+        skip=skip,
+        limit=limit
+    )
 
 
 @router.patch(
     "/{recipe_id}/steps/{step_id}",
     response_model=RecipeStepRead,
-    status_code=status.HTTP_200_OK,
-    summary="Update a recipe step",
+    summary="Update a recipe step"
 )
 def update_recipe_step(
         recipe_id: int,
         step_id: int,
         step_data: RecipeStepUpdate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeStepRead:
-    """Update a recipe step."""
-    step = crud_recipe.update_recipe_step(db, recipe_id, step_id, step_data)
-    return step
+    """Update a recipe step.
+
+    Args:
+        recipe_id: Recipe ID.
+        step_id: Step ID.
+        step_data: Step update data.
+        db: Database session dependency.
+
+    Returns:
+        The updated step.
+
+    Raises:
+        HTTPException: 404 if step not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    if step_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Step ID must be a positive integer"
+        )
+
+    updated_step = crud_recipe.update_recipe_step(
+        db=db,
+        recipe_id=recipe_id,
+        step_id=step_id,
+        step_data=step_data
+    )
+
+    if not updated_step:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Step with ID {step_id} not found in recipe {recipe_id}"
+        )
+
+    return updated_step
 
 
 @router.delete(
     "/{recipe_id}/steps/{step_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Remove a step from a recipe",
+    summary="Delete a recipe step"
 )
 def delete_recipe_step(
         recipe_id: int,
         step_id: int,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> Response:
-    """Remove a step from a recipe."""
-    crud_recipe.delete_recipe_step(db, recipe_id, step_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    """Delete a recipe step.
+
+    Args:
+        recipe_id: Recipe ID.
+        step_id: Step ID.
+        db: Database session dependency.
+
+    Returns:
+        Empty response.
+
+    Raises:
+        HTTPException: 404 if step not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    if step_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Step ID must be a positive integer"
+        )
+
+    try:
+        crud_recipe.delete_recipe_step(
+            db=db,
+            recipe_id=recipe_id,
+            step_id=step_id
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
 
 
 # ================================================================== #
-# Recipe Nutrition Endpoints                                        #
+# Recipe Nutrition Endpoints                                         #
 # ================================================================== #
 
 @router.post(
     "/{recipe_id}/nutrition",
     response_model=RecipeNutritionRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create recipe nutrition",
+    summary="Create or update recipe nutrition"
 )
 def create_recipe_nutrition(
         recipe_id: int,
         nutrition_data: RecipeNutritionCreate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeNutritionRead:
-    """Create or update nutrition information for a recipe."""
-    nutrition = crud_recipe.create_or_update_recipe_nutrition(db, recipe_id, nutrition_data)
-    return crud_recipe.build_recipe_nutrition_read(nutrition)
+    """Create or update nutrition information for a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        nutrition_data: Nutrition creation data.
+        db: Database session dependency.
+
+    Returns:
+        The created or updated nutrition information.
+
+    Raises:
+        HTTPException: 404 if recipe not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    try:
+        return crud_recipe.create_or_update_recipe_nutrition(
+            db=db,
+            recipe_id=recipe_id,
+            nutrition_data=nutrition_data
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
 
 
 @router.patch(
     "/{recipe_id}/nutrition",
     response_model=RecipeNutritionRead,
-    status_code=status.HTTP_200_OK,
-    summary="Update recipe nutrition",
+    summary="Update recipe nutrition"
 )
 def update_recipe_nutrition(
         recipe_id: int,
         nutrition_data: RecipeNutritionUpdate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeNutritionRead:
-    """Update existing nutrition information for a recipe."""
-    nutrition = crud_recipe.update_recipe_nutrition(db, recipe_id, nutrition_data)
-    if nutrition is None:
+    """Update nutrition information for a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        nutrition_data: Nutrition update data.
+        db: Database session dependency.
+
+    Returns:
+        The updated nutrition information.
+
+    Raises:
+        HTTPException: 404 if nutrition not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    updated_nutrition = crud_recipe.update_recipe_nutrition(
+        db=db,
+        recipe_id=recipe_id,
+        nutrition_data=nutrition_data
+    )
+
+    if not updated_nutrition:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Nutrition information not found for recipe {recipe_id}"
+            detail=f"Nutrition information for recipe {recipe_id} not found"
         )
-    return crud_recipe.build_recipe_nutrition_read(nutrition)
+
+    return updated_nutrition
 
 
 @router.delete(
     "/{recipe_id}/nutrition",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete recipe nutrition",
+    summary="Delete recipe nutrition"
 )
 def delete_recipe_nutrition(
         recipe_id: int,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> Response:
-    """Delete nutrition information for a recipe."""
-    crud_recipe.delete_recipe_nutrition(db, recipe_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    """Delete nutrition information for a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        db: Database session dependency.
+
+    Returns:
+        Empty response.
+
+    Raises:
+        HTTPException: 404 if nutrition not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    try:
+        crud_recipe.delete_recipe_nutrition(db=db, recipe_id=recipe_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
 
 
 # ================================================================== #
-# Recipe Advanced Query Endpoints                                   #
+# Recipe Advanced Query Endpoints                                    #
 # ================================================================== #
 
 @router.get(
     "/suggestions/by-ingredients",
     response_model=list[RecipeRead],
-    status_code=status.HTTP_200_OK,
-    summary="Get recipe suggestions by available ingredients",
+    summary="Get recipe suggestions by available ingredients"
 )
 def get_recipe_suggestions_by_ingredients(
-        food_item_ids: list[int] = Query(..., description="Available food item IDs"),
-        min_match_percentage: float = Query(0.7, ge=0.0, le=1.0, description="Minimum match percentage"),
-        skip: int = Query(0, ge=0, description="Number of recipes to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of recipes to return"),
-        db: Session = Depends(get_db),
+        food_item_ids: Annotated[list[int], Query(description="List of available food item IDs")],
+        db: Annotated[Session, Depends(get_db)],
+        min_match_percentage: Annotated[
+            float, Query(description="Minimum match percentage (0.0-1.0)", ge=0.0, le=1.0)] = 0.7
 ) -> list[RecipeRead]:
-    """Get recipes that can be made with available ingredients."""
-    recipes = crud_recipe.get_recipes_by_available_ingredients(db, food_item_ids, min_match_percentage)
-    return [crud_recipe.build_recipe_read(recipe) for recipe in recipes]
+    """Get recipe suggestions based on available ingredients.
+
+    Args:
+        food_item_ids: List of available food item IDs.
+        min_match_percentage: Minimum match percentage (0.0-1.0).
+        db: Database session dependency.
+
+    Returns:
+        List of recipe suggestions ordered by match percentage.
+    """
+    if not food_item_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one food item ID is required"
+        )
+
+    return crud_recipe.get_recipes_by_available_ingredients(
+        db=db,
+        food_item_ids=food_item_ids,
+        min_match_percentage=min_match_percentage
+    )
 
 
 @router.get(
     "/ai-generated",
     response_model=list[RecipeRead],
-    status_code=status.HTTP_200_OK,
-    summary="Get AI-generated recipes",
+    summary="Get AI-generated recipes"
 )
 def get_ai_generated_recipes(
-        skip: int = Query(0, ge=0, description="Number of recipes to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of recipes to return"),
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)],
+        skip: int = 0,
+        limit: int = 100
 ) -> list[RecipeRead]:
-    """Get all AI-generated recipes."""
-    recipes = crud_recipe.get_ai_generated_recipes(db, skip, limit)
-    return [crud_recipe.build_recipe_read(recipe) for recipe in recipes]
+    """Get all AI-generated recipes.
+
+    Args:
+        db: Database session dependency.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+
+    Returns:
+        List of AI-generated recipes.
+    """
+    return crud_recipe.get_ai_generated_recipes(db=db, skip=skip, limit=limit)
 
 
 # ================================================================== #
-# Recipe Review Endpoints                                           #
+# Recipe Review Endpoints                                            #
 # ================================================================== #
 
 @router.post(
     "/{recipe_id}/reviews",
     response_model=RecipeReviewRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a recipe review",
+    summary="Create or update a recipe review"
 )
 def create_recipe_review(
         recipe_id: int,
-        user_id: int,
+        user_id: Annotated[int, Query(description="User ID of the reviewer")],
         review_data: RecipeReviewUpsert,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeReviewRead:
-    """Create or update a recipe review."""
-    review = crud_recipe.create_or_update_recipe_review(db, user_id, recipe_id, review_data)
-    return crud_recipe.build_recipe_review_read(review)
+    """Create or update a recipe review.
+
+    Args:
+        recipe_id: Recipe ID.
+        user_id: User ID of the reviewer.
+        review_data: Review data.
+        db: Database session dependency.
+
+    Returns:
+        The created or updated review.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    if user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User ID must be a positive integer"
+        )
+
+    return crud_recipe.create_or_update_recipe_review(
+        db=db,
+        user_id=user_id,
+        recipe_id=recipe_id,
+        review_data=review_data
+    )
 
 
 @router.get(
     "/{recipe_id}/reviews",
     response_model=list[RecipeReviewRead],
-    status_code=status.HTTP_200_OK,
-    summary="Get recipe reviews",
+    summary="Get all reviews for a recipe"
 )
 def get_recipe_reviews(
         recipe_id: int,
-        skip: int = Query(0, ge=0, description="Number of reviews to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of reviews to return"),
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)],
+        skip: int = 0,
+        limit: int = 100
 ) -> list[RecipeReviewRead]:
-    """Get all reviews for a recipe."""
-    reviews = crud_recipe.get_recipe_reviews(db, recipe_id, skip, limit)
-    return [crud_recipe.build_recipe_review_read(review) for review in reviews]
+    """Get all reviews for a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        db: Database session dependency.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+
+    Returns:
+        List of recipe reviews.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    return crud_recipe.get_recipe_reviews(
+        db=db,
+        recipe_id=recipe_id,
+        skip=skip,
+        limit=limit
+    )
 
 
 @router.get(
-    "/{recipe_id}/rating-summary",
+    "/{recipe_id}/reviews/rating-summary",
     response_model=RecipeRatingSummary,
-    status_code=status.HTTP_200_OK,
-    summary="Get recipe rating summary",
+    summary="Get rating summary for a recipe"
 )
 def get_recipe_rating_summary(
         recipe_id: int,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeRatingSummary:
-    """Get rating summary for a recipe."""
-    return crud_recipe.get_recipe_rating_summary(db, recipe_id)
+    """Get rating summary for a recipe.
+
+    Args:
+        recipe_id: Recipe ID.
+        db: Database session dependency.
+
+    Returns:
+        Rating summary with average rating and distribution.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    return crud_recipe.get_recipe_rating_summary(db=db, recipe_id=recipe_id)
 
 
 @router.patch(
     "/{recipe_id}/reviews/{user_id}",
     response_model=RecipeReviewRead,
-    status_code=status.HTTP_200_OK,
-    summary="Update a recipe review",
+    summary="Update a recipe review"
 )
 def update_recipe_review(
         recipe_id: int,
         user_id: int,
         review_data: RecipeReviewUpdate,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> RecipeReviewRead:
-    """Update an existing recipe review."""
-    review = crud_recipe.update_recipe_review(db, user_id, recipe_id, review_data)
-    if review is None:
+    """Update a recipe review.
+
+    Args:
+        recipe_id: Recipe ID.
+        user_id: User ID of the reviewer.
+        review_data: Review update data.
+        db: Database session dependency.
+
+    Returns:
+        The updated review.
+
+    Raises:
+        HTTPException: 404 if review not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    if user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User ID must be a positive integer"
+        )
+
+    updated_review = crud_recipe.update_recipe_review(
+        db=db,
+        user_id=user_id,
+        recipe_id=recipe_id,
+        review_data=review_data
+    )
+
+    if not updated_review:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Review not found for user {user_id} and recipe {recipe_id}"
+            detail=f"Review for recipe {recipe_id} by user {user_id} not found"
         )
-    return crud_recipe.build_recipe_review_read(review)
+
+    return updated_review
 
 
 @router.delete(
     "/{recipe_id}/reviews/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a recipe review",
+    summary="Delete a recipe review"
 )
 def delete_recipe_review(
         recipe_id: int,
         user_id: int,
-        db: Session = Depends(get_db),
+        db: Annotated[Session, Depends(get_db)]
 ) -> Response:
-    """Delete a recipe review."""
-    crud_recipe.delete_recipe_review(db, user_id, recipe_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    """Delete a recipe review.
+
+    Args:
+        recipe_id: Recipe ID.
+        user_id: User ID of the reviewer.
+        db: Database session dependency.
+
+    Returns:
+        Empty response.
+
+    Raises:
+        HTTPException: 404 if review not found.
+    """
+    if recipe_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipe ID must be a positive integer"
+        )
+
+    if user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User ID must be a positive integer"
+        )
+
+    try:
+        crud_recipe.delete_recipe_review(
+            db=db,
+            user_id=user_id,
+            recipe_id=recipe_id
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
