@@ -75,14 +75,14 @@ class FoodItemRead(_FoodItemBase):
 
     id: int
     created_at: datetime.datetime
-    updated_at: datetime.datetime | None
+    updated_at: datetime.datetime
 
     # Include base unit relationship for convenience
     base_unit: UnitRead | None = Field(
         None,
         description="Base unit information (populated from relationship)"
     )
-    
+
     # Include base unit name for backward compatibility
     base_unit_name: str | None = Field(
         None,
@@ -196,6 +196,7 @@ class FoodItemAliasRead(_FoodItemAliasBase):
 
     id: int
     created_at: datetime.datetime
+    updated_at: datetime.datetime
 
     # Include related information for convenience
     food_item_name: str | None = Field(
@@ -256,6 +257,7 @@ class FoodItemUnitConversionRead(_FoodItemUnitConversionBase):
     """Schema for reading food item unit conversion data."""
 
     created_at: datetime.datetime
+    updated_at: datetime.datetime
 
     # Include related information for convenience
     food_item_name: str | None = Field(

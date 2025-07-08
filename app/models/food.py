@@ -1,3 +1,4 @@
+
 """SQLAlchemy ORM models for food system."""
 
 from __future__ import annotations
@@ -57,9 +58,10 @@ class FoodItem(Base):
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
-    updated_at: Mapped[datetime.datetime | None] = mapped_column(
+    updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime,
-        nullable=True,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
         onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
@@ -100,7 +102,7 @@ class FoodItemAlias(Base):
 
     Allows multiple names/aliases for the same food item.
     For example, "Haferflocken" → "Porridge", "Oats".
-    
+
     The user_id field is optional to allow both global and user-specific aliases.
     """
 
@@ -132,6 +134,12 @@ class FoodItemAlias(Base):
         DateTime,
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
@@ -213,6 +221,12 @@ class FoodItemUnitConversion(Base):
         DateTime,
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
