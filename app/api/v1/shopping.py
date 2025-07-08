@@ -19,7 +19,8 @@ from app.schemas.shopping import (
 # Sub-routers for better organization                               #
 # ================================================================== #
 
-kitchen_router = APIRouter(prefix="/kitchens/{kitchen_id}/shopping-lists", tags=["Shopping Lists"])
+lists_router = APIRouter(prefix="/kitchens/{kitchen_id}/shopping-lists", tags=["Shopping Lists"])
+assignments_router = APIRouter(prefix="/kitchens/{kitchen_id}/shopping-lists/{list_id}/products", tags=["Shopping List Product Assignments"])
 products_router = APIRouter(prefix="/shopping-products", tags=["Shopping Products"])
 
 
@@ -265,7 +266,7 @@ def get_products_for_food_item(
 # Shopping Lists Management (Kitchen-scoped)                        #
 # ================================================================== #
 
-@kitchen_router.post(
+@lists_router.post(
     "/",
     response_model=ShoppingListRead,
     status_code=status.HTTP_201_CREATED,
@@ -309,7 +310,7 @@ def create_shopping_list(
         ) from exc
 
 
-@kitchen_router.get(
+@lists_router.get(
     "/",
     response_model=list[ShoppingListRead],
     status_code=status.HTTP_200_OK,
@@ -331,7 +332,7 @@ def get_kitchen_shopping_lists(
     return crud_shopping.get_kitchen_shopping_lists(db, kitchen_id)
 
 
-@kitchen_router.get(
+@lists_router.get(
     "/{list_id}",
     response_model=ShoppingListRead,
     status_code=status.HTTP_200_OK,
@@ -372,7 +373,7 @@ def get_shopping_list(
     return shopping_list
 
 
-@kitchen_router.get(
+@lists_router.get(
     "/{list_id}/with-products",
     response_model=ShoppingListWithProducts,
     status_code=status.HTTP_200_OK,
@@ -426,7 +427,7 @@ def get_shopping_list_with_products(
     return list_with_products
 
 
-@kitchen_router.patch(
+@lists_router.patch(
     "/{list_id}",
     response_model=ShoppingListRead,
     status_code=status.HTTP_200_OK,
@@ -477,7 +478,7 @@ def update_shopping_list(
     return updated_list
 
 
-@kitchen_router.delete(
+@lists_router.delete(
     "/{list_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete shopping list"
@@ -529,11 +530,11 @@ def delete_shopping_list(
 
 
 # ================================================================== #
-# Shopping List Product Assignment Management                       #
+# Shopping List Product Assignments                                 #
 # ================================================================== #
 
-@kitchen_router.post(
-    "/{list_id}/products",
+@assignments_router.post(
+    "/",
     response_model=ShoppingProductAssignmentRead,
     status_code=status.HTTP_201_CREATED,
     summary="Assign product to shopping list"
@@ -603,8 +604,8 @@ def assign_product_to_list(
         ) from exc
 
 
-@kitchen_router.post(
-    "/{list_id}/products/create-and-assign",
+@assignments_router.post(
+    "/create-and-assign",
     response_model=ShoppingProductAssignmentRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create product and assign to shopping list"
@@ -703,8 +704,8 @@ def create_product_and_assign_to_list(
         ) from exc
 
 
-@kitchen_router.get(
-    "/{list_id}/products",
+@assignments_router.get(
+    "/",
     response_model=list[ShoppingProductAssignmentRead],
     status_code=status.HTTP_200_OK,
     summary="Get shopping list products"
@@ -762,8 +763,8 @@ def get_shopping_list_products(
     )
 
 
-@kitchen_router.patch(
-    "/{list_id}/products/{product_id}",
+@assignments_router.patch(
+    "/{product_id}",
     response_model=ShoppingProductAssignmentRead,
     status_code=status.HTTP_200_OK,
     summary="Update product assignment"
@@ -828,8 +829,8 @@ def update_product_assignment(
     return updated_assignment
 
 
-@kitchen_router.delete(
-    "/{list_id}/products/{product_id}",
+@assignments_router.delete(
+    "/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove product from shopping list"
 )
@@ -889,5 +890,6 @@ def remove_product_from_list(
 router = APIRouter(prefix="/shopping")
 
 # Include all sub-routers
-router.include_router(kitchen_router)
+router.include_router(lists_router)
+router.include_router(assignments_router)
 router.include_router(products_router)
