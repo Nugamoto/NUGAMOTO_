@@ -126,6 +126,7 @@ class RecipeStepRead(_RecipeStepBase):
     id: int
     recipe_id: int
     created_at: datetime
+    updated_at: datetime
 
 
 
@@ -169,6 +170,7 @@ class RecipeNutritionRead(_RecipeNutritionBase):
 
     recipe_id: int
     created_at: datetime
+    updated_at: datetime
 
     # Computed fields populated by CRUD builders
     has_complete_macros: bool = Field(..., description="Whether all macros are available")
@@ -289,6 +291,7 @@ class RecipeRead(_RecipeBase):
 
     id: int
     created_at: datetime
+    updated_at: datetime
     created_by_user: UserRead | None = None
 
 
@@ -297,6 +300,7 @@ class RecipeWithDetails(_RecipeBase):
 
     id: int
     created_at: datetime
+    updated_at: datetime
     created_by_user: UserRead | None = None
 
     ingredients: list[RecipeIngredientRead] = Field(default_factory=list)
@@ -426,6 +430,7 @@ class RecipeReviewRead(_RecipeReviewBase):
     user_id: int
     recipe_id: int
     created_at: datetime
+    updated_at: datetime
     user: UserRead
 
 
