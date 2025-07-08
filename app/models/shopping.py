@@ -1,3 +1,4 @@
+
 """SQLAlchemy ORM models for shopping system v2.0."""
 
 from __future__ import annotations
@@ -45,6 +46,12 @@ class ShoppingList(Base):
         DateTime, nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
@@ -68,7 +75,7 @@ class ShoppingList(Base):
 
 class ShoppingProduct(Base):
     """Global shopping product catalog (v2.0).
-    
+
     Represents a purchasable product that can be assigned to multiple shopping lists.
     Each product defines a specific package with its unit, quantity, and base unit conversion.
     """
@@ -118,9 +125,10 @@ class ShoppingProduct(Base):
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
-    updated_at: Mapped[datetime.datetime | None] = mapped_column(
+    updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime,
-        nullable=True,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
         onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
@@ -141,7 +149,7 @@ class ShoppingProduct(Base):
     @property
     def unit_price(self) -> float | None:
         """Calculate price per base unit if price is available.
-        
+
         Returns:
             Price per base unit (e.g., price per gram) or None if no price set.
         """
@@ -162,7 +170,7 @@ class ShoppingProduct(Base):
 
 class ShoppingProductAssignment(Base):
     """Assignment of a shopping product to a specific shopping list (v2.0).
-    
+
     This is the join table that connects shopping lists with products,
     allowing the same product to be on multiple lists with different contexts.
     Uses composite primary key for optimal performance.
@@ -212,9 +220,10 @@ class ShoppingProductAssignment(Base):
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
-    updated_at: Mapped[datetime.datetime | None] = mapped_column(
+    updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime,
-        nullable=True,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
         onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
