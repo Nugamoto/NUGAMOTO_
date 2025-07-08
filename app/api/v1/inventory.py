@@ -18,9 +18,6 @@ from app.schemas.inventory import (
     StorageLocationUpdate,
 )
 
-# Create router
-inventory_router = APIRouter()
-
 # Sub-routers for different resource types
 storage_locations_router = APIRouter(prefix="/storage-locations", tags=["storage-locations"])
 inventory_items_router = APIRouter(prefix="/items", tags=["inventory-items"])
@@ -294,8 +291,11 @@ def get_expired_items(
 
 
 # ================================================================== #
-# Register Sub-Routers                                               #
+# Main Router Assembly                                               #
 # ================================================================== #
 
-inventory_router.include_router(storage_locations_router)
-inventory_router.include_router(inventory_items_router)
+router = APIRouter()
+
+# Include all sub-routers
+router.include_router(storage_locations_router)
+router.include_router(inventory_items_router)
