@@ -1,3 +1,4 @@
+
 """FastAPI router exposing the kitchens endpoints."""
 
 from __future__ import annotations
@@ -17,14 +18,19 @@ from app.schemas.kitchen import (
     UserKitchenUpdate,
 )
 
-router = APIRouter(prefix="/kitchens", tags=["Kitchens"])
+# ================================================================== #
+# Sub-routers for better organization                               #
+# ================================================================== #
+
+kitchens_router = APIRouter(tags=["Kitchens"])
+users_router = APIRouter(prefix="/users", tags=["Kitchen Users & Memberships"])
 
 
 # ================================================================== #
-# Kitchen Management Routes                                          #
+# Kitchen Management CRUD                                           #
 # ================================================================== #
 
-@router.post(
+@kitchens_router.post(
     "/",
     response_model=KitchenRead,
     status_code=status.HTTP_201_CREATED,
@@ -46,7 +52,7 @@ def create_kitchen(
     return crud_kitchen.create_kitchen(db, kitchen_data)
 
 
-@router.get(
+@kitchens_router.get(
     "/",
     response_model=list[KitchenRead],
     status_code=status.HTTP_200_OK,
@@ -64,7 +70,7 @@ def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
     return crud_kitchen.get_all_kitchens(db)
 
 
-@router.get(
+@kitchens_router.get(
     "/{kitchen_id}",
     response_model=KitchenWithUsers,
     status_code=status.HTTP_200_OK,
@@ -93,7 +99,7 @@ def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUs
     return kitchen
 
 
-@router.patch(
+@kitchens_router.patch(
     "/{kitchen_id}",
     response_model=KitchenRead,
     status_code=status.HTTP_200_OK,
@@ -139,7 +145,7 @@ def update_kitchen(
     return updated_kitchen
 
 
-@router.delete(
+@kitchens_router.delete(
     "/{kitchen_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a kitchen",
@@ -174,11 +180,11 @@ def delete_kitchen(
 
 
 # ================================================================== #
-# User-Kitchen Relationship Routes                                   #
+# Kitchen Users & Memberships                                       #
 # ================================================================== #
 
-@router.post(
-    "/{kitchen_id}/users",
+@users_router.post(
+    "/{kitchen_id}/",
     response_model=UserKitchenRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add user to kitchen",
@@ -229,8 +235,42 @@ def add_user_to_kitchen(
         ) from exc
 
 
-@router.patch(
-    "/{kitchen_id}/users/{user_id}/role",
+@users_router.get(
+    "/{kitchen_id}/{user_id}",
+    response_model=UserKitchenRead,
+    status_code=status.HTTP_200_OK,
+    summary="Get user's role in kitchen",
+)
+def get_user_role_in_kitchen(
+        kitchen_id: int,
+        user_id: int,
+        db: Session = Depends(get_db)
+) -> UserKitchenRead:
+    """Get a user's role in a specific kitchen.
+
+    Args:
+        kitchen_id: Primary key of the kitchen.
+        user_id: Primary key of the user.
+        db: Injected database session.
+
+    Returns:
+        The user-kitchen relationship with role information.
+
+    Raises:
+        HTTPException: 404 if the relationship does not exist.
+    """
+    user_kitchen = crud_kitchen.get_user_kitchen_relationship(db, kitchen_id, user_id)
+    if user_kitchen is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a member of this kitchen"
+        )
+
+    return user_kitchen
+
+
+@users_router.patch(
+    "/{kitchen_id}/{user_id}/role",
     response_model=UserKitchenRead,
     status_code=status.HTTP_200_OK,
     summary="Update user role in kitchen",
@@ -278,42 +318,8 @@ def update_user_role_in_kitchen(
     return user_kitchen
 
 
-@router.get(
-    "/{kitchen_id}/users/{user_id}",
-    response_model=UserKitchenRead,
-    status_code=status.HTTP_200_OK,
-    summary="Get user's role in kitchen",
-)
-def get_user_role_in_kitchen(
-        kitchen_id: int,
-        user_id: int,
-        db: Session = Depends(get_db)
-) -> UserKitchenRead:
-    """Get a user's role in a specific kitchen.
-
-    Args:
-        kitchen_id: Primary key of the kitchen.
-        user_id: Primary key of the user.
-        db: Injected database session.
-
-    Returns:
-        The user-kitchen relationship with role information.
-
-    Raises:
-        HTTPException: 404 if the relationship does not exist.
-    """
-    user_kitchen = crud_kitchen.get_user_kitchen_relationship(db, kitchen_id, user_id)
-    if user_kitchen is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not a member of this kitchen"
-        )
-
-    return user_kitchen
-
-
-@router.delete(
-    "/{kitchen_id}/users/{user_id}",
+@users_router.delete(
+    "/{kitchen_id}/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove user from kitchen",
 )
@@ -345,12 +351,8 @@ def remove_user_from_kitchen(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# ================================================================== #
-# User Kitchen Membership Routes                                     #
-# ================================================================== #
-
-@router.get(
-    "/users/{user_id}/kitchens",
+@users_router.get(
+    "/{user_id}/kitchens",
     response_model=list[UserKitchenRead],
     status_code=status.HTTP_200_OK,
     summary="Get all kitchens for a user",
@@ -369,3 +371,14 @@ def get_user_kitchens(
         List of user-kitchen relationships for the user.
     """
     return crud_kitchen.get_user_kitchens(db, user_id)
+
+
+# ================================================================== #
+# Main Router Assembly                                               #
+# ================================================================== #
+
+router = APIRouter(prefix="/kitchens")
+
+# Include all sub-routers
+router.include_router(kitchens_router)
+router.include_router(users_router)
