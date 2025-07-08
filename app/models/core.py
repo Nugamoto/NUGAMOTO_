@@ -1,3 +1,4 @@
+
 """SQLAlchemy ORM models for core unit system."""
 
 from __future__ import annotations
@@ -51,6 +52,12 @@ class Unit(Base):
         DateTime,
         nullable=False,
         default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
@@ -111,6 +118,17 @@ class UnitConversion(Base):
         Float,
         nullable=False,
         comment="Conversion factor: value_in_from_unit * factor = value_in_to_unit"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
