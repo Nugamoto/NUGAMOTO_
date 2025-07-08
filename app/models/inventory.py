@@ -1,3 +1,4 @@
+
 """SQLAlchemy ORM models for inventory management."""
 
 from __future__ import annotations
@@ -43,6 +44,17 @@ class StorageLocation(Base):
         String(100),
         nullable=False,
         comment="Name of the storage location (e.g., 'Refrigerator', 'Pantry')"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
@@ -124,6 +136,11 @@ class InventoryItem(Base):
         Date,
         nullable=True,
         comment="Expiration date of this specific inventory item"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime,
