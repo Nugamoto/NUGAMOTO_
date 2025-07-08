@@ -1,13 +1,14 @@
+
 """SQLAlchemy ORM models for recipes."""
 
 from __future__ import annotations
 
-from datetime import datetime
+import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean, DateTime, ForeignKey, Integer, String, Text, JSON,
-    Float, UniqueConstraint, func
+    Float, UniqueConstraint
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,10 +34,21 @@ class Recipe(Base):
     created_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
     difficulty: Mapped[str] = mapped_column(String(10), nullable=False, default="medium")
     servings: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
@@ -88,9 +100,16 @@ class RecipeIngredient(Base):
         ForeignKey("units.id"), nullable=True
     )
     original_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
     # ------------------------------------------------------------------ #
@@ -142,7 +161,17 @@ class RecipeStep(Base):
     )
     step_number: Mapped[int] = mapped_column(Integer, nullable=False)
     instruction: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
@@ -185,7 +214,17 @@ class RecipeNutrition(Base):
     carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     fiber_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual")
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
@@ -233,7 +272,17 @@ class RecipeReview(Base):
     )
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
