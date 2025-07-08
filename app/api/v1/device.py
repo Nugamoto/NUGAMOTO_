@@ -728,7 +728,7 @@ def get_kitchen_device_summary(
 # Main Router Assembly                                               #
 # ================================================================== #
 
-router = APIRouter(prefix="/devices", tags=["Devices"])
+router = APIRouter(prefix="/devices")
 
 # Include all sub-routers
 router.include_router(device_types_router)

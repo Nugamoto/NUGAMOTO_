@@ -886,7 +886,7 @@ def remove_product_from_list(
 # Main Router Assembly                                               #
 # ================================================================== #
 
-router = APIRouter(prefix="/shopping", tags=["Shopping"])
+router = APIRouter(prefix="/shopping")
 
 # Include all sub-routers
 router.include_router(kitchen_router)

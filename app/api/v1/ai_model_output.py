@@ -14,7 +14,7 @@ from app.schemas.ai_model_output import (
     AIOutputSummary
 )
 
-router = APIRouter(prefix="/ai", tags=["AI"])
+router = APIRouter(prefix="/ai", tags=["AI Outputs"])
 
 
 @router.post(

@@ -22,8 +22,8 @@ from app.schemas.inventory import (
 # Sub-routers for better organization                               #
 # ================================================================== #
 
-storage_locations_router = APIRouter(prefix="/storage-locations", tags=["storage-locations"])
-inventory_items_router = APIRouter(prefix="/items", tags=["inventory-items"])
+storage_locations_router = APIRouter(prefix="/storage-locations", tags=["Storage Locations"])
+inventory_items_router = APIRouter(prefix="/items", tags=["Inventory Items"])
 
 
 # ================================================================== #
