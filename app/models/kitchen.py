@@ -1,10 +1,12 @@
+
 """SQLAlchemy ORM models for kitchen and user-kitchen relationships."""
 
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import KitchenRole
@@ -27,6 +29,17 @@ class Kitchen(Base):
     # ------------------------------------------------------------------ #
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
@@ -53,6 +66,7 @@ class Kitchen(Base):
     kitchen_tools: Mapped[list[KitchenTool]] = relationship(
         "KitchenTool", back_populates="kitchen", cascade="all, delete-orphan"
     )
+
     # ------------------------------------------------------------------ #
     # Dunder                                                               #
     # ------------------------------------------------------------------ #
@@ -78,6 +92,17 @@ class UserKitchen(Base):
         ForeignKey("kitchens.id"), primary_key=True
     )
     role: Mapped[KitchenRole] = mapped_column(nullable=False, default=KitchenRole.MEMBER)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
