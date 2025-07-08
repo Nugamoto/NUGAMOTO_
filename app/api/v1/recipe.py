@@ -1069,6 +1069,7 @@ def delete_recipe_review(
 router = APIRouter(prefix="/recipes")
 
 # Include all sub-routers
+router.include_router(recipe_router)
 router.include_router(ingredients_router)
 router.include_router(steps_router)
 router.include_router(nutrition_router)
