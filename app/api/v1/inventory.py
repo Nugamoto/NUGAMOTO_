@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -124,7 +124,7 @@ def delete_storage_location(
         *,
         db: Annotated[Session, Depends(get_db)],
         storage_location_id: int
-) -> None:
+) -> Response:
     """Delete a storage location."""
     deleted = crud_inventory.delete_storage_location(db, storage_location_id)
     if not deleted:
@@ -132,6 +132,8 @@ def delete_storage_location(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Storage location with ID {storage_location_id} not found"
         )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
@@ -198,7 +200,7 @@ def get_inventory_item(
     return item
 
 
-@inventory_items_router.put(
+@inventory_items_router.patch(
     "/{inventory_id}",
     response_model=InventoryItemRead,
     summary="Update an inventory item",
@@ -232,7 +234,7 @@ def delete_inventory_item(
         *,
         db: Annotated[Session, Depends(get_db)],
         inventory_id: int
-) -> None:
+) -> Response:
     """Delete an inventory item."""
     deleted = crud_inventory.delete_inventory_item(db, inventory_id)
     if not deleted:
@@ -240,6 +242,8 @@ def delete_inventory_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inventory item with ID {inventory_id} not found"
         )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================== #
