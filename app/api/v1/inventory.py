@@ -18,7 +18,10 @@ from app.schemas.inventory import (
     StorageLocationUpdate,
 )
 
-# Sub-routers for different resource types
+# ================================================================== #
+# Sub-routers for better organization                               #
+# ================================================================== #
+
 storage_locations_router = APIRouter(prefix="/storage-locations", tags=["storage-locations"])
 inventory_items_router = APIRouter(prefix="/items", tags=["inventory-items"])
 
