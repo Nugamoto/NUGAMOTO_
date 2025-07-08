@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text
+from sqlalchemy import String, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, validates, relationship
 
 from app.db.base import Base
@@ -32,6 +33,17 @@ class User(Base):
     diet_type: Mapped[str | None] = mapped_column(String(50))
     allergies: Mapped[str | None] = mapped_column(Text)
     preferences: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
