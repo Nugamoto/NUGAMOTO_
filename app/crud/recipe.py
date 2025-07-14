@@ -102,6 +102,11 @@ def create_recipe(db: Session, recipe_data: RecipeCreate) -> RecipeRead:
     # Create recipe
     recipe_orm = Recipe(
         title=recipe_data.title,
+        description=recipe_data.description,
+        cuisine_type=recipe_data.cuisine_type,
+        prep_time_minutes=recipe_data.prep_time_minutes,
+        cook_time_minutes=recipe_data.cook_time_minutes,
+        total_time_minutes=recipe_data.total_time_minutes,
         is_ai_generated=recipe_data.is_ai_generated,
         created_by_user_id=recipe_data.created_by_user_id,
         difficulty=recipe_data.difficulty,
