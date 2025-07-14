@@ -1,4 +1,3 @@
-
 """Pydantic schemas for AI services."""
 
 from __future__ import annotations
@@ -7,11 +6,80 @@ import datetime
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy.orm import Session
 
 from app.core.enums import DifficultyLevel
 from app.schemas.ai_model_output import AIModelOutputRead
+from app.schemas.device import ApplianceWithDeviceType, KitchenToolWithDeviceType
+from app.schemas.inventory import InventoryItemRead
 from app.schemas.recipe import RecipeWithDetails, RecipeCreate, RecipeIngredientCreate, RecipeStepCreate, \
     RecipeNutritionCreate
+from app.schemas.user import UserRead
+
+
+# ================================================================== #
+# Prompt Context Models                                              #
+# ================================================================== #
+
+class PromptContext(BaseModel):
+    """Structured context for prompt generation."""
+
+    user: UserRead
+    inventory_items: list[InventoryItemRead]
+    appliances: list[ApplianceWithDeviceType]  # Typed instead of Any
+    tools: list[KitchenToolWithDeviceType]  # Typed instead of Any
+    request: RecipeGenerationRequest
+
+    # Additional computed context
+    expiring_items: list[InventoryItemRead] = Field(default_factory=list)
+    low_stock_items: list[InventoryItemRead] = Field(default_factory=list)
+    available_categories: dict[str, int] = Field(default_factory=dict)
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def build_from_ids(
+            cls,
+            db: Session,
+            user_id: int,
+            kitchen_id: int,
+            request: RecipeGenerationRequest
+    ) -> PromptContext:
+        """Factory method to build context from IDs."""
+        from app.crud import device as crud_device
+        from app.crud import inventory as crud_inventory
+        from app.crud import user as crud_user
+
+        # CRUD calls with error handling
+        user = crud_user.get_user_by_id(db, user_id=user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        inventory_items = crud_inventory.get_kitchen_inventory(db, kitchen_id=kitchen_id)
+        appliances = crud_device.get_kitchen_appliances(db, kitchen_id=kitchen_id)
+        tools = crud_device.get_kitchen_tools(db, kitchen_id=kitchen_id)
+
+        # Compute expiring/low stock items
+        expiring_items = [item for item in inventory_items if item.expires_soon]
+        low_stock_items = [item for item in inventory_items if item.is_low_stock]
+
+        # Compute available categories
+        available_categories = {}
+        for item in inventory_items:
+            if item.food_item.category:
+                category = item.food_item.category
+                available_categories[category] = available_categories.get(category, 0) + 1
+
+        return cls(
+            user=user,
+            inventory_items=inventory_items,
+            appliances=appliances,
+            tools=tools,
+            request=request,
+            expiring_items=expiring_items,
+            low_stock_items=low_stock_items,
+            available_categories=available_categories
+        )
 
 
 # ================================================================== #
