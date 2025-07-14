@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 from app.crud import device as crud_device
 from app.crud import inventory as crud_inventory
 from app.crud import user as crud_user
-from app.models.inventory import InventoryItem
-from app.schemas.user import UserRead
 from app.schemas.ai_service import RecipeGenerationRequest
+from app.schemas.inventory import InventoryItemRead
+from app.schemas.user import UserRead
 
 
 class PromptBuilder:
@@ -95,9 +95,9 @@ Always respond with practical, achievable recipes that consider:
             self,
             request: RecipeGenerationRequest,
             user: UserRead,
-            inventory_items: list[InventoryItem],
-            appliances: list,  # Any type, could be ApplianceWithDeviceType
-            tools: list       # Any type, could be KitchenToolWithDeviceType
+            inventory_items: list[InventoryItemRead],
+            appliances: list,  # Any type. Could be ApplianceWithDeviceType
+            tools: list  # Any type. Could be KitchenToolWithDeviceType
     ) -> str:
         """Build the user prompt with all contextual information."""
 
@@ -150,7 +150,7 @@ Please respond with a complete recipe in JSON format."""
 
         return context
 
-    def _build_inventory_context(self, inventory_items: list[InventoryItem]) -> str:
+    def _build_inventory_context(self, inventory_items: list[InventoryItemRead]) -> str:
         """Build inventory context with food item IDs for AI prompts."""
         if not inventory_items:
             return "AVAILABLE INGREDIENTS:\nNo ingredients currently available in the kitchen inventory."
@@ -282,12 +282,12 @@ Respond in JSON format with structured analysis."""
             # Get base unit name from the relationship
             base_unit_name = item.food_item.base_unit.name if item.food_item.base_unit else 'units'
 
-            if item.is_expired():
+            if item.is_expired:
                 expired_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (expired {item.expiration_date})")
-            elif item.expires_soon():
+            elif item.expires_soon:
                 days_left = (item.expiration_date - today).days if item.expiration_date else None
                 expiring_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (expires in {days_left} days)")
-            elif item.is_low_stock():
+            elif item.is_low_stock:
                 low_stock_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (below minimum)")
             else:
                 good_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name}")
