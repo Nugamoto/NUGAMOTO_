@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, TypeVar
 
 from openai import OpenAI
 from openai.types.chat import (
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam
 )
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -19,6 +20,9 @@ from app.services.ai.base import AIService
 from app.services.ai.prompt_builder import PromptBuilder
 
 logger = logging.getLogger(__name__)
+
+# Type variable for structured completion return type
+T = TypeVar('T', bound=BaseModel)
 
 
 class OpenAIServiceError(Exception):
@@ -59,7 +63,7 @@ class OpenAIService(AIService):
             kitchen_id: int,
             **kwargs: Any
     ) -> RecipeGenerationResponse:
-        """Generate a recipe using OpenAI.
+        """Generate a recipe using OpenAI with structured output.
 
         Args:
             request: Recipe generation request with preferences.
@@ -74,23 +78,22 @@ class OpenAIService(AIService):
             OpenAIServiceError: If recipe generation fails.
         """
         try:
-            # Build dynamic prompts (no await needed)
+            # Build dynamic prompts
             system_prompt, user_prompt = self.prompt_builder.build_recipe_prompt(
                 request=request,
                 user_id=user_id,
                 kitchen_id=kitchen_id
             )
 
-            # Generate recipe using OpenAI
-            response_data = await self._create_json_completion(
+            # Generate recipe using structured output with existing schemas
+            recipe_response = await self._create_structured_completion(
                 system_content=system_prompt,
                 user_content=user_prompt,
+                response_model=RecipeGenerationResponse,
                 max_tokens=kwargs.get('max_tokens', 2000),
                 temperature=kwargs.get('temperature', 0.7)
             )
 
-            # Parse and validate response
-            recipe_response = RecipeGenerationResponse.model_validate(response_data)
             logger.info(f"Successfully generated recipe for user {user_id}")
             return recipe_response
 
@@ -116,12 +119,12 @@ class OpenAIService(AIService):
             OpenAIServiceError: If analysis fails.
         """
         try:
-            # Build dynamic prompts (no await needed)
+            # Build dynamic prompts
             system_prompt, user_prompt = self.prompt_builder.build_inventory_analysis_prompt(
                 kitchen_id=kitchen_id
             )
 
-            # Generate analysis using OpenAI
+            # Generate analysis using structured output
             analysis_data = await self._create_json_completion(
                 system_content=system_prompt,
                 user_content=user_prompt,
@@ -156,8 +159,16 @@ class OpenAIService(AIService):
             OpenAIServiceError: If suggestion generation fails.
         """
         try:
-            # Create a basic recipe request for suggestions
+            # Create a basic recipe request for suggestions with all required fields
             suggestion_request = RecipeGenerationRequest(
+                cuisine_type=None,
+                meal_type=None,
+                difficulty_level=None,
+                max_prep_time=None,
+                max_cook_time=None,
+                servings=None,
+                dietary_restrictions=None,
+                exclude_ingredients=None,
                 special_requests="Provide 3-5 quick meal suggestions based on available ingredients"
             )
 
@@ -185,7 +196,7 @@ class OpenAIService(AIService):
                 }"""
             )
 
-            # Generate suggestions using OpenAI
+            # Generate suggestions using JSON completion
             suggestions_data = await self._create_json_completion(
                 system_content=suggestion_system_prompt,
                 user_content=user_prompt + "\n\nPlease provide quick meal suggestions rather than a single detailed recipe.",
@@ -200,6 +211,64 @@ class OpenAIService(AIService):
             logger.error(f"Cooking suggestions failed for user {user_id}: {str(e)}")
             raise OpenAIServiceError(f"Cooking suggestions failed: {str(e)}")
 
+    async def _create_structured_completion(
+            self,
+            system_content: str,
+            user_content: str,
+            response_model: type[T],
+            max_tokens: int = 2000,
+            temperature: float = 0.7
+    ) -> T:
+        """Create completion with structured output using Pydantic model.
+
+        Args:
+            system_content: System prompt content.
+            user_content: User prompt content.
+            response_model: Pydantic model class for structured output.
+            max_tokens: Maximum tokens for response.
+            temperature: Temperature for response generation.
+
+        Returns:
+            Parsed and validated Pydantic model instance.
+
+        Raises:
+            OpenAIServiceError: If completion fails.
+        """
+        try:
+            messages = [
+                ChatCompletionSystemMessageParam(role="system", content=system_content),
+                ChatCompletionUserMessageParam(role="user", content=user_content)
+            ]
+
+            logger.info(f"Making OpenAI API request with structured output: {response_model.__name__}")
+            logger.debug(f"Model: {self.model}")
+            logger.debug(f"Temperature: {temperature}")
+            logger.debug(f"Max tokens: {max_tokens}")
+
+            # Use beta.chat.completions.parse with existing recipe schemas
+            completion = self.client.beta.chat.completions.parse(
+                model=self.model,
+                messages=messages,
+                response_format=response_model,
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
+
+            logger.info("Received structured response from OpenAI")
+            logger.debug(f"Response ID: {completion.id}")
+            logger.debug(f"Model used: {completion.model}")
+            logger.debug(f"Usage: {completion.usage}")
+
+            # The parse method automatically validates and returns the Pydantic model
+            parsed_response = completion.choices[0].message.parsed
+            logger.info("Successfully parsed and validated structured output")
+
+            return parsed_response
+
+        except Exception as e:
+            logger.error(f"Structured completion failed: {str(e)}")
+            raise OpenAIServiceError(f"Structured completion failed: {str(e)}")
+
     async def _create_json_completion(
             self,
             system_content: str,
@@ -207,85 +276,30 @@ class OpenAIService(AIService):
             max_tokens: int = 1500,
             temperature: float = 0.7
     ) -> dict[str, Any]:
+        """Create JSON completion for non-recipe structured responses.
+
+        This method is kept for backward compatibility and non-recipe AI features
+        like inventory analysis and cooking suggestions.
+
+        Args:
+            system_content: System prompt content.
+            user_content: User prompt content.
+            max_tokens: Maximum tokens for response.
+            temperature: Temperature for response generation.
+
+        Returns:
+            Dictionary containing the JSON response.
+
+        Raises:
+            OpenAIServiceError: If completion fails.
+        """
         try:
             messages = [
-                ChatCompletionSystemMessageParam(
-                    role="system",
-                    content=system_content
-                ),
-                ChatCompletionUserMessageParam(
-                    role="user",
-                    content=user_content
-                )
+                ChatCompletionSystemMessageParam(role="system", content=system_content),
+                ChatCompletionUserMessageParam(role="user", content=user_content)
             ]
 
-            # Define the function schema based on RecipeGenerationResponse with required ID
-            function_schema = {
-                "name": "generate_recipe",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string", "minLength": 1, "maxLength": 200},
-                        "description": {"type": "string", "maxLength": 500},
-                        "cuisine_type": {"type": "string", "maxLength": 50},
-                        "difficulty_level": {"type": "string", "enum": ["easy", "medium", "hard"]},
-                        "prep_time_minutes": {"type": "integer", "minimum": 0},
-                        "cook_time_minutes": {"type": "integer", "minimum": 0},
-                        "total_time_minutes": {"type": "integer", "minimum": 0},
-                        "servings": {"type": "integer", "minimum": 1},
-                        "ingredients": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {
-                                        "type": "integer", 
-                                        "description": "Required food item ID from database - must match an ID from the available ingredients list"
-                                    },
-                                    "name": {"type": "string", "minLength": 1, "maxLength": 100},
-                                    "amount": {"type": "string", "minLength": 1, "maxLength": 50},
-                                    "notes": {"type": "string", "maxLength": 200}
-                                },
-                                "required": ["id", "name", "amount"]
-                            },
-                            "minItems": 1
-                        },
-                        "instructions": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "step_number": {"type": "integer", "minimum": 1},
-                                    "instruction": {"type": "string", "minLength": 1, "maxLength": 1000},
-                                    "estimated_time": {"type": "integer", "minimum": 1}
-                                },
-                                "required": ["step_number", "instruction"]
-                            },
-                            "minItems": 1
-                        },
-                        "nutritional_info": {
-                            "type": "object",
-                            "properties": {
-                                "calories_per_serving": {"type": "integer", "minimum": 0},
-                                "protein_grams": {"type": "number", "minimum": 0},
-                                "carbs_grams": {"type": "number", "minimum": 0},
-                                "fat_grams": {"type": "number", "minimum": 0},
-                                "fiber_grams": {"type": "number", "minimum": 0}
-                            }
-                        },
-                        "tips": {"type": "array", "items": {"type": "string"}},
-                        "tags": {"type": "array", "items": {"type": "string"}}
-                    },
-                    "required": [
-                        "title", "difficulty_level", "prep_time_minutes",
-                        "cook_time_minutes", "total_time_minutes", "servings",
-                        "ingredients", "instructions"
-                    ]
-                }
-            }
-
-            # Log the request details
-            logger.info("Making OpenAI API request...")
+            logger.info("Making OpenAI API request with JSON response format")
             logger.debug(f"Model: {self.model}")
             logger.debug(f"Temperature: {temperature}")
             logger.debug(f"Max tokens: {max_tokens}")
@@ -293,29 +307,23 @@ class OpenAIService(AIService):
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
+                response_format={"type": "json_object"},
                 max_tokens=max_tokens,
-                temperature=temperature,
-                functions=[function_schema],
-                function_call={"name": "generate_recipe"}
+                temperature=temperature
             )
 
-            # Log the raw response
-            logger.info("Received OpenAI API response")
+            logger.info("Received JSON response from OpenAI")
             logger.debug(f"Response ID: {completion.id}")
             logger.debug(f"Model used: {completion.model}")
             logger.debug(f"Usage: {completion.usage}")
 
-            # Extract the function call result
-            function_call = completion.choices[0].message.function_call
-            if not function_call or not function_call.arguments:
-                raise OpenAIServiceError("No function call in response")
+            # Parse JSON response
+            response_content = completion.choices[0].message.content
+            if not response_content:
+                raise OpenAIServiceError("Empty response from OpenAI")
 
-            # Parse and log the structured output
-            response_data = json.loads(function_call.arguments)
-            logger.info("Successfully parsed structured output from OpenAI")
-            
-            # Log the structured output for debugging
-            logger.debug(f"Structured output: {json.dumps(response_data, indent=2)}")
+            response_data = json.loads(response_content)
+            logger.info("Successfully parsed JSON response")
 
             return response_data
 
@@ -323,5 +331,5 @@ class OpenAIService(AIService):
             logger.error(f"Failed to parse JSON response: {str(e)}")
             raise OpenAIServiceError(f"Invalid JSON response: {str(e)}")
         except Exception as e:
-            logger.error(f"OpenAI API error: {str(e)}")
-            raise OpenAIServiceError(f"OpenAI API call failed: {str(e)}")
+            logger.error(f"JSON completion failed: {str(e)}")
+            raise OpenAIServiceError(f"JSON completion failed: {str(e)}")
