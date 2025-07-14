@@ -420,6 +420,7 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
             conn.execute(insert(meta.tables["food_item_alias"]), alias_rows)
 
         # ---------- food-item spezifische Konversionen ----------
+
         fiuc_data = [
             # (food_name, from_unit, factor → base_unit)
 
@@ -447,7 +448,7 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
             ("Spaghetti (Spaghetti)", "pack", 500),
             ("Flour (Mehl)", "bag", 1000),
             ("Oats (Haferflocken)", "bag", 750),
-            ("Bread Slice (Brotscheibe)", "slice", 40),
+            ("Bread Slice (Brotscheibe)", "pack", 800),  # 1 pack = 800g (20 slices × 40g)
 
             # Legumes
             ("Lentils (Linsen)", "pack", 500),
@@ -460,7 +461,7 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
             ("Butter (Butter)", "pack", 250),
             ("Cheese (Käse)", "block", 400),
             ("Yogurt (Joghurt)", "cup", 150),
-            ("Egg (Ei)", "piece", 60),
+            ("Egg (Ei)", "pack", 720),  # 1 pack = 720g (12 eggs × 60g)
 
             # Meat & Fish
             ("Chicken Breast (Hähnchenbrust)", "pack", 500),
