@@ -49,6 +49,9 @@ class PromptContext(BaseModel):
         from app.crud import device as crud_device
         from app.crud import inventory as crud_inventory
         from app.crud import user as crud_user
+        from app.crud import food as crud_food
+        from app.schemas.food import FoodItemWithConversions
+        from app.schemas.inventory import InventoryItemRead
 
         # CRUD calls with error handling
         user = crud_user.get_user_by_id(db, user_id=user_id)
@@ -59,20 +62,39 @@ class PromptContext(BaseModel):
         appliances = crud_device.get_kitchen_appliances(db, kitchen_id=kitchen_id)
         tools = crud_device.get_kitchen_tools(db, kitchen_id=kitchen_id)
 
-        # Compute expiring/low stock items
-        expiring_items = [item for item in inventory_items if item.expires_soon]
-        low_stock_items = [item for item in inventory_items if item.is_low_stock]
+        # Enhance inventory items with food conversions
+        enhanced_inventory_items = []
+        for item in inventory_items:
+            # Load conversions for this food item
+            conversions = crud_food.get_conversions_for_food_item(db, item.food_item.id)
+
+            # Create enhanced food item with conversions
+            enhanced_food_item = FoodItemWithConversions(
+                **item.food_item.model_dump(),
+                unit_conversions=conversions
+            )
+
+            # Create enhanced inventory item
+            enhanced_item = InventoryItemRead(
+                **item.model_dump(exclude={'food_item'}),
+                food_item=enhanced_food_item
+            )
+            enhanced_inventory_items.append(enhanced_item)
+
+        # Compute expiring/low stock items from enhanced items
+        expiring_items = [item for item in enhanced_inventory_items if item.expires_soon]
+        low_stock_items = [item for item in enhanced_inventory_items if item.is_low_stock]
 
         # Compute available categories
         available_categories = {}
-        for item in inventory_items:
+        for item in enhanced_inventory_items:
             if item.food_item.category:
                 category = item.food_item.category
                 available_categories[category] = available_categories.get(category, 0) + 1
 
         return cls(
             user=user,
-            inventory_items=inventory_items,
+            inventory_items=enhanced_inventory_items,
             appliances=appliances,
             tools=tools,
             request=request,
@@ -80,8 +102,6 @@ class PromptContext(BaseModel):
             low_stock_items=low_stock_items,
             available_categories=available_categories
         )
-
-
 # ================================================================== #
 # Recipe Generation Schemas                                          #
 # ================================================================== #
