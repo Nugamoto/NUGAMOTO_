@@ -1,9 +1,10 @@
+
 """Enhanced modular prompt builder for AI services."""
 
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 from sqlalchemy.orm import Session
 
@@ -25,6 +26,7 @@ from app.services.ai.prompt_templates import (
 
 if TYPE_CHECKING:
     from app.schemas.inventory import InventoryItemRead
+    from app.schemas.food import FoodItemRead, FoodItemWithConversions
 
 
 class PromptSectionBuilder:
@@ -40,16 +42,14 @@ class PromptSectionBuilder:
             "preferences": user.preferences or "None"
         }
 
-        # Use the template instead of manual formatting
         return USER_PROFILE_TEMPLATE.build(user_data)
 
     @staticmethod
     def build_inventory_section(context: PromptContext) -> str:
         """Build inventory section using template."""
         if not context.inventory_items:
-            return USER_PROFILE_TEMPLATE.build({})  # Uses fallback message
+            return USER_PROFILE_TEMPLATE.build({})
 
-        # Format ingredient list
         ingredient_lines = []
         sorted_items = sorted(
             context.inventory_items,
@@ -61,12 +61,10 @@ class PromptSectionBuilder:
                 PromptSectionBuilder._format_ingredient_item(item)
             )
 
-        # Build category summary
         category_summary = ""
         if context.available_categories:
             category_summary = f"{SECTION_HEADERS['available_categories']} {', '.join(context.available_categories.keys())}"
 
-        # Use template
         inventory_data = {
             "ingredient_list": "\n".join(ingredient_lines),
             "category_summary": category_summary,
@@ -78,13 +76,47 @@ class PromptSectionBuilder:
     @staticmethod
     def _format_ingredient_item(item: InventoryItemRead) -> str:
         """Format individual inventory item."""
-        food_item = item.food_item
-        base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
+        food_item: Union[FoodItemRead, FoodItemWithConversions] = item.food_item
+        base_unit = food_item.base_unit
+        base_unit_name = base_unit.name if base_unit else 'units'
         quantity_str = f"{item.quantity:.1f}" if item.quantity % 1 != 0 else f"{int(item.quantity)}"
+
+        available_units = []
+
+        if base_unit:
+            available_units.append(f"{base_unit.name} (ID: {base_unit.id})")
+
+        if hasattr(food_item, 'unit_conversions') and getattr(food_item, 'unit_conversions', None):
+            conversions = getattr(food_item, 'unit_conversions')
+            for conversion in conversions:
+                if conversion.from_unit_id != base_unit.id:
+                    available_units.append(f"{conversion.from_unit_name} (ID: {conversion.from_unit_id})")
+                if conversion.to_unit_id != base_unit.id:
+                    available_units.append(f"{conversion.to_unit_name} (ID: {conversion.to_unit_id})")
+
+        if base_unit:
+            try:
+                from app.crud import core as crud_core
+                from app.db.session import SessionLocal
+
+                db = SessionLocal()
+                try:
+                    compatible_units = crud_core.get_compatible_units_for_base_unit(db, base_unit.id)
+                    for unit in compatible_units:
+                        if unit.id != base_unit.id:
+                            available_units.append(f"{unit.name} (ID: {unit.id})")
+                finally:
+                    db.close()
+            except Exception:
+                pass
+
+        available_units = sorted(list(set(available_units)))
 
         line = f"- {food_item.name} (ID: {food_item.id}): {quantity_str} {base_unit_name}"
 
-        # Add status indicators
+        if available_units:
+            line += f" | Available Units: {', '.join(available_units)}"
+
         indicators = []
         if item.expires_soon:
             days_left = (item.expiration_date - datetime.date.today()).days if item.expiration_date else None
@@ -109,9 +141,8 @@ class PromptSectionBuilder:
     ) -> str:
         """Build equipment section using template."""
         if not appliances and not tools:
-            return EQUIPMENT_TEMPLATE.build({})  # Uses fallback message
+            return EQUIPMENT_TEMPLATE.build({})
 
-        # Build appliances section
         appliances_section = ""
         if appliances:
             appliances_lines = ["Appliances:"]
@@ -124,7 +155,6 @@ class PromptSectionBuilder:
                 appliances_lines.append(line)
             appliances_section = "\n".join(appliances_lines)
 
-        # Build tools section
         tools_section = ""
         if tools:
             tools_lines = ["Tools:"]
@@ -139,7 +169,6 @@ class PromptSectionBuilder:
                 tools_lines.append(line)
             tools_section = "\n".join(tools_lines)
 
-        # Use template
         equipment_data = {
             "appliances_section": appliances_section,
             "tools_section": tools_section
@@ -175,7 +204,6 @@ class PromptSectionBuilder:
                     f"- {food_item.name} (ID: {food_item.id}): {quantity_str} {base_unit_name}"
                 )
 
-        # Add appliance preferences
         if context.request.required_appliances:
             if priority_lines:
                 priority_lines.append("")
@@ -223,7 +251,6 @@ class PromptSectionBuilder:
         if request.special_requests:
             lines.append(f"- Special Requests: {request.special_requests}")
 
-        # Add preferences
         preferences = []
         if request.prioritize_expiring:
             preferences.append("prioritize expiring ingredients")
@@ -258,7 +285,6 @@ class PromptBuilder:
             request=request
         )
 
-        # Build sections using templates
         user_context = self.section_builder.build_user_section(context.user)
         inventory_context = self.section_builder.build_inventory_section(context)
         equipment_context = self.section_builder.build_equipment_section(
@@ -267,12 +293,10 @@ class PromptBuilder:
         priority_context = self.section_builder.build_priority_section(context)
         request_context = self.section_builder.build_request_section(context.request)
 
-        # Format requirements
         requirements = f"{SECTION_HEADERS['requirements']}\n" + "\n".join(
             f"- {req}" for req in RECIPE_REQUIREMENTS
         )
 
-        # Use template
         return RECIPE_GENERATION_TEMPLATE.build_complete_prompt(
             user_context=user_context,
             inventory_context=inventory_context,
@@ -291,12 +315,11 @@ class PromptBuilder:
 
         context = PromptContext.build_from_ids(
             db=self.db,
-            user_id=1,  # Placeholder
+            user_id=1,
             kitchen_id=kitchen_id,
             request=analysis_request
         )
 
-        # Build analysis sections
         analysis_sections = []
 
         if context.expiring_items:
@@ -318,7 +341,6 @@ class PromptBuilder:
                     f"- {food_item.name}: {item.quantity} {base_unit_name} (below minimum)"
                 )
 
-        # Good condition items
         good_items = [
             item for item in context.inventory_items
             if not item.expires_soon and not item.is_low_stock and not item.is_expired
@@ -357,10 +379,9 @@ class PromptBuilder:
             request=suggestion_request
         )
 
-        # Build sections using templates
         user_context = self.section_builder.build_user_section(context.user)
         inventory_context = self.section_builder.build_inventory_section(context)
-        equipment_context = self.section_builder.build_equipment_section(  # FIXED: Correct method name
+        equipment_context = self.section_builder.build_equipment_section(
             context.appliances, context.tools
         )
 
