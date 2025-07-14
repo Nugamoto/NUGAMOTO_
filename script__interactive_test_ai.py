@@ -1,3 +1,4 @@
+
 """Interactive test script for AI service."""
 
 import asyncio
@@ -20,6 +21,8 @@ from app.services.ai.openai_service import OpenAIService, OpenAIServiceError
 from app.core.enums import DifficultyLevel
 from app.crud import user as crud_user
 from app.crud import kitchen as crud_kitchen
+from app.crud import food as crud_food
+from app.crud import core as crud_core
 
 # Configure logging with separate levels for file and console
 log_dir = Path("logs")
@@ -158,10 +161,35 @@ def print_structured_output(response_data: dict):
     print("=" * 80)
 
 
+def format_ingredient_display(ingredient, db: Session) -> str:
+    """Format ingredient for display with proper name and unit lookup."""
+    try:
+        # Look up food item name
+        food_item = crud_food.get_food_item_by_id(db, food_item_id=ingredient.food_item_id)
+        food_name = food_item.name if food_item else f"Food ID: {ingredient.food_item_id}"
+
+        # Display amount in base unit
+        amount = ingredient.amount_in_base_unit
+        base_unit = food_item.base_unit.name if food_item and food_item.base_unit else "units"
+
+        # If original unit is specified, show both
+        if ingredient.original_unit_id and ingredient.original_amount:
+            original_unit = crud_core.get_unit_by_id(db, unit_id=ingredient.original_unit_id)  # CORRECTED
+            original_unit_name = original_unit.name if original_unit else f"Unit ID: {ingredient.original_unit_id}"
+
+            return f"{ingredient.original_amount} {original_unit_name} {food_name} ({amount} {base_unit})"
+        else:
+            return f"{amount} {base_unit} {food_name}"
+
+    except Exception as e:
+        logger.warning(f"Error formatting ingredient display: {e}")
+        return f"{ingredient.amount_in_base_unit} units (Food ID: {ingredient.food_item_id})"
+
+
 async def interactive_test():
     """Interactive test with user selection."""
     logger.info("Starting NUGAMOTO AI Service Interactive Test")
-    
+
     if not settings.OPENAI_API_KEY:
         logger.error("OPENAI_API_KEY not found in environment variables")
         print("❌ Error: OPENAI_API_KEY not found in environment variables")
@@ -261,7 +289,7 @@ async def interactive_test():
         # Make the API call and capture the raw response
         print("\n🔄 Making API call to OpenAI...")
         logger.info("Starting recipe generation with OpenAI API")
-        
+
         recipe = await ai_service.generate_recipe(
             request=recipe_request,
             user_id=selected_user.id,
@@ -281,19 +309,21 @@ async def interactive_test():
         print(f"🍽️  Cuisine: {recipe.cuisine_type}")
         print(f"⏱️  Total Time: {recipe.total_time_minutes} minutes")
         print(f"👥 Servings: {recipe.servings}")
-        print(f"📊 Difficulty: {recipe.difficulty_level}")
+        print(f"📊 Difficulty: {recipe.difficulty}")
 
         print(f"\n📝 Description:")
         print(f"   {recipe.description or 'No description provided'}")
 
         print(f"\n🥘 Ingredients ({len(recipe.ingredients)}):")
         for ingredient in recipe.ingredients:
-            print(f"   • {ingredient.amount} {ingredient.name}")
+            # Use correct schema attributes and lookup names
+            display_text = format_ingredient_display(ingredient, db)
+            print(f"   • {display_text}")
 
-        print(f"\n👩‍🍳 Instructions ({len(recipe.instructions)} steps):")
-        for instruction in recipe.instructions:
-            time_info = f" ({instruction.estimated_time} min)" if instruction.estimated_time else ""
-            print(f"   {instruction.step_number}. {instruction.instruction}{time_info}")
+        print(f"\n👩‍🍳 Instructions ({len(recipe.steps)} steps):")
+        for step in recipe.steps:
+            # Use correct schema attributes - no estimated_time_minutes
+            print(f"   {step.step_number}. {step.instruction}")
 
         if recipe.tips:
             print(f"\n💡 Tips:")
