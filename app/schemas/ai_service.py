@@ -21,53 +21,52 @@ from app.schemas.recipe import RecipeWithDetails, RecipeCreate, RecipeIngredient
 class RecipeGenerationRequest(BaseModel):
     """Request schema for recipe generation."""
 
-    cuisine_type: Annotated[str | None, Field(
-        None,
+    cuisine_type: str | None = Field(
+        default=None,
         max_length=50,
         description="Preferred cuisine type (e.g., 'Italian', 'Asian')"
-    )]
-    meal_type: Annotated[str | None, Field(
-        None,
+    )
+    meal_type: str | None = Field(
+        default=None,
         max_length=30,
         description="Type of meal (e.g., 'breakfast', 'lunch', 'dinner', 'snack')"
-    )]
+    )
     difficulty_level: DifficultyLevel | None = Field(
-        None,
+        default=None,
         description="Preferred difficulty level"
     )
-    max_prep_time: Annotated[int | None, Field(
-        None,
+    max_prep_time: int | None = Field(
+        default=None,
         ge=1,
         le=480,
         description="Maximum preparation time in minutes"
-    )]
-    max_cook_time: Annotated[int | None, Field(
-        None,
+    )
+    max_cook_time: int | None = Field(
+        default=None,
         ge=1,
         le=480,
         description="Maximum cooking time in minutes"
-    )]
-    servings: Annotated[int | None, Field(
-        None,
+    )
+    servings: int | None = Field(
+        default=None,
         ge=1,
         le=20,
         description="Number of servings"
-    )]
-    dietary_restrictions: Annotated[list[str], Field(
+    )
+    dietary_restrictions: list[str] = Field(
         default_factory=list,
         description="List of dietary restrictions"
-    )]
-    exclude_ingredients: Annotated[list[str], Field(
+    )
+    exclude_ingredients: list[str] = Field(
         default_factory=list,
         description="Ingredients to exclude from the recipe"
-    )]
-    special_requests: Annotated[str | None, Field(
-        None,
+    )
+    special_requests: str | None = Field(
+        default=None,
         max_length=500,
         description="Any special requests or preferences"
-    )]
+    )
 
-    # New contextual fields for better AI prompting
     prioritize_expiring: bool = Field(
         default=True,
         description="Prioritize ingredients that are expiring soon"
@@ -101,22 +100,8 @@ class RecipeGenerationRequest(BaseModel):
 
     @classmethod
     def from_user_input(cls, user_input: str) -> RecipeGenerationRequest:
-        return cls(
-            special_requests=user_input,
-            cuisine_type=None,
-            meal_type=None,
-            difficulty_level=None,
-            max_prep_time=None,
-            max_cook_time=None,
-            servings=None,
-            dietary_restrictions=[],
-            exclude_ingredients=[],
-            prioritize_expiring=True,
-            prefer_available_ingredients=True,
-            required_appliances=[],
-            avoid_appliances=[]
-        )
-
+        """Create RecipeGenerationRequest from user input."""
+        return cls(special_requests=user_input)
 
 class RecipeGenerationResponse(BaseModel):
     """AI Response Schema - uses existing recipe schemas for consistency."""
