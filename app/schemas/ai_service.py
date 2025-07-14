@@ -256,8 +256,7 @@ class RecipeGenerationResponse(BaseModel):
         unknown_ingredients = []
 
         for ing in self.ingredients:
-            food_item = None
-        
+
         # Try to find by ID first (preferred method since we now require IDs)
             try:
                 food_item = get_food_item_by_id(db, ing.id)
@@ -316,7 +315,7 @@ class RecipeGenerationResponse(BaseModel):
         # Create recipe
         return RecipeCreate(
             title=self.title,
-            difficulty=self.difficulty_level.value,
+            difficulty=self.difficulty_level,
             servings=self.servings,
             tags=self.tags,
             ingredients=ingredients,
