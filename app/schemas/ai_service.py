@@ -103,27 +103,28 @@ class RecipeGenerationRequest(BaseModel):
         """Create RecipeGenerationRequest from user input."""
         return cls(special_requests=user_input)
 
-class RecipeGenerationResponse(BaseModel):
-    """AI Response Schema - uses existing recipe schemas for consistency."""
 
-    # Basic recipe info
-    title: Annotated[str, Field(min_length=1, max_length=255)]
-    description: Annotated[str | None, Field(None, max_length=500)]
-    cuisine_type: Annotated[str | None, Field(None, max_length=100)]
-    difficulty_level: DifficultyLevel
-    prep_time_minutes: Annotated[int, Field(ge=0)]
-    cook_time_minutes: Annotated[int, Field(ge=0)]
-    total_time_minutes: Annotated[int, Field(ge=0)]
-    servings: Annotated[int, Field(ge=1, le=20)]
+class RecipeGenerationResponse(BaseModel):
+    """AI Response Schema - aligned with existing recipe schemas."""
+
+    # Basic recipe info - aligned with _RecipeBase
+    title: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None)
+    cuisine_type: str | None = Field(default=None, max_length=100)
+    difficulty: DifficultyLevel = Field(default=DifficultyLevel.MEDIUM)
+    prep_time_minutes: int = Field(ge=0)
+    cook_time_minutes: int = Field(ge=0)
+    total_time_minutes: int = Field(ge=0)
+    servings: int = Field(ge=1, le=20)
+    tags: list[str] = Field(default_factory=list)
 
     # Use existing schemas directly
-    ingredients: Annotated[list[RecipeIngredientCreate], Field(min_length=1)]
-    steps: Annotated[list[RecipeStepCreate], Field(min_length=1)]
+    ingredients: list[RecipeIngredientCreate] = Field(min_length=1)
+    steps: list[RecipeStepCreate] = Field(min_length=1)
     nutrition: RecipeNutritionCreate | None = None
 
-    # Optional fields
+    # Optional AI-specific fields
     tips: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -131,7 +132,7 @@ class RecipeGenerationResponse(BaseModel):
     )
 
     def to_recipe_create(self, created_by_user_id: int) -> RecipeCreate:
-        """Convert to RecipeCreate - direct mapping since we use same schemas."""
+        """Convert to RecipeCreate - now with perfect alignment."""
         return RecipeCreate(
             title=self.title,
             description=self.description,
@@ -139,12 +140,12 @@ class RecipeGenerationResponse(BaseModel):
             prep_time_minutes=self.prep_time_minutes,
             cook_time_minutes=self.cook_time_minutes,
             total_time_minutes=self.total_time_minutes,
-            difficulty=self.difficulty_level,
+            difficulty=self.difficulty,
             servings=self.servings,
             tags=self.tags,
-            ingredients=self.ingredients,  # Direct assignment!
-            steps=self.steps,  # Direct assignment!
-            nutrition=self.nutrition,  # Direct assignment!
+            ingredients=self.ingredients,
+            steps=self.steps,
+            nutrition=self.nutrition,
             is_ai_generated=True,
             created_by_user_id=created_by_user_id
         )
