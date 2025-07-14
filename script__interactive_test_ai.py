@@ -160,6 +160,10 @@ def print_structured_output(response_data: dict):
     print(formatted_json)
     print("=" * 80)
 
+    # Log the structured output to file
+    logger.debug("=== STRUCTURED OUTPUT FROM OPENAI API ===")
+    logger.debug(formatted_json)
+    logger.debug("=== END STRUCTURED OUTPUT ===")
 
 def format_ingredient_display(ingredient, db: Session) -> str:
     """Format ingredient for display with proper name and unit lookup."""
