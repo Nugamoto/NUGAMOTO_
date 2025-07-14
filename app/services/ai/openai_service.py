@@ -11,6 +11,7 @@ from openai.types.chat import (
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam
 )
+from openai.types.shared_params import ResponseFormatJSONObject
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -159,16 +160,8 @@ class OpenAIService(AIService):
             OpenAIServiceError: If suggestion generation fails.
         """
         try:
-            # Create a basic recipe request for suggestions with all required fields
+            # Create a basic recipe request for suggestions - now uses default_factory
             suggestion_request = RecipeGenerationRequest(
-                cuisine_type=None,
-                meal_type=None,
-                difficulty_level=None,
-                max_prep_time=None,
-                max_cook_time=None,
-                servings=None,
-                dietary_restrictions=None,
-                exclude_ingredients=None,
                 special_requests="Provide 3-5 quick meal suggestions based on available ingredients"
             )
 
@@ -307,7 +300,7 @@ class OpenAIService(AIService):
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                response_format={"type": "json_object"},
+                response_format=ResponseFormatJSONObject(type="json_object"),
                 max_tokens=max_tokens,
                 temperature=temperature
             )
