@@ -1,4 +1,3 @@
-
 """SQLAlchemy ORM models for recipes."""
 
 from __future__ import annotations
@@ -30,6 +29,11 @@ class Recipe(Base):
     # ------------------------------------------------------------------ #
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cuisine_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    prep_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cook_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_ai_generated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
@@ -48,7 +52,6 @@ class Recipe(Base):
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
         onupdate=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
-
 
     # ------------------------------------------------------------------ #
     # Relationships                                                       #
