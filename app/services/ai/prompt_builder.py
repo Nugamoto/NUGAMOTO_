@@ -1,4 +1,3 @@
-
 """Enhanced modular prompt builder for AI services."""
 
 from __future__ import annotations
@@ -6,6 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING, Union
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.schemas.ai_service import RecipeGenerationRequest, PromptContext
@@ -107,7 +107,7 @@ class PromptSectionBuilder:
                             available_units.append(f"{unit.name} (ID: {unit.id})")
                 finally:
                     db.close()
-            except Exception:
+            except (ImportError, SQLAlchemyError):
                 pass
 
         available_units = sorted(list(set(available_units)))
