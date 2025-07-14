@@ -1,3 +1,4 @@
+
 """Pydantic schemas for AI services."""
 
 from __future__ import annotations
@@ -66,6 +67,24 @@ class RecipeGenerationRequest(BaseModel):
         description="Any special requests or preferences"
     )]
 
+    # New contextual fields for better AI prompting
+    prioritize_expiring: bool = Field(
+        default=True,
+        description="Prioritize ingredients that are expiring soon"
+    )
+    prefer_available_ingredients: bool = Field(
+        default=True,
+        description="Prefer using ingredients available in kitchen inventory"
+    )
+    required_appliances: list[str] = Field(
+        default_factory=list,
+        description="List of required appliances for the recipe"
+    )
+    avoid_appliances: list[str] = Field(
+        default_factory=list,
+        description="List of appliances to avoid using"
+    )
+
     model_config = ConfigDict(
         str_strip_whitespace=True,
         validate_assignment=True
@@ -91,7 +110,11 @@ class RecipeGenerationRequest(BaseModel):
             max_cook_time=None,
             servings=None,
             dietary_restrictions=[],
-            exclude_ingredients=[]
+            exclude_ingredients=[],
+            prioritize_expiring=True,
+            prefer_available_ingredients=True,
+            required_appliances=[],
+            avoid_appliances=[]
         )
 
 
