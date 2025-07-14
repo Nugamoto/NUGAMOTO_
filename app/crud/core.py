@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import List
+
 from sqlalchemy import select, ColumnElement
 from sqlalchemy.orm import Session, selectinload
 
@@ -619,3 +621,30 @@ def create_conversion_result(
         target_unit_name=to_unit.name if to_unit else f"Unit {to_unit_id}",
         conversion_factor=conversion_factor
     )
+
+
+def get_compatible_units_for_base_unit(db: Session, base_unit_id: int) -> List[UnitRead]:
+    """
+    Get all units that are compatible with the given base unit.
+    Compatible means: units that have a direct conversion to/from the base unit.
+    """
+    # Units that can convert TO the base unit
+    compatible_from_units = db.scalars(
+        select(Unit).join(
+            UnitConversion, Unit.id == UnitConversion.from_unit_id
+        ).where(UnitConversion.to_unit_id == base_unit_id)
+    ).all()
+
+    # Units that can convert FROM the base unit
+    compatible_to_units = db.scalars(
+        select(Unit).join(
+            UnitConversion, Unit.id == UnitConversion.to_unit_id
+        ).where(UnitConversion.from_unit_id == base_unit_id)
+    ).all()
+
+    # Combine and deduplicate
+    all_compatible = list(compatible_from_units) + list(compatible_to_units)
+    unique_units = {unit.id: unit for unit in all_compatible}
+
+    # Convert to schemas before returning
+    return [build_unit_read(unit) for unit in unique_units.values()]
