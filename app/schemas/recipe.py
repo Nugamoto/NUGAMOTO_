@@ -235,6 +235,11 @@ class _RecipeBase(BaseModel):
     """Fields shared by all recipe-related schemas."""
 
     title: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None)
+    cuisine_type: str | None = Field(default=None, max_length=100)
+    prep_time_minutes: int | None = Field(default=None, ge=0)
+    cook_time_minutes: int | None = Field(default=None, ge=0)
+    total_time_minutes: int | None = Field(default=None, ge=0)
     is_ai_generated: bool = Field(default=False)
     created_by_user_id: int | None = Field(default=None, gt=0)
     difficulty: DifficultyLevel = Field(default=DifficultyLevel.MEDIUM)
@@ -334,6 +339,11 @@ class RecipeUpdate(_RecipeBase):
     """Schema for partial recipe updates (PATCH operations)."""
 
     title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None)
+    cuisine_type: str | None = Field(default=None, max_length=100)
+    prep_time_minutes: int | None = Field(default=None, ge=0)
+    cook_time_minutes: int | None = Field(default=None, ge=0)
+    total_time_minutes: int | None = Field(default=None, ge=0)
     is_ai_generated: bool | None = None
     created_by_user_id: int | None = Field(default=None, gt=0)
     difficulty: DifficultyLevel | None = None
