@@ -605,6 +605,7 @@ def get_conversions_for_food_item(
             selectinload(FoodItemUnitConversion.to_unit)
         )
         .where(FoodItemUnitConversion.food_item_id == food_item_id)
+        .where(FoodItemUnitConversion.from_unit_id != FoodItemUnitConversion.to_unit_id)  # ← FILTER HINZUGEFÜGT
         .order_by(FoodItemUnitConversion.from_unit_id, FoodItemUnitConversion.to_unit_id)
     ).all()
 
