@@ -6,11 +6,8 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from app.crud import device as crud_device
-from app.crud import inventory as crud_inventory
-from app.crud import user as crud_user
-from app.schemas.ai_service import RecipeGenerationRequest
-from app.schemas.inventory import InventoryItemRead
+from app.schemas.ai_service import RecipeGenerationRequest, PromptContext
+from app.schemas.device import ApplianceWithDeviceType, KitchenToolWithDeviceType
 from app.schemas.user import UserRead
 
 
@@ -41,40 +38,23 @@ class PromptBuilder:
         Returns:
             Tuple of (system_prompt, user_prompt).
         """
-        user = crud_user.get_user_by_id(self.db, user_id=user_id)
-        if not user:
-            raise ValueError(f"User {user_id} not found")
-
-        # Get kitchen inventory using correct CRUD function
-        inventory_items = crud_inventory.get_kitchen_inventory(
-            self.db, kitchen_id=kitchen_id
-        )
-
-        # Get available appliances and tools using correct CRUD functions
-        # These return the extended schemas with device type info
-        appliances = crud_device.get_kitchen_appliances(
-            self.db, kitchen_id=kitchen_id
-        )
-        tools = crud_device.get_kitchen_tools(
-            self.db, kitchen_id=kitchen_id
+        # Use structured context instead of individual CRUD calls
+        context = PromptContext.build_from_ids(
+            db=self.db,
+            user_id=user_id,
+            kitchen_id=kitchen_id,
+            request=request
         )
 
         system_prompt = self._build_system_prompt()
-        user_prompt = self._build_user_prompt(
-            request=request,
-            user=user,
-            inventory_items=inventory_items,
-            appliances=appliances,
-            tools=tools
-        )
+        user_prompt = self._build_user_prompt_from_context(context)
 
         return system_prompt, user_prompt
 
-    def _build_system_prompt(self) -> str:
+    @staticmethod
+    def _build_system_prompt() -> str:
         """Build the system prompt for recipe generation."""
-        return """
-
-You are NUGAMOTO, an expert culinary AI assistant specializing in smart kitchen management.
+        return """You are NUGAMOTO, an expert culinary AI assistant specializing in smart kitchen management.
 
 Your expertise includes:
 - Creating recipes based on available ingredients and kitchen equipment
@@ -89,29 +69,19 @@ Always respond with practical, achievable recipes that consider:
 - Kitchen equipment capabilities
 - Cooking skill level and time constraints
 - Food safety and proper cooking techniques
-"""
 
-    def _build_user_prompt(
-            self,
-            request: RecipeGenerationRequest,
-            user: UserRead,
-            inventory_items: list[InventoryItemRead],
-            appliances: list,  # Any type. Could be ApplianceWithDeviceType
-            tools: list  # Any type. Could be KitchenToolWithDeviceType
-    ) -> str:
-        """Build the user prompt with all contextual information."""
+CRITICAL: When using ingredients, always include the exact food_item_id from the inventory list provided."""
 
-        # Build user context
-        user_context = self._build_user_context(user)
+    @staticmethod
+    def _build_user_prompt_from_context(context: PromptContext) -> str:
+        """Build user prompt from structured context."""
 
-        # Build inventory context
-        inventory_context = self._build_inventory_context(inventory_items)
-
-        # Build equipment context
-        equipment_context = self._build_equipment_context(appliances, tools)
-
-        # Build request context
-        request_context = self._build_request_context(request)
+        # Build sections using context
+        user_context = PromptBuilder._build_user_context(context.user)
+        inventory_context = PromptBuilder._build_inventory_context_enhanced(context)
+        equipment_context = PromptBuilder._build_equipment_context_typed(context.appliances, context.tools)
+        priority_context = PromptBuilder._build_priority_context(context)
+        request_context = PromptBuilder._build_request_context(context.request)
 
         prompt = f"""Please generate a recipe based on the following information:
 
@@ -121,21 +91,25 @@ Always respond with practical, achievable recipes that consider:
 
 {equipment_context}
 
+{priority_context}
+
 {request_context}
 
 Requirements:
 - Use available ingredients efficiently
 - Consider dietary preferences and restrictions
+- PRIORITIZE expiring ingredients when possible
 - Suggest appropriate cooking methods for available equipment
 - Provide clear, step-by-step instructions
 - Include estimated cooking and prep times
-- Mention any ingredient substitutions if needed
+- Always include food_item_id for each ingredient used
 
 Please respond with a complete recipe in JSON format."""
 
         return prompt
 
-    def _build_user_context(self, user: UserRead) -> str:
+    @staticmethod
+    def _build_user_context(user: UserRead) -> str:
         """Build user-specific context section."""
         context = f"USER PROFILE:\n- Name: {user.name}"
 
@@ -150,27 +124,55 @@ Please respond with a complete recipe in JSON format."""
 
         return context
 
-    def _build_inventory_context(self, inventory_items: list[InventoryItemRead]) -> str:
-        """Build inventory context with food item IDs for AI prompts."""
-        if not inventory_items:
+    @staticmethod
+    def _build_inventory_context_enhanced(context: PromptContext) -> str:
+        """Build enhanced inventory context with prioritization."""
+        if not context.inventory_items:
             return "AVAILABLE INGREDIENTS:\nNo ingredients currently available in the kitchen inventory."
 
-        # Group by category and include IDs
         context_lines = [
             "AVAILABLE INGREDIENTS (with database IDs for reference):"
         ]
 
-        for item in inventory_items:
+        # Sort items: expiring first, then low stock, then regular
+        sorted_items = sorted(
+            context.inventory_items,
+            key=lambda x: (
+                not x.expires_soon,  # Expiring items first
+                not x.is_low_stock,  # Low stock items second
+                x.food_item.name  # Alphabetical for rest
+            )
+        )
+
+        for item in sorted_items:
             food_item = item.food_item
             base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
             quantity_str = f"{item.quantity:.1f}" if item.quantity % 1 != 0 else f"{int(item.quantity)}"
 
+            # Build ingredient line with status indicators
             ingredient_line = f"- {food_item.name} (ID: {food_item.id}): {quantity_str} {base_unit_name}"
 
-            if item.expiration_date:
+            # Add priority indicators
+            status_indicators = []
+            if item.expires_soon:
+                days_left = (item.expiration_date - datetime.date.today()).days if item.expiration_date else None
+                status_indicators.append(f"⚠️ EXPIRES IN {days_left} DAYS")
+            elif item.is_expired:
+                status_indicators.append("❌ EXPIRED")
+
+            if item.is_low_stock:
+                status_indicators.append("📉 LOW STOCK")
+
+            if status_indicators:
+                ingredient_line += f" | {' | '.join(status_indicators)}"
+            elif item.expiration_date:
                 ingredient_line += f" | Expires: {item.expiration_date.strftime('%Y-%m-%d')}"
 
             context_lines.append(ingredient_line)
+
+        # Add category summary
+        if context.available_categories:
+            context_lines.append(f"\nAVAILABLE CATEGORIES: {', '.join(context.available_categories.keys())}")
 
         context_lines.append(
             "\nIMPORTANT: Always use the exact ID and name from this list when specifying ingredients in your recipe."
@@ -178,34 +180,35 @@ Please respond with a complete recipe in JSON format."""
 
         return "\n".join(context_lines)
 
-    def _build_equipment_context(self, appliances: list, tools: list) -> str:
-        """Build kitchen equipment context section."""
+    @staticmethod
+    def _build_equipment_context_typed(
+            appliances: list[ApplianceWithDeviceType],
+            tools: list[KitchenToolWithDeviceType]
+    ) -> str:
+        """Build kitchen equipment context with typed schemas."""
         context = "AVAILABLE KITCHEN EQUIPMENT:"
 
         if appliances:
             context += "\n\nAppliances:"
             for appliance in appliances:
-                # Handle both Appliance and ApplianceWithDeviceType objects
-                display_name = getattr(appliance, 'display_name', 'Unknown Appliance')
-                capacity = getattr(appliance, 'capacity_liters', None)
-
-                context += f"\n- {display_name}"
-                if capacity:
-                    context += f" ({capacity}L capacity)"
+                context += f"\n- {appliance.display_name}"
+                if appliance.capacity_liters:
+                    context += f" ({appliance.capacity_liters}L capacity)"
+                # Use correct attribute names from schema
+                if hasattr(appliance, 'device_type_name'):
+                    context += f" | Type: {appliance.device_type_name}"
 
         if tools:
             context += "\n\nTools:"
             for tool in tools:
-                # Handle both KitchenTool and KitchenToolWithDeviceType objects
-                name = getattr(tool, 'name', 'Unknown Tool')
-                size_detail = getattr(tool, 'size_or_detail', None)
-                quantity = getattr(tool, 'quantity', None)
-
-                tool_desc = f"- {name}"
-                if size_detail:
-                    tool_desc += f" ({size_detail})"
-                if quantity and quantity > 1:
-                    tool_desc += f" (x{quantity})"
+                tool_desc = f"- {tool.name}"
+                if tool.size_or_detail:
+                    tool_desc += f" ({tool.size_or_detail})"
+                if tool.quantity and tool.quantity > 1:
+                    tool_desc += f" (x{tool.quantity})"
+                # Use correct attribute names from schema
+                if hasattr(tool, 'device_type_name'):
+                    tool_desc += f" | Type: {tool.device_type_name}"
                 context += f"\n{tool_desc}"
 
         if not appliances and not tools:
@@ -213,7 +216,46 @@ Please respond with a complete recipe in JSON format."""
 
         return context
 
-    def _build_request_context(self, request: RecipeGenerationRequest) -> str:
+    @staticmethod
+    def _build_priority_context(context: PromptContext) -> str:
+        """Build priority context for ingredient usage."""
+        priority_lines = []
+
+        if context.request.prioritize_expiring and context.expiring_items:
+            priority_lines.append("PRIORITY INGREDIENTS (use these first):")
+            for item in context.expiring_items:
+                food_item = item.food_item
+                base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
+                quantity_str = f"{item.quantity:.1f}" if item.quantity % 1 != 0 else f"{int(item.quantity)}"
+                days_left = (item.expiration_date - datetime.date.today()).days if item.expiration_date else None
+                priority_lines.append(
+                    f"- {food_item.name} (ID: {food_item.id}): {quantity_str} {base_unit_name} - expires in {days_left} days")
+
+        if context.low_stock_items:
+            if priority_lines:
+                priority_lines.append("")
+            priority_lines.append("LOW STOCK ITEMS (use sparingly):")
+            for item in context.low_stock_items:
+                food_item = item.food_item
+                base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
+                quantity_str = f"{item.quantity:.1f}" if item.quantity % 1 != 0 else f"{int(item.quantity)}"
+                priority_lines.append(f"- {food_item.name} (ID: {food_item.id}): {quantity_str} {base_unit_name}")
+
+        # Add appliance preferences
+        if context.request.required_appliances:
+            if priority_lines:
+                priority_lines.append("")
+            priority_lines.append(f"REQUIRED APPLIANCES: {', '.join(context.request.required_appliances)}")
+
+        if context.request.avoid_appliances:
+            if priority_lines:
+                priority_lines.append("")
+            priority_lines.append(f"AVOID APPLIANCES: {', '.join(context.request.avoid_appliances)}")
+
+        return "\n".join(priority_lines) if priority_lines else "No special priorities specified."
+
+    @staticmethod
+    def _build_request_context(request: RecipeGenerationRequest) -> str:
         """Build request-specific context section."""
         context = "RECIPE REQUEST:"
 
@@ -244,20 +286,32 @@ Please respond with a complete recipe in JSON format."""
         if request.special_requests:
             context += f"\n- Special Requests: {request.special_requests}"
 
+        # Add new contextual preferences
+        preferences = []
+        if request.prioritize_expiring:
+            preferences.append("prioritize expiring ingredients")
+        if request.prefer_available_ingredients:
+            preferences.append("prefer available ingredients")
+
+        if preferences:
+            context += f"\n- Preferences: {', '.join(preferences)}"
+
         return context
 
     def build_inventory_analysis_prompt(self, kitchen_id: int) -> tuple[str, str]:
-        """Build prompts for inventory analysis.
+        """Build prompts for inventory analysis using structured context."""
 
-        Args:
-            kitchen_id: ID of the kitchen to analyze.
+        # Create a minimal request for analysis
+        analysis_request = RecipeGenerationRequest(
+            special_requests="Analyze inventory for insights and recommendations"
+        )
 
-        Returns:
-            Tuple of (system_prompt, user_prompt).
-        """
-        # Get inventory using correct CRUD function
-        inventory_items = crud_inventory.get_kitchen_inventory(
-            self.db, kitchen_id=kitchen_id
+        # Build context (user_id=1 is placeholder for analysis)
+        context = PromptContext.build_from_ids(
+            db=self.db,
+            user_id=1,  # Placeholder - analysis doesn't need specific user
+            kitchen_id=kitchen_id,
+            request=analysis_request
         )
 
         system_prompt = """You are NUGAMOTO, a smart kitchen inventory assistant.
@@ -271,41 +325,45 @@ Analyze the provided inventory and provide insights including:
 
 Respond in JSON format with structured analysis."""
 
-        # Build inventory analysis
-        today = datetime.date.today()
-        expired_items = []
-        expiring_items = []
-        low_stock_items = []
-        good_items = []
+        # Build comprehensive analysis prompt
+        analysis_sections = []
 
-        for item in inventory_items:
-            # Get base unit name from the relationship
-            base_unit_name = item.food_item.base_unit.name if item.food_item.base_unit else 'units'
+        if context.expiring_items:
+            analysis_sections.append("EXPIRING SOON:")
+            for item in context.expiring_items:
+                food_item = item.food_item
+                base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
+                days_left = (item.expiration_date - datetime.date.today()).days if item.expiration_date else None
+                analysis_sections.append(
+                    f"- {food_item.name}: {item.quantity} {base_unit_name} (expires in {days_left} days)")
 
-            if item.is_expired:
-                expired_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (expired {item.expiration_date})")
-            elif item.expires_soon:
-                days_left = (item.expiration_date - today).days if item.expiration_date else None
-                expiring_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (expires in {days_left} days)")
-            elif item.is_low_stock:
-                low_stock_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name} (below minimum)")
-            else:
-                good_items.append(f"- {item.food_item.name}: {item.quantity} {base_unit_name}")
+        if context.low_stock_items:
+            analysis_sections.append("\nLOW STOCK:")
+            for item in context.low_stock_items:
+                food_item = item.food_item
+                base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
+                analysis_sections.append(f"- {food_item.name}: {item.quantity} {base_unit_name} (below minimum)")
 
-        user_prompt = "Please analyze this kitchen inventory:\n\n"
-
-        if expired_items:
-            user_prompt += "EXPIRED ITEMS:\n" + "\n".join(expired_items) + "\n\n"
-
-        if expiring_items:
-            user_prompt += "EXPIRING SOON:\n" + "\n".join(expiring_items) + "\n\n"
-
-        if low_stock_items:
-            user_prompt += "LOW STOCK:\n" + "\n".join(low_stock_items) + "\n\n"
+        # Good condition items
+        good_items = [
+            item for item in context.inventory_items
+            if not item.expires_soon and not item.is_low_stock and not item.is_expired
+        ]
 
         if good_items:
-            user_prompt += "GOOD CONDITION:\n" + "\n".join(good_items) + "\n\n"
+            analysis_sections.append("\nGOOD CONDITION:")
+            for item in good_items[:10]:  # Limit to first 10
+                food_item = item.food_item
+                base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
+                analysis_sections.append(f"- {food_item.name}: {item.quantity} {base_unit_name}")
 
-        user_prompt += "Provide a comprehensive analysis with recommendations for optimal ingredient usage and waste reduction."
+        if context.available_categories:
+            analysis_sections.append(f"\nAVAILABLE CATEGORIES: {', '.join(context.available_categories.keys())}")
+
+        user_prompt = f"""Please analyze this kitchen inventory:
+
+{chr(10).join(analysis_sections)}
+
+Provide a comprehensive analysis with recommendations for optimal ingredient usage and waste reduction."""
 
         return system_prompt, user_prompt
