@@ -311,11 +311,24 @@ def add_recipe_ingredient(
     if existing_ingredient:
         raise ValueError(f"Ingredient with food item ID {ingredient_data.food_item_id} already exists in recipe")
 
+    # Auto-calculate amount_in_base_unit if not provided
+    amount_in_base_unit = ingredient_data.amount_in_base_unit
+    if amount_in_base_unit is None and ingredient_data.original_amount and ingredient_data.original_unit_id:
+        # Import here to avoid circular imports
+        from app.services.conversions.unit_conversion_service import UnitConversionService
+
+        unit_conversion_service = UnitConversionService(db)
+        amount_in_base_unit = unit_conversion_service.convert_to_base_unit(
+            ingredient_data.food_item_id,
+            ingredient_data.original_amount,
+            ingredient_data.original_unit_id
+        )
+
     # Create ingredient
     ingredient_orm = RecipeIngredient(
         recipe_id=recipe_id,
         food_item_id=ingredient_data.food_item_id,
-        amount_in_base_unit=ingredient_data.amount_in_base_unit,
+        amount_in_base_unit=amount_in_base_unit,
         original_unit_id=ingredient_data.original_unit_id,
         original_amount=ingredient_data.original_amount
     )
