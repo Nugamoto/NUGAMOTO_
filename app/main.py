@@ -15,7 +15,8 @@ from .api.v1 import (
     user_health as user_health_router,
     user_credentials as user_credentials_router,
     device as device_router,
-    recipe as recipe_router
+    recipe as recipe_router,
+    ai as ai_router
 )
 
 app = FastAPI(
@@ -50,3 +51,4 @@ app.include_router(device_router.router, prefix="/v1")
 
 # Recipe routes
 app.include_router(recipe_router.router, prefix="/v1")
+app.include_router(ai_router.router, prefix="/v1")
