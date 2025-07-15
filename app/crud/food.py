@@ -760,3 +760,102 @@ def can_convert_food_units(
 
     # No conversion path found
     return False
+
+
+# ================================================================== #
+# Unit Conversion Utilities                                          #
+# ================================================================== #
+
+def convert_to_base_unit(
+        db: Session,
+        food_item_id: int,
+        amount: float,
+        from_unit_id: int
+) -> float:
+    """Convert amount to base unit for a food item - CRUD layer.
+
+    Args:
+        db: Database session
+        food_item_id: ID of the food item
+        amount: Amount to convert
+        from_unit_id: Source unit ID
+
+    Returns:
+        Amount in base unit
+
+    Raises:
+        ValueError: If food item not found or conversion not possible
+    """
+
+    # Get food item
+    food_item = db.scalar(select(FoodItem).where(FoodItem.id == food_item_id))
+    if not food_item:
+        raise ValueError(f"Food item {food_item_id} not found")
+
+    # If already in base unit, return as-is
+    if from_unit_id == food_item.base_unit_id:
+        return amount
+
+    # Try existing convert_food_value function
+    result = convert_food_value(
+        db=db,
+        food_item_id=food_item_id,
+        value=amount,
+        from_unit_id=from_unit_id,
+        to_unit_id=food_item.base_unit_id
+    )
+
+    if result and result[0] is not None:
+        return result[0]  # Return converted value
+
+    raise ValueError(
+        f"Cannot convert from unit {from_unit_id} to base unit {food_item.base_unit_id} "
+        f"for food item {food_item_id}"
+    )
+
+
+def get_available_units_for_food_item(db: Session, food_item_id: int) -> list[tuple[int, str]]:
+    """Get all available units for a food item - CRUD layer.
+
+    Args:
+        db: Database session
+        food_item_id: ID of the food item
+
+    Returns:
+        List of (unit_id, unit_name) tuples
+    """
+
+    food_item = db.scalar(
+        select(FoodItem)
+        .options(
+            selectinload(FoodItem.base_unit),
+            selectinload(FoodItem.unit_conversions).selectinload(FoodItemUnitConversion.from_unit),
+            selectinload(FoodItem.unit_conversions).selectinload(FoodItemUnitConversion.to_unit)
+        )
+        .where(FoodItem.id == food_item_id)
+    )
+
+    if not food_item:
+        return []
+
+    available_units = []
+    unit_ids_seen = set()
+
+    # Always add base unit
+    available_units.append((food_item.base_unit_id, food_item.base_unit.name))
+    unit_ids_seen.add(food_item.base_unit_id)
+
+    # Add units from food-specific conversions
+    if hasattr(food_item, 'unit_conversions') and food_item.unit_conversions:
+        for conversion in food_item.unit_conversions:
+            # Add from_unit if not already present
+            if conversion.from_unit_id not in unit_ids_seen:
+                available_units.append((conversion.from_unit_id, conversion.from_unit.name))
+                unit_ids_seen.add(conversion.from_unit_id)
+
+            # Add to_unit if not already present
+            if conversion.to_unit_id not in unit_ids_seen:
+                available_units.append((conversion.to_unit_id, conversion.to_unit.name))
+                unit_ids_seen.add(conversion.to_unit_id)
+
+    return available_units
