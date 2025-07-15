@@ -11,7 +11,8 @@ from typing import Protocol
 
 
 # System Prompts
-NUGAMOTO_RECIPE_SYSTEM_PROMPT = """You are NUGAMOTO, an expert culinary AI assistant specializing in smart kitchen management.
+NUGAMOTO_RECIPE_SYSTEM_PROMPT = """
+You are NUGAMOTO, an expert culinary AI assistant specializing in smart kitchen management.
 
 Your expertise includes:
 - Creating recipes based on available ingredients and kitchen equipment
@@ -27,7 +28,6 @@ CRITICAL UNIT HANDLING RULES:
 4. When in doubt, use the base unit provided for each ingredient
 5. EXAMPLE: For 500g tomatoes, specify: "original_amount": 500, "original_unit_id": 1 (if ID 1 is grams)
 6. NEVER leave original_unit_id null or empty when original_amount is provided
-7. DO NOT specify amount_in_base_unit - this will be calculated automatically
 
 NUTRITION SOURCE VALIDATION:
 - For nutrition.source, use only: "imported", "ai_generated", "api", "manual", or "calculated"
@@ -42,7 +42,8 @@ Always respond with practical, achievable recipes that consider:
 
 CRITICAL: When using ingredients, always include the exact food_item_id from the inventory list provided."""
 
-NUGAMOTO_INVENTORY_SYSTEM_PROMPT = """You are NUGAMOTO, a smart kitchen inventory assistant.
+NUGAMOTO_INVENTORY_SYSTEM_PROMPT = """
+You are NUGAMOTO, a smart kitchen inventory assistant.
 
 Analyze the provided inventory and provide insights including:
 - Items that are expiring soon or already expired
@@ -53,7 +54,8 @@ Analyze the provided inventory and provide insights including:
 
 Respond in JSON format with structured analysis."""
 
-NUGAMOTO_SUGGESTIONS_SYSTEM_PROMPT = """You are NUGAMOTO, a personalized cooking assistant.
+NUGAMOTO_SUGGESTIONS_SYSTEM_PROMPT = """
+You are NUGAMOTO, a personalized cooking assistant.
 
 Provide 3-5 quick meal suggestions in JSON format with the following structure:
 {
@@ -168,7 +170,8 @@ class SectionTemplate:
 
 RECIPE_GENERATION_TEMPLATE = PromptTemplate(
     system_prompt=NUGAMOTO_RECIPE_SYSTEM_PROMPT,
-    user_template="""Please generate a recipe based on the following information:
+    user_template="""
+Please generate a recipe based on the following information:
 
 {user_context}
 
@@ -188,7 +191,8 @@ RECIPE_GENERATION_TEMPLATE = PromptTemplate(
 
 INVENTORY_ANALYSIS_TEMPLATE = PromptTemplate(
     system_prompt=NUGAMOTO_INVENTORY_SYSTEM_PROMPT,
-    user_template="""Please analyze this kitchen inventory:
+    user_template="""
+Please analyze this kitchen inventory:
 
 {analysis_sections}
 
@@ -198,7 +202,8 @@ Provide a comprehensive analysis with recommendations for optimal ingredient usa
 
 COOKING_SUGGESTIONS_TEMPLATE = PromptTemplate(
     system_prompt=NUGAMOTO_SUGGESTIONS_SYSTEM_PROMPT,
-    user_template="""Based on the following kitchen information:
+    user_template="""
+Based on the following kitchen information:
 
 {user_context}
 
