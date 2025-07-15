@@ -37,7 +37,7 @@ async def generate_recipe(
             kitchen_id=data.kitchen_id
         )
 
-        model_version = getattr(ai_service, 'model_version', 'unknown')
+        model_version = getattr(ai_service, 'model', 'unknown')
 
         ai_output = crud_ai_output.create_ai_output(
             db=db,
