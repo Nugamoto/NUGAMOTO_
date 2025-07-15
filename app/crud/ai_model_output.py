@@ -9,7 +9,7 @@ from app.schemas.ai_model_output import (
     AIModelOutputCreate,
     AIModelOutputRead,
     AIOutputSearchParams,
-    AIOutputSummary
+    AIOutputSummary, AIModelOutputUpdate
 )
 
 
@@ -92,6 +92,44 @@ def get_ai_output_by_id(db: Session, output_id: int) -> AIModelOutputRead | None
 
     return build_ai_model_output_read(output_orm)
 
+
+def update_ai_output(
+        db: Session,
+        output_id: int,
+        output_data: AIModelOutputUpdate
+) -> AIModelOutputRead | None:
+    """Update AI output - returns schema.
+
+    Args:
+        db: Database session.
+        output_id: The unique identifier of the AI output.
+        output_data: Validated AI output update data.
+
+    Returns:
+        The updated AI output schema if found, None otherwise.
+
+    Example:
+        >>> data = AIModelOutputUpdate(
+        ...     target_id=456,
+        ...     extra_data={"status": "saved", "recipe_id": 456}
+        ... )
+        >>> result = update_ai_output(db, 123, data)
+    """
+    output_orm = get_ai_output_orm_by_id(db, output_id)
+
+    if not output_orm:
+        return None
+
+    # Update only fields that are provided (not None)
+    update_data = output_data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(output_orm, field, value)
+
+    db.commit()
+    db.refresh(output_orm)
+
+    return build_ai_model_output_read(output_orm)
 
 def delete_ai_output(db: Session, output_id: int) -> bool:
     """Delete an AI output by its ID.

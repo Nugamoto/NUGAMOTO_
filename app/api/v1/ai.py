@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.core.enums import OutputType, OutputFormat, AIOutputTargetType
 from app.crud import ai_model_output as crud_ai_output
-from app.schemas.ai_model_output import AIModelOutputCreate
+from app.schemas.ai_model_output import AIModelOutputCreate, AIModelOutputUpdate
 from app.schemas.ai_service import (
     RecipeGenerationAPIRequest,
     RecipeWithAIOutput,
@@ -110,9 +110,19 @@ async def mark_ai_recipe_as_saved(
         if not ai_output or ai_output.user_id != user_id:
             raise HTTPException(status_code=404, detail="AI output not found")
 
-        ai_output.target_id = recipe_id
-        ai_output.extra_data = {"status": "saved", "recipe_id": recipe_id}
-        db.commit()
+        update_data = AIModelOutputUpdate(
+            target_id=recipe_id,
+            extra_data={"status": "saved", "recipe_id": recipe_id}
+        )
+
+        updated_output = crud_ai_output.update_ai_output(
+            db=db,
+            output_id=ai_output_id,
+            output_data=update_data
+        )
+
+        if not updated_output:
+            raise HTTPException(status_code=404, detail="Failed to update AI output")
 
         return {"message": "AI recipe marked as saved"}
 

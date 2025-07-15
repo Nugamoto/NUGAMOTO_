@@ -57,6 +57,38 @@ class AIModelOutputRead(_AIModelOutputBase):
     updated_at: datetime = Field(..., description="Last update timestamp")
 
 
+class AIModelOutputUpdate(_AIModelOutputBase):
+    """Schema for updating AI model outputs."""
+
+    # Override all fields from base to make them optional
+    user_id: int | None = Field(default=None, gt=0, description="ID of the user who initiated the AI request")
+    model_version: str | None = Field(
+        default=None,
+        max_length=100,
+        description="AI model version (e.g., 'gpt-4', 'claude-3')"
+    )
+    output_type: OutputType | None = Field(default=None, description="Type of AI output")
+    output_format: OutputFormat | None = Field(
+        default=None,
+        description="Format of the output content"
+    )
+    prompt_used: str | None = Field(default=None, min_length=1, description="Input prompt sent to AI service")
+    raw_output: str | None = Field(default=None, min_length=1, description="Raw output from AI service")
+    extra_data: dict[str, Any] | None = Field(
+        default=None,
+        description="Additional metadata (tokens, cost, model info, etc.)"
+    )
+    target_type: AIOutputTargetType | None = Field(
+        default=None,
+        description="Type of target entity this AI output relates to"
+    )
+    target_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="Optional ID of the target entity (recipe, shopping list, etc.)"
+    )
+
+
 class AIOutputSearchParams(BaseModel):
     """Schema for AI output search and filtering parameters."""
 
