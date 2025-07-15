@@ -12,7 +12,7 @@ from app.core.enums import DifficultyLevel
 from app.schemas.ai_model_output import AIModelOutputRead
 from app.schemas.device import ApplianceWithDeviceType, KitchenToolWithDeviceType
 from app.schemas.inventory import InventoryItemRead
-from app.schemas.recipe import RecipeWithDetails, RecipeCreate, RecipeIngredientCreate, RecipeStepCreate, \
+from app.schemas.recipe import RecipeCreate, RecipeIngredientCreate, RecipeStepCreate, \
     RecipeNutritionCreate
 from app.schemas.user import UserRead
 from app.services.conversions.unit_conversion_service import UnitConversionService
@@ -396,10 +396,18 @@ class RecipeRequestInput(BaseModel):
         return RecipeGenerationRequest.from_user_input(self.user_input)
 
 
-class RecipeWithAIOutput(BaseModel):
-    """Schema combining recipe and its AI generation metadata."""
+class RecipeGenerationAPIRequest(BaseModel):
+    """API request schema for recipe generation."""
 
-    recipe: RecipeWithDetails
+    user_id: int = Field(..., gt=0)
+    kitchen_id: int = Field(..., gt=0)
+    request: RecipeGenerationRequest
+
+
+class RecipeWithAIOutput(BaseModel):
+    """Schema combining recipe generation response and AI metadata."""
+
+    recipe: RecipeGenerationResponse
     ai_output: AIModelOutputRead
 
     model_config = ConfigDict(from_attributes=True)
