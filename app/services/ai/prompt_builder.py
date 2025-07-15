@@ -3,18 +3,21 @@
 
 from sqlalchemy.orm import Session
 
-from app.schemas.user import UserRead
-from app.schemas.device import ApplianceWithDeviceType, KitchenToolWithDeviceType
 from app.schemas.ai_service import PromptContext, RecipeGenerationRequest
+from app.schemas.device import ApplianceWithDeviceType, KitchenToolWithDeviceType
+from app.schemas.user import UserRead
+from app.services.ai.inventory_prompt_service import InventoryPromptService
 from app.services.ai.prompt_templates import (
     USER_PROFILE_TEMPLATE,
     INVENTORY_TEMPLATE,
     EQUIPMENT_TEMPLATE,
     SECTION_HEADERS,
-    COMMON_MESSAGES
+    COMMON_MESSAGES,
+    NUGAMOTO_RECIPE_SYSTEM_PROMPT,
+    NUGAMOTO_INVENTORY_SYSTEM_PROMPT,
+    RECIPE_REQUIREMENTS
 )
 from app.services.conversions.unit_conversion_service import UnitConversionService
-from app.services.ai.inventory_prompt_service import InventoryPromptService
 
 
 class PromptSectionBuilder:
@@ -59,8 +62,8 @@ class PromptSectionBuilder:
 
     @staticmethod
     def build_equipment_section(
-        appliances: list[ApplianceWithDeviceType],
-        tools: list[KitchenToolWithDeviceType]
+            appliances: list[ApplianceWithDeviceType],
+            tools: list[KitchenToolWithDeviceType]
     ) -> str:
         """Build equipment section using template."""
         if not appliances and not tools:
@@ -172,3 +175,140 @@ class PromptSectionBuilder:
             lines.append(f"- Preferences: {', '.join(preferences)}")
 
         return "\n".join(lines)
+
+
+class PromptBuilder:
+    """Main prompt builder that orchestrates section building."""
+
+
+    def __init__(self, db: Session):
+        """Initialize prompt builder with database session."""
+        self.db = db
+        self.section_builder = PromptSectionBuilder(db)
+
+
+    def build_recipe_prompt(
+            self,
+            request: RecipeGenerationRequest,
+            user_id: int,
+            kitchen_id: int
+    ) -> tuple[str, str]:
+        """Build recipe generation prompt using templates.
+
+        Args:
+            request: Recipe generation request
+            user_id: User ID
+            kitchen_id: Kitchen ID
+
+        Returns:
+            Tuple of (system_prompt, user_prompt)
+        """
+        # Build context from database
+        context = PromptContext.build_from_ids(
+            db=self.db,
+            user_id=user_id,
+            kitchen_id=kitchen_id,
+            request=request
+        )
+
+        # Build individual sections
+        user_context = self.section_builder.build_user_section(context.user)
+        inventory_context = self.section_builder.build_inventory_section(context)
+        equipment_context = self.section_builder.build_equipment_section(
+            context.appliances, context.tools
+        )
+        priority_context = self.section_builder.build_priority_section(context)
+        request_context = self.section_builder.build_request_section(context.request)
+
+        # Build requirements section
+        requirements = f"{SECTION_HEADERS['requirements']}\n" + "\n".join(
+            f"- {req}" for req in RECIPE_REQUIREMENTS
+        )
+
+        # Combine all sections into user prompt
+        user_prompt = f"""Please generate a recipe based on the following information:
+
+{user_context}
+
+{inventory_context}
+
+{equipment_context}
+
+{priority_context}
+
+{request_context}
+
+{requirements}
+
+{COMMON_MESSAGES['json_format']}"""
+
+        return NUGAMOTO_RECIPE_SYSTEM_PROMPT, user_prompt
+
+
+    def build_inventory_analysis_prompt(self, kitchen_id: int) -> tuple[str, str]:
+        """Build inventory analysis prompt using templates.
+
+        Args:
+            kitchen_id: Kitchen ID
+
+        Returns:
+            Tuple of (system_prompt, user_prompt)
+        """
+        # Create basic request for inventory analysis
+        analysis_request = RecipeGenerationRequest(
+            special_requests="Analyze inventory for insights and recommendations"
+        )
+
+        # Build context
+        context = PromptContext.build_from_ids(
+            db=self.db,
+            user_id=1,  # Default user for analysis
+            kitchen_id=kitchen_id,
+            request=analysis_request
+        )
+
+        # Build analysis sections
+        analysis_sections = []
+
+        # Expiring items
+        if context.expiring_items:
+            analysis_sections.append(f"{SECTION_HEADERS['expiring_soon']}")
+            expiring_lines = self.section_builder.inventory_prompt_service.format_priority_ingredients(
+                context.expiring_items
+            )
+            analysis_sections.extend(expiring_lines)
+
+        # Low-stock items
+        if context.low_stock_items:
+            analysis_sections.append(f"\n{SECTION_HEADERS['low_stock_items']}")
+            low_stock_lines = self.section_builder.inventory_prompt_service.format_low_stock_items(
+                context.low_stock_items
+            )
+            analysis_sections.extend(low_stock_lines)
+
+        # Good condition items (sample)
+        good_items = [
+            item for item in context.inventory_items
+            if not item.expires_soon and not item.is_low_stock and not item.is_expired
+        ]
+        if good_items:
+            analysis_sections.append(f"\n{SECTION_HEADERS['good_condition']}")
+            for item in good_items[:10]:  # Show first 10
+                food_item = item.food_item
+                base_unit_name = food_item.base_unit.name if food_item.base_unit else 'units'
+                quantity_str = f"{item.quantity:.1f}" if item.quantity % 1 != 0 else f"{int(item.quantity)}"
+                analysis_sections.append(f"- {food_item.name}: {quantity_str} {base_unit_name}")
+
+        # Available categories
+        if context.available_categories:
+            analysis_sections.append(
+                f"\n{SECTION_HEADERS['available_categories']} {', '.join(context.available_categories.keys())}"
+            )
+
+        user_prompt = f"""Please analyze this kitchen inventory:
+
+{chr(10).join(analysis_sections)}
+
+Provide a comprehensive analysis with recommendations for optimal ingredient usage and waste reduction."""
+
+        return NUGAMOTO_INVENTORY_SYSTEM_PROMPT, user_prompt
