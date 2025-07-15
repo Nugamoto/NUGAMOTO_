@@ -1,3 +1,4 @@
+
 """Service for building inventory-related prompt sections."""
 
 import datetime
@@ -73,7 +74,7 @@ class InventoryPromptService:
         return line
 
     def _get_available_units_display(self, food_item: Union[FoodItemRead, FoodItemWithConversions]) -> list[str]:
-        """Get available units display for a food item.
+        """Get available units display for a food item with COMPLETE original logic.
 
         Args:
             food_item: Food item to get units for
@@ -81,22 +82,55 @@ class InventoryPromptService:
         Returns:
             List of formatted unit strings
         """
+        available_units = []
+        base_unit = food_item.base_unit
+
         try:
-            # Get all available units (food-specific + generic)
-            available_units = self.unit_conversion_service.get_all_available_units_for_food_item(food_item.id)
-
+            # First, try to get units from the unit conversion service
+            service_units = self.unit_conversion_service.get_all_available_units_for_food_item(food_item.id)
+            
             # Format as "unit_name (ID: unit_id)"
-            formatted_units = []
-            for unit_id, unit_name in available_units:
-                formatted_units.append(f"{unit_name} (ID: {unit_id})")
-
-            return sorted(formatted_units)
+            for unit_id, unit_name in service_units:
+                available_units.append(f"{unit_name} (ID: {unit_id})")
 
         except (ValueError, SQLAlchemyError):
-            # Fallback to base unit only if service fails
-            if food_item.base_unit:
-                return [f"{food_item.base_unit.name} (ID: {food_item.base_unit.id})"]
-            return []
+            # Fallback to original complex logic if service fails
+
+            # Add base unit first
+            if base_unit:
+                available_units.append(f"{base_unit.name} (ID: {base_unit.id})")
+
+            # Add food-specific conversions (from original logic)
+            if hasattr(food_item, 'unit_conversions') and getattr(food_item, 'unit_conversions', None):
+                conversions = getattr(food_item, 'unit_conversions')
+                for conversion in conversions:
+                    if conversion.from_unit_id != base_unit.id:
+                        available_units.append(f"{conversion.from_unit_name} (ID: {conversion.from_unit_id})")
+                    if conversion.to_unit_id != base_unit.id:
+                        available_units.append(f"{conversion.to_unit_name} (ID: {conversion.to_unit_id})")
+
+            # Add generic compatible units (from original logic)
+            if base_unit:
+                try:
+                    from app.crud import core as crud_core
+                    from app.db.session import SessionLocal
+
+                    db = SessionLocal()
+                    try:
+                        compatible_units = crud_core.get_compatible_units_for_base_unit(db, base_unit.id)
+                        for unit in compatible_units:
+                            if unit.id != base_unit.id:
+                                available_units.append(f"{unit.name} (ID: {unit.id})")
+                    finally:
+                        db.close()
+                except (ImportError, SQLAlchemyError):
+                    # Final fallback to base unit only
+                    if base_unit and not available_units:
+                        available_units.append(f"{base_unit.name} (ID: {base_unit.id})")
+
+        # Remove duplicates and sort
+        available_units = sorted(list(set(available_units)))
+        return available_units
 
     @staticmethod
     def _get_status_indicators(item: InventoryItemRead) -> list[str]:
@@ -108,19 +142,21 @@ class InventoryPromptService:
         Returns:
             List of status indicator strings
         """
+        from app.services.ai.prompt_templates import STATUS_INDICATORS
+        
         indicators = []
 
         if item.expires_soon:
             days_left = (item.expiration_date - datetime.date.today()).days if item.expiration_date else None
             if days_left is not None:
-                indicators.append(f"⚠️ EXPIRES IN {days_left} DAYS")
+                indicators.append(STATUS_INDICATORS["expires_soon"].format(days=days_left))
             else:
                 indicators.append("⚠️ EXPIRES SOON")
         elif item.is_expired:
-            indicators.append("❌ EXPIRED")
+            indicators.append(STATUS_INDICATORS["expired"])
 
         if item.is_low_stock:
-            indicators.append("📉 LOW STOCK")
+            indicators.append(STATUS_INDICATORS["low_stock"])
 
         return indicators
 
