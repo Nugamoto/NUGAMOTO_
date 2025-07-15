@@ -16,7 +16,7 @@ from .api.v1 import (
     user_credentials as user_credentials_router,
     device as device_router,
     recipe as recipe_router,
-    ai as ai_router
+    ai_service_recipe as ai_router
 )
 
 app = FastAPI(
