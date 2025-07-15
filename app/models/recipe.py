@@ -31,6 +31,7 @@ class Recipe(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     cuisine_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    meal_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prep_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cook_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)

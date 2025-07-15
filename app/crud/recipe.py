@@ -104,6 +104,7 @@ def create_recipe(db: Session, recipe_data: RecipeCreate) -> RecipeRead:
         title=recipe_data.title,
         description=recipe_data.description,
         cuisine_type=recipe_data.cuisine_type,
+        meal_type=recipe_data.meal_type,
         prep_time_minutes=recipe_data.prep_time_minutes,
         cook_time_minutes=recipe_data.cook_time_minutes,
         total_time_minutes=recipe_data.total_time_minutes,
