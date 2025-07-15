@@ -228,6 +228,7 @@ class RecipeGenerationResponse(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None)
     cuisine_type: str | None = Field(default=None, max_length=100)
+    meal_type: str | None = Field(default=None, max_length=100)
     difficulty: DifficultyLevel = Field(default=DifficultyLevel.MEDIUM)
     prep_time_minutes: int = Field(ge=0)
     cook_time_minutes: int = Field(ge=0)
@@ -261,6 +262,7 @@ class RecipeGenerationResponse(BaseModel):
             title=self.title,
             description=self.description,
             cuisine_type=self.cuisine_type,
+            meal_type=self.meal_type,
             prep_time_minutes=self.prep_time_minutes,
             cook_time_minutes=self.cook_time_minutes,
             total_time_minutes=self.total_time_minutes,
