@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Self
 
-from pydantic import BaseModel, Field, field_validator
-from pydantic.config import ConfigDict
+from pydantic import BaseModel, Field, field_validator, model_validator, ValidationInfo, ConfigDict
 
 from app.core.enums import DifficultyLevel
 from app.schemas.user import UserRead
@@ -16,12 +16,12 @@ from app.schemas.user import UserRead
 # ================================================================== #
 
 class _RecipeIngredientBase(BaseModel):
-    """Fields shared by all recipe ingredient schemas."""
+    """Base schema for Recipe Ingredients with common fields."""
 
-    food_item_id: int = Field(..., gt=0)
-    amount_in_base_unit: float = Field(..., gt=0)
-    original_unit_id: int | None = Field(default=None, gt=0)
-    original_amount: float | None = Field(default=None, gt=0)
+    food_item_id: int = Field(..., gt=0, description="ID of the food item")
+    amount_in_base_unit: float | None = Field(None, gt=0, description="Amount in base unit (optional)")
+    original_unit_id: int | None = Field(None, gt=0, description="ID of the original unit")
+    original_amount: float | None = Field(None, gt=0, description="Original amount")
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -29,17 +29,21 @@ class _RecipeIngredientBase(BaseModel):
         from_attributes=True
     )
 
+
+    @model_validator(mode='after')
+    def validate_amount_fields(self) -> Self:
+        """Validate that either amount_in_base_unit OR original_amount+original_unit_id is provided."""
+        if self.amount_in_base_unit is None:
+            if not (self.original_amount and self.original_unit_id):
+                raise ValueError("Must provide either amount_in_base_unit or both original_amount and original_unit_id")
+        return self
+
+
     @field_validator('original_amount')
-    def validate_original_amount_with_unit(cls, v, info):
-        """Ensure original_amount and original_unit_id are both provided or both None."""
-        values = info.data
-        original_unit_id = values.get('original_unit_id')
-
-        if v is not None and original_unit_id is None:
-            raise ValueError("original_unit_id is required when original_amount is provided")
-        if v is None and original_unit_id is not None:
-            raise ValueError("original_amount is required when original_unit_id is provided")
-
+    def validate_original_amount_with_unit(cls, v: float | None, info: ValidationInfo) -> float | None:
+        """Validate that original_amount is provided with original_unit_id."""
+        if v is not None and info.data.get('original_unit_id') is None:
+            raise ValueError("original_amount requires original_unit_id")
         return v
 
 
