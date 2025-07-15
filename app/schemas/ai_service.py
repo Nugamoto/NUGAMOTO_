@@ -15,6 +15,7 @@ from app.schemas.inventory import InventoryItemRead
 from app.schemas.recipe import RecipeWithDetails, RecipeCreate, RecipeIngredientCreate, RecipeStepCreate, \
     RecipeNutritionCreate
 from app.schemas.user import UserRead
+from app.services.conversions.unit_conversion_service import UnitConversionService
 
 
 # ================================================================== #
@@ -98,6 +99,41 @@ class PromptContext(BaseModel):
 # ================================================================== #
 # Recipe Generation Schemas                                          #
 # ================================================================== #
+
+class AIRecipeIngredientCreate(BaseModel):
+    """AI-specific ingredient schema - only original amount/unit, no base unit."""
+
+    food_item_id: int = Field(..., gt=0)
+    original_unit_id: int = Field(..., gt=0)
+    original_amount: float = Field(..., gt=0)
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        from_attributes=True
+    )
+
+
+    def to_recipe_ingredient_create(self, unit_conversion_service: UnitConversionService) -> RecipeIngredientCreate:
+        """Convert to RecipeIngredientCreate with base unit conversion."""
+        try:
+            # Convert using the service
+            amount_in_base_unit = unit_conversion_service.convert_to_base_unit(
+                food_item_id=self.food_item_id,
+                amount=self.original_amount,
+                from_unit_id=self.original_unit_id
+            )
+
+            return RecipeIngredientCreate(
+                food_item_id=self.food_item_id,
+                amount_in_base_unit=amount_in_base_unit,
+                original_unit_id=self.original_unit_id,
+                original_amount=self.original_amount
+            )
+        except Exception as e:
+            # If conversion fails, let it bubble up - this indicates data/config issues
+            raise ValueError(f"Failed to convert ingredient {self.food_item_id}: {e}")
+
 
 class RecipeGenerationRequest(BaseModel):
     """Request schema for recipe generation."""
@@ -186,7 +222,7 @@ class RecipeGenerationRequest(BaseModel):
 
 
 class RecipeGenerationResponse(BaseModel):
-    """AI Response Schema - aligned with existing recipe schemas."""
+    """AI Response Schema - uses AI-specific ingredient schema."""
 
     # Basic recipe info - aligned with _RecipeBase
     title: str = Field(min_length=1, max_length=255)
@@ -199,8 +235,8 @@ class RecipeGenerationResponse(BaseModel):
     servings: int = Field(ge=1, le=20)
     tags: list[str] = Field(default_factory=list)
 
-    # Use existing schemas directly
-    ingredients: list[RecipeIngredientCreate] = Field(min_length=1)
+    # Use AI-specific ingredient schema
+    ingredients: list[AIRecipeIngredientCreate] = Field(min_length=1)
     steps: list[RecipeStepCreate] = Field(min_length=1)
     nutrition: RecipeNutritionCreate | None = None
 
@@ -212,8 +248,15 @@ class RecipeGenerationResponse(BaseModel):
         from_attributes=True
     )
 
-    def to_recipe_create(self, created_by_user_id: int) -> RecipeCreate:
-        """Convert to RecipeCreate - now with perfect alignment."""
+
+    def to_recipe_create(self, created_by_user_id: int, unit_conversion_service: UnitConversionService) -> RecipeCreate:
+        """Convert to RecipeCreate with base unit conversion."""
+        # Convert AI ingredients to regular ingredients
+        converted_ingredients = []
+        for ai_ingredient in self.ingredients:
+            converted_ingredient = ai_ingredient.to_recipe_ingredient_create(unit_conversion_service)
+            converted_ingredients.append(converted_ingredient)
+
         return RecipeCreate(
             title=self.title,
             description=self.description,
@@ -224,7 +267,7 @@ class RecipeGenerationResponse(BaseModel):
             difficulty=self.difficulty,
             servings=self.servings,
             tags=self.tags,
-            ingredients=self.ingredients,
+            ingredients=converted_ingredients,
             steps=self.steps,
             nutrition=self.nutrition,
             is_ai_generated=True,
