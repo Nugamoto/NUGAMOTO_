@@ -1,3 +1,4 @@
+
 """AI recipe generation endpoints."""
 
 from typing import Annotated
@@ -14,8 +15,8 @@ from app.schemas.ai_service import (
     RecipeWithAIOutput,
     RecipeRequestInput
 )
-
 from app.services.ai.factory import AIServiceFactory
+from app.services.conversions.unit_conversion_service import UnitConversionService
 
 router = APIRouter(prefix="/ai", tags=["AI Services"])
 
@@ -40,22 +41,33 @@ async def generate_recipe(
             kitchen_id=kitchen_id
         )
 
-        recipe_data = recipe_response.to_recipe_create(db)
+        # Create unit conversion service
+        unit_conversion_service = UnitConversionService(db)
+
+        # Convert AI response to RecipeCreate
+        recipe_data = recipe_response.to_recipe_create(
+            created_by_user_id=user_id,
+            unit_conversion_service=unit_conversion_service
+        )
 
         # Create recipe in DB
         recipe = crud_recipe.create_recipe(
             db=db,
-            recipe_data=recipe_data,
-            is_ai_generated=True,
-            created_by_user_id=user_id
+            recipe_data=recipe_data
         )
+
+        # Get recipe with details for response
+        recipe_with_details = crud_recipe.get_recipe_with_details(db, recipe.id)
+
+        # Get model version from service (with proper type handling)
+        model_version = getattr(ai_service, 'model', 'unknown')
 
         # Log AI interaction
         ai_output = crud_ai_output.create_ai_output(
             db=db,
             output_data=AIModelOutputCreate(
                 user_id=user_id,
-                model_version=ai_service.model,
+                model_version=model_version,
                 output_type=OutputType.RECIPE,
                 output_format=OutputFormat.JSON,
                 prompt_used=request.user_input,
@@ -67,7 +79,7 @@ async def generate_recipe(
         )
 
         return RecipeWithAIOutput(
-            recipe=recipe,
+            recipe=recipe_with_details,
             ai_output=ai_output
         )
 
