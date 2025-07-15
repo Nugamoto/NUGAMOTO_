@@ -1,5 +1,29 @@
 """SQLAlchemy models package."""
 
-from app.models import core, recipe, user, inventory, shopping, kitchen, ai_model_output, food
+from app.models import (
+    ai_model_output,
+    core,
+    device,
+    food,
+    inventory,
+    kitchen,
+    recipe,
+    shopping,
+    user,
+    user_credentials,
+    user_health
+)
 
-__all__ = ["core", "recipe", "user", "inventory", "shopping", "kitchen", "ai_model_output", "food"]
+__all__ = [
+    "ai_model_output",
+    "core",
+    "device",
+    "food",
+    "inventory",
+    "kitchen",
+    "recipe",
+    "shopping",
+    "user",
+    "user_credentials",
+    "user_health"
+]
