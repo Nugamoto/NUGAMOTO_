@@ -165,6 +165,7 @@ def print_structured_output(response_data: dict):
     logger.debug(formatted_json)
     logger.debug("=== END STRUCTURED OUTPUT ===")
 
+
 def format_ingredient_display(ingredient, db: Session) -> str:
     """Format ingredient for display with proper name and unit lookup."""
     try:
@@ -172,23 +173,36 @@ def format_ingredient_display(ingredient, db: Session) -> str:
         food_item = crud_food.get_food_item_by_id(db, food_item_id=ingredient.food_item_id)
         food_name = food_item.name if food_item else f"Food ID: {ingredient.food_item_id}"
 
-        # Display amount in base unit
-        amount = ingredient.amount_in_base_unit
-        base_unit = food_item.base_unit.name if food_item and food_item.base_unit else "units"
+        # Check if this is an AI ingredient (only has original_amount/original_unit_id)
+        if hasattr(ingredient, 'original_amount') and hasattr(ingredient, 'original_unit_id'):
+            # This is an AIRecipeIngredientCreate
+            if ingredient.original_unit_id and ingredient.original_amount:
+                original_unit = crud_core.get_unit_by_id(db, unit_id=ingredient.original_unit_id)
+                original_unit_name = original_unit.name if original_unit else f"Unit ID: {ingredient.original_unit_id}"
+                return f"{ingredient.original_amount} {original_unit_name} {food_name}"
+            else:
+                return f"? units {food_name}"
 
-        # If original unit is specified, show both
-        if ingredient.original_unit_id and ingredient.original_amount:
-            original_unit = crud_core.get_unit_by_id(db, unit_id=ingredient.original_unit_id)  # CORRECTED
-            original_unit_name = original_unit.name if original_unit else f"Unit ID: {ingredient.original_unit_id}"
+        # This is a regular RecipeIngredientCreate/Read with amount_in_base_unit
+        elif hasattr(ingredient, 'amount_in_base_unit'):
+            amount = ingredient.amount_in_base_unit
+            base_unit = food_item.base_unit.name if food_item and food_item.base_unit else "units"
 
-            return f"{ingredient.original_amount} {original_unit_name} {food_name} ({amount} {base_unit})"
+            # If original unit is specified, show both
+            if hasattr(ingredient, 'original_unit_id') and ingredient.original_unit_id and ingredient.original_amount:
+                original_unit = crud_core.get_unit_by_id(db, unit_id=ingredient.original_unit_id)
+                original_unit_name = original_unit.name if original_unit else f"Unit ID: {ingredient.original_unit_id}"
+                return f"{ingredient.original_amount} {original_unit_name} {food_name} ({amount} {base_unit})"
+            else:
+                return f"{amount} {base_unit} {food_name}"
+
+        # Fallback
         else:
-            return f"{amount} {base_unit} {food_name}"
+            return f"Unknown format: {food_name}"
 
     except Exception as e:
         logger.warning(f"Error formatting ingredient display: {e}")
-        return f"{ingredient.amount_in_base_unit} units (Food ID: {ingredient.food_item_id})"
-
+        return f"Error displaying ingredient (Food ID: {ingredient.food_item_id})"
 
 async def interactive_test():
     """Interactive test with user selection."""
