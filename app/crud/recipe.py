@@ -283,62 +283,55 @@ def get_recipe_summary(db: Session) -> RecipeSummary:
 # Recipe Ingredient CRUD Operations                                  #
 # ================================================================== #
 
+
 def add_recipe_ingredient(
         db: Session,
         recipe_id: int,
         ingredient_data: RecipeIngredientCreate
 ) -> RecipeIngredientRead:
-    """Add an ingredient to a recipe."""
-    # Validate recipe exists
-    recipe = db.get(Recipe, recipe_id)
-    if not recipe:
-        raise ValueError(f"Recipe with ID {recipe_id} not found")
-
-    # Validate food item exists
-    food_item = db.get(FoodItem, ingredient_data.food_item_id)
-    if not food_item:
-        raise ValueError(f"Food item with ID {ingredient_data.food_item_id} not found")
-
-    # Check if ingredient already exists
-    existing_ingredient = db.scalar(
-        select(RecipeIngredient).where(
-            and_(
-                RecipeIngredient.recipe_id == recipe_id,
-                RecipeIngredient.food_item_id == ingredient_data.food_item_id
-            )
-        )
-    )
-    if existing_ingredient:
-        raise ValueError(f"Ingredient with food item ID {ingredient_data.food_item_id} already exists in recipe")
+    """Add a new ingredient to a recipe."""
+    from app.services.conversions.unit_conversion_service import UnitConversionService
 
     # Auto-calculate amount_in_base_unit if not provided
-    amount_in_base_unit = ingredient_data.amount_in_base_unit
-    if amount_in_base_unit is None and ingredient_data.original_amount and ingredient_data.original_unit_id:
-        # Import here to avoid circular imports
-        from app.services.conversions.unit_conversion_service import UnitConversionService
-
-        unit_conversion_service = UnitConversionService(db)
-        amount_in_base_unit = unit_conversion_service.convert_to_base_unit(
-            ingredient_data.food_item_id,
-            ingredient_data.original_amount,
-            ingredient_data.original_unit_id
+    if ingredient_data.amount_in_base_unit is None:
+        conversion_service = UnitConversionService(db)
+        ingredient_data.amount_in_base_unit = conversion_service.convert_to_base_unit(
+            food_item_id=ingredient_data.food_item_id,
+            amount=ingredient_data.original_amount,
+            from_unit_id=ingredient_data.original_unit_id
         )
 
-    # Create ingredient
-    ingredient_orm = RecipeIngredient(
+    # Check if recipe exists
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise ValueError(f"Recipe with id {recipe_id} not found")
+
+    # Check if ingredient already exists for this recipe
+    existing_ingredient = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == recipe_id,
+        RecipeIngredient.food_item_id == ingredient_data.food_item_id
+    ).first()
+
+    if existing_ingredient:
+        raise ValueError(f"Ingredient with food_item_id {ingredient_data.food_item_id} already exists for this recipe")
+
+    # Create new ingredient
+    db_ingredient = RecipeIngredient(
         recipe_id=recipe_id,
         food_item_id=ingredient_data.food_item_id,
-        amount_in_base_unit=amount_in_base_unit,
+        amount_in_base_unit=ingredient_data.amount_in_base_unit,
         original_unit_id=ingredient_data.original_unit_id,
         original_amount=ingredient_data.original_amount
     )
-    db.add(ingredient_orm)
-    db.commit()
 
-    # Get ingredient with relationships and convert
-    ingredient_with_relationships = get_recipe_ingredient_orm_with_relationships(db, recipe_id,
-                                                                                 ingredient_data.food_item_id)
-    return build_recipe_ingredient_read(ingredient_with_relationships)
+    db.add(db_ingredient)
+    db.commit()
+    db.refresh(db_ingredient)
+
+    # Return with relationships
+    ingredient_with_relations = get_recipe_ingredient_orm_with_relationships(db, recipe_id,
+                                                                             ingredient_data.food_item_id)
+    return build_recipe_ingredient_read(ingredient_with_relations)
 
 
 def get_ingredients_for_recipe(db: Session, recipe_id: int) -> list[RecipeIngredientRead]:
@@ -359,29 +352,39 @@ def update_recipe_ingredient(
         recipe_id: int,
         food_item_id: int,
         ingredient_data: RecipeIngredientUpdate
-) -> RecipeIngredientRead | None:
-    """Update a recipe ingredient."""
-    ingredient_orm = db.scalar(
-        select(RecipeIngredient).where(
-            and_(
-                RecipeIngredient.recipe_id == recipe_id,
-                RecipeIngredient.food_item_id == food_item_id
-            )
+) -> RecipeIngredientRead:
+    """Update an existing recipe ingredient."""
+    from app.services.conversions.unit_conversion_service import UnitConversionService
+
+    # Auto-calculate amount_in_base_unit if not provided but original values are
+    if ingredient_data.amount_in_base_unit is None and ingredient_data.original_amount and ingredient_data.original_unit_id:
+        conversion_service = UnitConversionService(db)
+        ingredient_data.amount_in_base_unit = conversion_service.convert_to_base_unit(
+            food_item_id=ingredient_data.food_item_id or food_item_id,
+            amount=ingredient_data.original_amount,
+            from_unit_id=ingredient_data.original_unit_id
         )
-    )
-    if not ingredient_orm:
-        return None
+
+    # Get existing ingredient
+    ingredient = db.query(RecipeIngredient).filter(
+        RecipeIngredient.recipe_id == recipe_id,
+        RecipeIngredient.food_item_id == food_item_id
+    ).first()
+
+    if not ingredient:
+        raise ValueError(f"Ingredient with food_item_id {food_item_id} not found for recipe {recipe_id}")
 
     # Update fields
     update_data = ingredient_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(ingredient_orm, field, value)
+        setattr(ingredient, field, value)
 
     db.commit()
+    db.refresh(ingredient)
 
-    # Get updated ingredient with relationships and convert
-    updated_ingredient = get_recipe_ingredient_orm_with_relationships(db, recipe_id, food_item_id)
-    return build_recipe_ingredient_read(updated_ingredient)
+    # Return with relationships
+    ingredient_with_relations = get_recipe_ingredient_orm_with_relationships(db, recipe_id, food_item_id)
+    return build_recipe_ingredient_read(ingredient_with_relations)
 
 
 def delete_recipe_ingredient(db: Session, recipe_id: int, food_item_id: int) -> None:
