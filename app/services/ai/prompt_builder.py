@@ -1,11 +1,14 @@
 
 """Builder for individual prompt sections using templates."""
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy.orm import Session
 
-from app.schemas.ai_service import PromptContext, RecipeGenerationRequest
-from app.schemas.device import ApplianceWithDeviceType, KitchenToolWithDeviceType
-from app.schemas.user import UserRead
+if TYPE_CHECKING:
+    from app.schemas.ai_service import PromptContext, RecipeGenerationRequest
+    from app.schemas.device import ApplianceWithDeviceType, KitchenToolWithDeviceType
+    from app.schemas.user import UserRead
 from app.services.ai.inventory_prompt_service import InventoryPromptService
 from app.services.ai.prompt_templates import (
     USER_PROFILE_TEMPLATE,
