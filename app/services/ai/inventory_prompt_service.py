@@ -1,23 +1,26 @@
-
 """Service for building inventory-related prompt sections."""
 
 import datetime
-from typing import Union
+from typing import Union, TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.schemas.food import FoodItemRead, FoodItemWithConversions
-from app.schemas.inventory import InventoryItemRead
 from app.services.conversions.unit_conversion_service import UnitConversionService
+
+if TYPE_CHECKING:
+    from app.schemas.food import FoodItemRead, FoodItemWithConversions
+    from app.schemas.inventory import InventoryItemRead
 
 
 class InventoryPromptService:
     """Service for building inventory sections in AI prompts."""
 
+
     def __init__(self, unit_conversion_service: UnitConversionService):
         self.unit_conversion_service = unit_conversion_service
 
-    def format_inventory_items(self, items: list[InventoryItemRead]) -> list[str]:
+
+    def format_inventory_items(self, items: list["InventoryItemRead"]) -> list[str]:
         """Format inventory items for prompt display.
 
         Args:
@@ -42,7 +45,8 @@ class InventoryPromptService:
 
         return formatted_items
 
-    def _format_single_item(self, item: InventoryItemRead) -> str:
+
+    def _format_single_item(self, item: "InventoryItemRead") -> str:
         """Format a single inventory item.
 
         Args:
@@ -51,6 +55,8 @@ class InventoryPromptService:
         Returns:
             Formatted item string
         """
+        from app.schemas.food import FoodItemRead, FoodItemWithConversions
+
         food_item: Union[FoodItemRead, FoodItemWithConversions] = item.food_item
 
         # Basic item info
@@ -73,7 +79,8 @@ class InventoryPromptService:
 
         return line
 
-    def _get_available_units_display(self, food_item: Union[FoodItemRead, FoodItemWithConversions]) -> list[str]:
+
+    def _get_available_units_display(self, food_item: Union["FoodItemRead", "FoodItemWithConversions"]) -> list[str]:
         """Get available units display for a food item with COMPLETE original logic.
 
         Args:
@@ -88,7 +95,7 @@ class InventoryPromptService:
         try:
             # First, try to get units from the unit conversion service
             service_units = self.unit_conversion_service.get_all_available_units_for_food_item(food_item.id)
-            
+
             # Format as "unit_name (ID: unit_id)"
             for unit_id, unit_name in service_units:
                 available_units.append(f"{unit_name} (ID: {unit_id})")
@@ -132,8 +139,9 @@ class InventoryPromptService:
         available_units = sorted(list(set(available_units)))
         return available_units
 
+
     @staticmethod
-    def _get_status_indicators(item: InventoryItemRead) -> list[str]:
+    def _get_status_indicators(item: "InventoryItemRead") -> list[str]:
         """Get status indicators for an inventory item.
 
         Args:
@@ -143,7 +151,7 @@ class InventoryPromptService:
             List of status indicator strings
         """
         from app.services.ai.prompt_templates import STATUS_INDICATORS
-        
+
         indicators = []
 
         if item.expires_soon:
@@ -160,8 +168,9 @@ class InventoryPromptService:
 
         return indicators
 
+
     @staticmethod
-    def format_priority_ingredients(expiring_items: list[InventoryItemRead]) -> list[str]:
+    def format_priority_ingredients(expiring_items: list["InventoryItemRead"]) -> list[str]:
         """Format priority ingredients (expiring items).
 
         Args:
@@ -191,8 +200,9 @@ class InventoryPromptService:
 
         return priority_lines
 
+
     @staticmethod
-    def format_low_stock_items(low_stock_items: list[InventoryItemRead]) -> list[str]:
+    def format_low_stock_items(low_stock_items: list["InventoryItemRead"]) -> list[str]:
         """Format low stock items.
 
         Args:
