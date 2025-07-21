@@ -1,5 +1,5 @@
 """Unit conversion services."""
 
-from .unit_conversion_service import UnitConversionService
+from app.services.conversions import unit_conversion_service
 
-__all__ = ["UnitConversionService"]
+__all__ = ["unit_conversion_service"]

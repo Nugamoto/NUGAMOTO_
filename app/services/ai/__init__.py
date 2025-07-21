@@ -1,18 +1,12 @@
 """AI services package for NUGAMOTO smart kitchen assistant."""
 
-from .base import AIService
-from .factory import AIServiceFactory
-from .inventory_prompt_service import InventoryPromptService
-from .openai_service import OpenAIService, OpenAIServiceError
-from .prompt_builder import PromptBuilder
-from .prompt_templates import PromptTemplates
+from app.services.ai import base, factory, inventory_prompt_service, openai_service, prompt_builder, prompt_templates
 
 __all__ = [
-    "AIService",
-    "AIServiceFactory",
-    "InventoryPromptService",
-    "OpenAIService",
-    "OpenAIServiceError",
-    "PromptBuilder",
-    "PromptTemplates"
+    "base",
+    "factory",
+    "inventory_prompt_service",
+    "openai_service",
+    "prompt_builder",
+    "prompt_templates"
 ]
