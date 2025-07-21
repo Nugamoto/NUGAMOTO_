@@ -546,3 +546,28 @@ class RecipeWithAIMetadata(RecipeWithDetails):
     ai_model_version: str | None = Field(default=None)
     ai_generation_date: datetime | None = Field(default=None)
     ai_prompt_summary: str | None = Field(default=None)
+
+
+# ================================================================== #
+# New Schemas to refactor                                           #
+# ================================================================== #
+
+
+class InsufficientIngredient(BaseModel):
+    """Schema for representing insufficient ingredients."""
+    food_item_id: int
+    food_item_name: str
+    required_amount: float
+    available_amount: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeCookResponse(BaseModel):
+    """Response schema for cooking a recipe."""
+    success: bool
+    message: str
+    insufficient_ingredients: list[InsufficientIngredient] | None = None
+    updated_inventory_items: list[int] = []
+
+    model_config = ConfigDict(from_attributes=True)

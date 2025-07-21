@@ -9,13 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.crud import recipe as crud_recipe
+from app.crud.recipe import InsufficientIngredientsError, cook_recipe
 from app.schemas.recipe import (
     RecipeCreate, RecipeRead, RecipeUpdate, RecipeWithDetails,
     RecipeIngredientCreate, RecipeIngredientRead, RecipeIngredientUpdate,
     RecipeStepCreate, RecipeStepRead, RecipeStepUpdate,
     RecipeNutritionCreate, RecipeNutritionRead, RecipeNutritionUpdate,
     RecipeReviewUpsert, RecipeReviewRead, RecipeReviewUpdate,
-    RecipeSearchParams, RecipeSummary, RecipeRatingSummary
+    RecipeSearchParams, RecipeSummary, RecipeRatingSummary, RecipeCookResponse
 )
 
 # ================================================================== #
@@ -351,6 +352,53 @@ def delete_recipe(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
+
+# new Endpoint
+
+@recipe_router.post("/{recipe_id}/cook", response_model=RecipeCookResponse)
+async def cook_recipe_endpoint(
+        recipe_id: int,
+        kitchen_id: int,
+        db: Session = Depends(get_db)
+) -> RecipeCookResponse:
+    """Cook a recipe by deducting ingredients from kitchen inventory.
+
+    Args:
+        recipe_id: ID of the recipe to cook
+        kitchen_id: ID of the kitchen to use ingredients from (query parameter)
+        db: Database session dependency
+
+    Returns:
+        Result of cooking operation with success status and details
+
+    Raises:
+        HTTPException:
+            - 404 if recipe not found
+            - 422 if insufficient ingredients available
+            - 400 for other validation errors
+    """
+    try:
+        result = cook_recipe(db, recipe_id, kitchen_id)
+        return RecipeCookResponse(**result)
+    except InsufficientIngredientsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": str(e),
+                "insufficient_ingredients": e.insufficient_ingredients
+            }
+        )
+    except ValueError as e:
+        if "Recipe not found" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 

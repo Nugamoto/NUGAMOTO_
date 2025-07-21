@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import and_, func, select
+from typing import Any, TYPE_CHECKING, cast
+
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.food import FoodItem
@@ -15,6 +17,9 @@ from app.schemas.recipe import (
     RecipeReviewUpsert, RecipeReviewRead, RecipeReviewUpdate,
     RecipeSearchParams, RecipeSummary, RecipeRatingSummary
 )
+
+if TYPE_CHECKING:
+    from app.models.inventory import InventoryItem
 
 
 # ================================================================== #
@@ -802,3 +807,104 @@ def get_recipe_review_orm_with_relationships(db: Session, user_id: int, recipe_i
 
     result = db.execute(query)
     return result.scalar_one_or_none()
+
+
+# ================================================================== #
+# New Crud to refactor                                           #
+# ================================================================== #
+
+class InsufficientIngredientsError(ValueError):
+    """Raised when there are not enough ingredients to cook a recipe."""
+
+
+    def __init__(self, insufficient_ingredients: list[dict]):
+        self.insufficient_ingredients = insufficient_ingredients
+        super().__init__(f"Insufficient ingredients: {len(insufficient_ingredients)} items missing")
+
+
+def cook_recipe(
+        db: Session,
+        recipe_id: int,
+        kitchen_id: int
+) -> dict[str, Any]:
+    """Cook a recipe by deducting ingredients from kitchen inventory.
+
+    Args:
+        db: Database session
+        recipe_id: ID of the recipe to cook
+        kitchen_id: ID of the kitchen to use ingredients from
+
+    Returns:
+        Dictionary with cooking result and details
+
+    Raises:
+        ValueError: If recipe not found
+        InsufficientIngredientsError: If not enough ingredients available
+        Exception: If database operations fail
+    """
+    try:
+        from app.models.inventory import InventoryItem
+
+        recipe = get_recipe_orm_with_relationships(db, recipe_id)
+        if not recipe:
+            raise ValueError("Recipe not found")
+
+        insufficient_ingredients = []
+        inventory_updates = []
+
+        for ingredient in recipe.ingredients:
+            available_items = (
+                db.query(InventoryItem)
+                .filter(InventoryItem.kitchen_id == kitchen_id)
+                .filter(InventoryItem.food_item_id == ingredient.food_item_id)
+                .filter(InventoryItem.quantity > 0)
+                .order_by(text("expiration_date ASC NULLS LAST"))
+                .all()
+            )
+
+            total_available = sum(cast(float, item.quantity) for item in available_items)
+            required_amount = cast(float, ingredient.amount_in_base_unit)
+
+            if total_available < required_amount:
+                insufficient_ingredients.append({
+                    "food_item_id": ingredient.food_item_id,
+                    "food_item_name": ingredient.food_item.name,
+                    "required_amount": required_amount,
+                    "available_amount": total_available
+                })
+            else:
+                remaining_needed = required_amount
+                for item in available_items:
+                    if remaining_needed <= 0:
+                        break
+
+                    item_quantity = cast(float, item.quantity)
+                    amount_to_deduct = min(item_quantity, remaining_needed)
+                    inventory_updates.append({
+                        "item": item,
+                        "new_quantity": item_quantity - amount_to_deduct
+                    })
+                    remaining_needed -= amount_to_deduct
+
+        if insufficient_ingredients:
+            raise InsufficientIngredientsError(insufficient_ingredients)
+
+        updated_item_ids = []
+        for update in inventory_updates:
+            update["item"].quantity = update["new_quantity"]
+            updated_item_ids.append(update["item"].id)
+
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Recipe cooked successfully",
+            "updated_inventory_items": updated_item_ids
+        }
+
+    except (ValueError, InsufficientIngredientsError):
+        # Business logic errors - no rollback needed
+        raise
+    except Exception as e:
+        db.rollback()
+        raise e
