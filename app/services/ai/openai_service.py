@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, TypeVar
+from typing import Any, TypeVar, TYPE_CHECKING
 
 from openai import OpenAI
 from openai.types.chat import (
@@ -16,7 +16,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.schemas.ai_service import RecipeGenerationRequest, RecipeGenerationResponse
+
+if TYPE_CHECKING:
+    from app.schemas.ai_service import RecipeGenerationRequest, RecipeGenerationResponse
 from app.services.ai.base import AIService
 from app.services.ai.prompt_builder import PromptBuilder
 
@@ -59,11 +61,11 @@ class OpenAIService(AIService):
 
     async def generate_recipe(
             self,
-            request: RecipeGenerationRequest,
+            request: "RecipeGenerationRequest",
             user_id: int,
             kitchen_id: int,
             **kwargs: Any
-    ) -> RecipeGenerationResponse:
+    ) -> "RecipeGenerationResponse":
         """Generate a recipe using OpenAI with structured output.
 
         Args:
@@ -78,6 +80,8 @@ class OpenAIService(AIService):
         Raises:
             OpenAIServiceError: If recipe generation fails.
         """
+        from app.schemas.ai_service import RecipeGenerationResponse
+
         try:
             # Build dynamic prompts
             system_prompt, user_prompt = self.prompt_builder.build_recipe_prompt(
@@ -159,6 +163,8 @@ class OpenAIService(AIService):
         Raises:
             OpenAIServiceError: If suggestion generation fails.
         """
+        from app.schemas.ai_service import RecipeGenerationRequest
+
         try:
             # Create a basic recipe request for suggestions - now uses default_factory
             suggestion_request = RecipeGenerationRequest(
