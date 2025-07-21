@@ -1,4 +1,3 @@
-
 """Builder for individual prompt sections using templates."""
 
 from typing import TYPE_CHECKING
@@ -26,13 +25,15 @@ from app.services.conversions.unit_conversion_service import UnitConversionServi
 class PromptSectionBuilder:
     """Builder for individual prompt sections using templates."""
 
+
     def __init__(self, db: Session):
         self.db = db
         self.unit_conversion_service = UnitConversionService(db)
         self.inventory_prompt_service = InventoryPromptService(self.unit_conversion_service)
 
+
     @staticmethod
-    def build_user_section(user: UserRead) -> str:
+    def build_user_section(user: "UserRead") -> str:
         """Build user profile section using template."""
         user_data = {
             "name": user.name,
@@ -43,7 +44,8 @@ class PromptSectionBuilder:
 
         return USER_PROFILE_TEMPLATE.build(user_data)
 
-    def build_inventory_section(self, context: PromptContext) -> str:
+
+    def build_inventory_section(self, context: "PromptContext") -> str:
         """Build inventory section using template."""
         if not context.inventory_items:
             return INVENTORY_TEMPLATE.build({})
@@ -63,10 +65,11 @@ class PromptSectionBuilder:
 
         return INVENTORY_TEMPLATE.build(inventory_data)
 
+
     @staticmethod
     def build_equipment_section(
-            appliances: list[ApplianceWithDeviceType],
-            tools: list[KitchenToolWithDeviceType]
+            appliances: list["ApplianceWithDeviceType"],
+            tools: list["KitchenToolWithDeviceType"]
     ) -> str:
         """Build equipment section using template."""
         if not appliances and not tools:
@@ -105,7 +108,8 @@ class PromptSectionBuilder:
 
         return EQUIPMENT_TEMPLATE.build(equipment_data)
 
-    def build_priority_section(self, context: PromptContext) -> str:
+
+    def build_priority_section(self, context: "PromptContext") -> str:
         """Build priority ingredients section."""
         priority_lines = []
 
@@ -133,8 +137,9 @@ class PromptSectionBuilder:
 
         return "\n".join(priority_lines) if priority_lines else COMMON_MESSAGES['no_priorities']
 
+
     @staticmethod
-    def build_request_section(request: RecipeGenerationRequest) -> str:
+    def build_request_section(request: "RecipeGenerationRequest") -> str:
         """Build request context section."""
         lines = [SECTION_HEADERS['recipe_request']]
 
@@ -192,7 +197,7 @@ class PromptBuilder:
 
     def build_recipe_prompt(
             self,
-            request: RecipeGenerationRequest,
+            request: "RecipeGenerationRequest",
             user_id: int,
             kitchen_id: int
     ) -> tuple[str, str]:
@@ -206,6 +211,8 @@ class PromptBuilder:
         Returns:
             Tuple of (system_prompt, user_prompt)
         """
+        from app.schemas.ai_service import PromptContext
+
         # Build context from database
         context = PromptContext.build_from_ids(
             db=self.db,
@@ -257,6 +264,8 @@ class PromptBuilder:
         Returns:
             Tuple of (system_prompt, user_prompt)
         """
+        from app.schemas.ai_service import RecipeGenerationRequest, PromptContext
+
         # Create basic request for inventory analysis
         analysis_request = RecipeGenerationRequest(
             special_requests="Analyze inventory for insights and recommendations"
