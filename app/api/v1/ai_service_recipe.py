@@ -16,6 +16,7 @@ from app.schemas.ai_service import (
 )
 from app.schemas.recipe import RecipeCreate
 from app.services.ai.factory import AIServiceFactory
+from app.services.ai.prompt_builder import PromptBuilder
 from app.services.conversions.unit_conversion_service import UnitConversionService
 
 router = APIRouter(prefix="/ai", tags=["AI Services"])
@@ -31,6 +32,14 @@ async def generate_recipe(
     try:
         ai_service = AIServiceFactory.create_ai_service(db)
 
+        # Build the prompt to capture what was actually sent to the AI
+        prompt_builder = PromptBuilder(db)
+        system_prompt, user_prompt = prompt_builder.build_recipe_prompt(
+            request=data.request,
+            user_id=data.user_id,
+            kitchen_id=data.kitchen_id
+        )
+
         recipe_response = await ai_service.generate_recipe(
             request=data.request,
             user_id=data.user_id,
@@ -39,6 +48,13 @@ async def generate_recipe(
 
         model_version = getattr(ai_service, 'model', 'unknown')
 
+        # Create structured prompt data for storage
+        prompt_data = {
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "original_request": data.request.model_dump()
+        }
+
         ai_output = crud_ai_output.create_ai_output(
             db=db,
             output_data=AIModelOutputCreate(
@@ -46,7 +62,7 @@ async def generate_recipe(
                 model_version=model_version,
                 output_type=OutputType.RECIPE,
                 output_format=OutputFormat.JSON,
-                prompt_used=str(data.request.model_dump()),
+                prompt_used=str(prompt_data),
                 raw_output=recipe_response.model_dump_json(),
                 target_type=AIOutputTargetType.RECIPE,
                 target_id=None,
