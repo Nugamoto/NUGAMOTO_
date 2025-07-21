@@ -1,11 +1,13 @@
+
 """Abstract base class for AI services."""
 
 from __future__ import annotations
 
 import abc
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from app.schemas.ai_service import RecipeGenerationRequest, RecipeGenerationResponse
+if TYPE_CHECKING:
+    from app.schemas.ai_service import RecipeGenerationRequest, RecipeGenerationResponse
 
 
 class AIService(abc.ABC):
@@ -19,16 +21,17 @@ class AIService(abc.ABC):
     @abc.abstractmethod
     async def generate_recipe(
             self,
-            request: RecipeGenerationRequest,
+            request: "RecipeGenerationRequest",
             user_id: int,
             kitchen_id: int
-    ) -> RecipeGenerationResponse:
+    ) -> "RecipeGenerationResponse":
         """Generate a recipe based on the provided request.
 
         Args:
             request: Structured request containing user preferences, available ingredients,
                     dietary restrictions, kitchen equipment, etc.
-            **kwargs: Additional provider-specific parameters.
+            user_id: ID of the user requesting the recipe.
+            kitchen_id: ID of the kitchen to use for recipe generation.
 
         Returns:
             Structured recipe response with ingredients, instructions, and metadata.
