@@ -2,7 +2,7 @@
 
 # start development server: uvicorn app.main:app --reload
 
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 
 from .api.v1 import (
     user as user_router,
@@ -25,9 +25,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
+default_router = APIRouter(tags=["Default"])
 
 # Root route for health check
-@app.get("/")
+@default_router.get(
+    "/",
+    summary="Root"
+)
 async def root():
     """API health check endpoint."""
     return {
@@ -36,6 +40,9 @@ async def root():
         "status": "online",
         "description": "Clean Architecture Backend for Smart Kitchen Management"
     }
+
+
+app.include_router(default_router)
 
 # Core system routes
 app.include_router(core_router.router, prefix="/v1")
