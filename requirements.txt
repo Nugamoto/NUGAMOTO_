@@ -8,3 +8,8 @@ pydantic-settings~=2.9.1
 click~=8.2.1
 pytest~=8.3.5
 email-validator>=2.0.0
+
+pandas~=2.3.1
+plotly~=6.2.0
+requests~=2.32.4
+streamlit~=1.47.0
