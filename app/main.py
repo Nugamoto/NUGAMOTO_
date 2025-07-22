@@ -25,6 +25,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+# Root route for health check
+@app.get("/")
+async def root():
+    """API health check endpoint."""
+    return {
+        "name": "NUGAMOTO - Smart Kitchen Assistant",
+        "version": "1.0.0",
+        "status": "online",
+        "description": "Clean Architecture Backend for Smart Kitchen Management"
+    }
+
 # Core system routes
 app.include_router(core_router.router, prefix="/v1")
 app.include_router(food_router.router, prefix="/v1")
