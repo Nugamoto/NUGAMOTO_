@@ -1,6 +1,6 @@
 
 """Seed script for the NUGAMOTO SQLite database."""
-# Ausführen:  python -m app.db.seed_db
+# Ausführen:  python -m backend.db.seed_db
 
 from __future__ import annotations
 
@@ -318,65 +318,65 @@ def seed_database(db_path: str | Path = Path("nugamoto.sqlite")) -> None:
         # ---------- food items ----------
         food_items_raw = [
             # (name_en (de),            category,       base_unit_key)
-            ("Tomato (Tomate)", "vegetable", "g"),
-            ("Potato (Kartoffel)", "vegetable", "g"),
-            ("Carrot (Karotte)", "vegetable", "g"),
-            ("Onion (Zwiebel)", "vegetable", "g"),
-            ("Garlic (Knoblauch)", "vegetable", "g"),
-            ("Bell Pepper (Paprika)", "vegetable", "g"),
-            ("Broccoli (Brokkoli)", "vegetable", "g"),
-            ("Cucumber (Gurke)", "vegetable", "g"),
-            ("Zucchini (Zucchini)", "vegetable", "g"),
-            ("Lettuce (Kopfsalat)", "vegetable", "g"),
+            ("Tomato (Tomate)", "Vegetable", "g"),
+            ("Potato (Kartoffel)", "Vegetable", "g"),
+            ("Carrot (Karotte)", "Vegetable", "g"),
+            ("Onion (Zwiebel)", "Vegetable", "g"),
+            ("Garlic (Knoblauch)", "Vegetable", "g"),
+            ("Bell Pepper (Paprika)", "Vegetable", "g"),
+            ("Broccoli (Brokkoli)", "Vegetable", "g"),
+            ("Cucumber (Gurke)", "Vegetable", "g"),
+            ("Zucchini (Zucchini)", "Vegetable", "g"),
+            ("Lettuce (Kopfsalat)", "Vegetable", "g"),
 
-            ("Apple (Apfel)", "fruit", "g"),
-            ("Banana (Banane)", "fruit", "g"),
-            ("Orange (Orange)", "fruit", "g"),
-            ("Lemon (Zitrone)", "fruit", "g"),
-            ("Strawberry (Erdbeere)", "fruit", "g"),
+            ("Apple (Apfel)", "Fruit", "g"),
+            ("Banana (Banane)", "Fruit", "g"),
+            ("Orange (Orange)", "Fruit", "g"),
+            ("Lemon (Zitrone)", "Fruit", "g"),
+            ("Strawberry (Erdbeere)", "Fruit", "g"),
 
-            ("Rice (Reis)", "grain", "g"),
-            ("Spaghetti (Spaghetti)", "grain", "g"),
-            ("Flour (Mehl)", "grain", "g"),
-            ("Oats (Haferflocken)", "grain", "g"),
-            ("Bread Slice (Brotscheibe)", "grain", "slice"),
+            ("Rice (Reis)", "Grain", "g"),
+            ("Spaghetti (Spaghetti)", "Grain", "g"),
+            ("Flour (Mehl)", "Grain", "g"),
+            ("Oats (Haferflocken)", "Grain", "g"),
+            ("Bread Slice (Brotscheibe)", "Grain", "slice"),
 
-            ("Lentils (Linsen)", "legume", "g"),
-            ("Chickpeas (Kichererbsen)", "legume", "g"),
-            ("Black Beans (Schwarze Bohnen)", "legume", "g"),
-            ("Almonds (Mandeln)", "legume", "g"),
+            ("Lentils (Linsen)", "Legume", "g"),
+            ("Chickpeas (Kichererbsen)", "Legume", "g"),
+            ("Black Beans (Schwarze Bohnen)", "Legume", "g"),
+            ("Almonds (Mandeln)", "Legume", "g"),
 
-            ("Milk (Milch)", "dairy", "ml"),
-            ("Butter (Butter)", "dairy", "g"),
-            ("Cheese (Käse)", "dairy", "g"),
-            ("Yogurt (Joghurt)", "dairy", "ml"),
-            ("Egg (Ei)", "dairy", "piece"),
+            ("Milk (Milch)", "Dairy", "ml"),
+            ("Butter (Butter)", "Dairy", "g"),
+            ("Cheese (Käse)", "Dairy", "g"),
+            ("Yogurt (Joghurt)", "Dairy", "ml"),
+            ("Egg (Ei)", "Dairy", "piece"),
 
-            ("Chicken Breast (Hähnchenbrust)", "meat", "g"),
-            ("Ground Beef (Hackfleisch)", "meat", "g"),
-            ("Pork Chop (Schweinekotelett)", "meat", "g"),
-            ("Salmon Fillet (Lachsfilet)", "meat", "g"),
+            ("Chicken Breast (Hähnchenbrust)", "Meat", "g"),
+            ("Ground Beef (Hackfleisch)", "Meat", "g"),
+            ("Pork Chop (Schweinekotelett)", "Meat", "g"),
+            ("Salmon Fillet (Lachsfilet)", "Meat", "g"),
 
-            ("Olive Oil (Olivenöl)", "condiment", "ml"),
-            ("Sugar (Zucker)", "condiment", "g"),
-            ("Salt (Salz)", "condiment", "g"),
-            ("Black Pepper (Pfeffer)", "condiment", "g"),
-            ("Ketchup (Ketchup)", "condiment", "ml"),
-            ("Soy Sauce (Sojasauce)", "condiment", "ml"),
-            ("Vinegar (Essig)", "condiment", "ml"),
-            ("Honey (Honig)", "condiment", "g"),
+            ("Olive Oil (Olivenöl)", "Condiment", "ml"),
+            ("Sugar (Zucker)", "Condiment", "g"),
+            ("Salt (Salz)", "Condiment", "g"),
+            ("Black Pepper (Pfeffer)", "Condiment", "g"),
+            ("Ketchup (Ketchup)", "Condiment", "ml"),
+            ("Soy Sauce (Sojasauce)", "Condiment", "ml"),
+            ("Vinegar (Essig)", "Condiment", "ml"),
+            ("Honey (Honig)", "Condiment", "g"),
 
-            ("Cinnamon (Zimt)", "spice", "g"),
-            ("Paprika Powder (Paprikapulver)", "spice", "g"),
-            ("Curry Powder (Currypulver)", "spice", "g"),
-            ("Oregano (Oregano)", "spice", "g"),
+            ("Cinnamon (Zimt)", "Spice", "g"),
+            ("Paprika Powder (Paprikapulver)", "Spice", "g"),
+            ("Curry Powder (Currypulver)", "Spice", "g"),
+            ("Oregano (Oregano)", "Spice", "g"),
 
-            ("Frozen Peas (Erbsen, gefr.)", "frozen", "g"),
-            ("Frozen Berries (Beeren, gefr.)", "frozen", "g"),
+            ("Frozen Peas (Erbsen, gefr.)", "Frozen", "g"),
+            ("Frozen Berries (Beeren, gefr.)", "Frozen", "g"),
 
-            ("Tofu (Tofu)", "plant protein", "g"),
-            ("Coconut Milk (Kokosmilch)", "condiment", "ml"),
-        ]  # = 50 Stück
+            ("Tofu (Tofu)", "Plant Protein", "g"),
+            ("Coconut Milk (Kokosmilch)", "Condiment", "ml"),
+        ]
 
         conn.execute(insert(food_items), [
             {"name": n, "category": cat, "base_unit_id": unit_id_map[unit],
