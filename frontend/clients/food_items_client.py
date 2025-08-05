@@ -1,7 +1,7 @@
 # frontend/clients/food_items_client.py
 from typing import Any
 
-from base import BaseClient
+from .base import BaseClient
 
 
 class FoodItemsClient(BaseClient):
