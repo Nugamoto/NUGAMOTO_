@@ -1,0 +1,724 @@
+"""API endpoints for food system."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from backend.core.dependencies import get_db
+from backend.crud import core as crud_core
+from backend.crud import food as crud_food
+from backend.schemas.food import (
+    FoodItemCreate, FoodItemRead, FoodItemUpdate, FoodItemWithConversions,
+    FoodItemUnitConversionCreate, FoodItemUnitConversionRead,
+    FoodItemAliasCreate, FoodItemAliasRead, FoodItemWithAliases,
+    FoodConversionResult
+)
+
+# ================================================================== #
+# Sub-routers for better organization                               #
+# ================================================================== #
+
+food_items_router = APIRouter(tags=["Food Items"])
+aliases_router = APIRouter(prefix="/aliases", tags=["Food Item Aliases"])
+conversions_router = APIRouter(prefix="/conversions", tags=["Food Item Conversions"])
+operations_router = APIRouter(prefix="/operations", tags=["Food Item Operations"])
+
+
+# ================================================================== #
+# Food Items CRUD                                                   #
+# ================================================================== #
+
+@food_items_router.post("/", response_model=FoodItemRead, status_code=status.HTTP_201_CREATED)
+def create_food_item(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_data: FoodItemCreate
+) -> FoodItemRead:
+    """Create a new food item.
+
+    Args:
+        db: Database session
+        food_item_data: Food item creation data
+
+    Returns:
+        Created food item data
+
+    Raises:
+        HTTPException: 400 if food item name already exists or base_unit_id doesn't exist
+    """
+    # Validate that base_unit exists
+    base_unit = crud_core.get_unit_by_id(db=db, unit_id=food_item_data.base_unit_id)
+    if not base_unit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Base unit with ID {food_item_data.base_unit_id} not found"
+        )
+
+    try:
+        return crud_food.create_food_item(db=db, food_item_data=food_item_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Food item with name '{food_item_data.name}' already exists"
+        )
+
+
+@food_items_router.get("/", response_model=list[FoodItemRead])
+def get_food_items(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        category: str | None = None,
+        skip: int = 0,
+        limit: int = 100
+) -> list[FoodItemRead]:
+    """Get all food items with optional filtering.
+
+    Args:
+        db: Database session
+        category: Optional category filter
+        skip: Number of items to skip
+        limit: Maximum number of items to return
+
+    Returns:
+        List of food items
+    """
+    return crud_food.get_all_food_items(
+        db=db, category=category, skip=skip, limit=limit
+    )
+
+
+@food_items_router.get("/{food_item_id}", response_model=FoodItemRead)
+def get_food_item_by_id(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int
+) -> FoodItemRead:
+    """Get food item by ID.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+
+    Returns:
+        Food item data
+
+    Raises:
+        HTTPException: 404 if food item not found
+    """
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    return food_item
+
+
+@food_items_router.patch("/{food_item_id}", response_model=FoodItemRead)
+def update_food_item(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int,
+        food_item_data: FoodItemUpdate
+) -> FoodItemRead:
+    """Update an existing food item.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        food_item_data: Updated food item data
+
+    Returns:
+        Updated food item data
+
+    Raises:
+        HTTPException: 404 if food item not found, 400 if base_unit_id doesn't exist
+    """
+    # Validate base_unit if provided
+    if food_item_data.base_unit_id is not None:
+        base_unit = crud_core.get_unit_by_id(db=db, unit_id=food_item_data.base_unit_id)
+        if not base_unit:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Base unit with ID {food_item_data.base_unit_id} not found"
+            )
+
+    try:
+        food_item = crud_food.update_food_item(
+            db=db, food_item_id=food_item_id, food_item_data=food_item_data
+        )
+        if not food_item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Food item with ID {food_item_id} not found"
+            )
+
+        return food_item
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Food item with name '{food_item_data.name}' already exists"
+        )
+
+
+@food_items_router.delete("/{food_item_id}")
+def delete_food_item(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int
+) -> Response:
+    """Delete a food item.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+
+    Returns:
+        Empty response with 204 status
+
+    Raises:
+        HTTPException: 404 if food item not found
+    """
+    success = crud_food.delete_food_item(db=db, food_item_id=food_item_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@food_items_router.get("/{food_item_id}/with-conversions", response_model=FoodItemWithConversions)
+def get_food_item_with_conversions(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int
+) -> FoodItemWithConversions:
+    """Get food item with its unit conversions.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+
+    Returns:
+        Food item data with unit conversions
+
+    Raises:
+        HTTPException: 404 if food item not found
+    """
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    conversions = crud_food.get_conversions_for_food_item(db=db, food_item_id=food_item_id)
+
+    return FoodItemWithConversions(
+        **food_item.model_dump(),
+        unit_conversions=conversions
+    )
+
+
+@food_items_router.get("/{food_item_id}/with-aliases", response_model=FoodItemWithAliases)
+def get_food_item_with_aliases(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int,
+        user_id: int | None = None
+) -> FoodItemWithAliases:
+    """Get food item with its aliases.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        user_id: Optional user ID to include user-specific aliases
+
+    Returns:
+        Food item data with aliases
+
+    Raises:
+        HTTPException: 404 if food item not found
+    """
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    aliases = crud_food.get_aliases_for_food_item(
+        db=db, food_item_id=food_item_id, user_id=user_id
+    )
+
+    return FoodItemWithAliases(
+        **food_item.model_dump(),
+        aliases=aliases
+    )
+
+
+# ================================================================== #
+# Food Item Aliases CRUD                                            #
+# ================================================================== #
+
+@aliases_router.post("/{food_item_id}/", response_model=FoodItemAliasRead, status_code=status.HTTP_201_CREATED)
+def create_food_item_alias(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int,
+        alias_data: FoodItemAliasCreate
+) -> FoodItemAliasRead:
+    """Create a new alias for a food item.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID (from URL path)
+        alias_data: Alias creation data
+
+    Returns:
+        Created alias data
+
+    Raises:
+        HTTPException: 400 if food item doesn't exist or alias already exists
+        HTTPException: 422 if food_item_id in body doesn't match URL parameter
+    """
+    # Ensure the food_item_id in the request body matches the URL parameter
+    if alias_data.food_item_id != food_item_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Food item ID in body ({alias_data.food_item_id}) must match URL parameter ({food_item_id})"
+        )
+
+    # Validate that food_item exists
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    # Validate user if provided
+    if alias_data.user_id is not None:
+        from backend.crud import user as crud_user
+        user = crud_user.get_user_by_id(db=db, user_id=alias_data.user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"User with ID {alias_data.user_id} not found"
+            )
+
+    try:
+        return crud_food.create_food_item_alias(db=db, alias_data=alias_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Alias '{alias_data.alias}' already exists for this food item and user combination"
+        )
+
+
+@aliases_router.get("/{food_item_id}/", response_model=list[FoodItemAliasRead])
+def get_aliases_for_food_item(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int,
+        user_id: int | None = None
+) -> list[FoodItemAliasRead]:
+    """Get all aliases for a specific food item.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        user_id: Optional user ID to filter user-specific aliases
+
+    Returns:
+        List of aliases for the food item
+
+    Raises:
+        HTTPException: 404 if food item not found
+    """
+    # Validate that food_item exists
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    return crud_food.get_aliases_for_food_item(
+        db=db, food_item_id=food_item_id, user_id=user_id
+    )
+
+
+@aliases_router.get("/users/{user_id}/", response_model=list[FoodItemAliasRead])
+def get_all_aliases_for_user(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        user_id: int,
+        skip: int = 0,
+        limit: int = 100
+) -> list[FoodItemAliasRead]:
+    """Get all aliases created by a specific user.
+
+    Args:
+        db: Database session
+        user_id: User ID
+        skip: Number of items to skip
+        limit: Maximum number of items to return
+
+    Returns:
+        List of aliases created by the user
+
+    Raises:
+        HTTPException: 404 if user not found
+    """
+    # Validate that user exists
+    from backend.crud import user as crud_user
+    user = crud_user.get_user_by_id(db=db, user_id=user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found"
+        )
+
+    return crud_food.get_all_aliases_for_user(
+        db=db, user_id=user_id, skip=skip, limit=limit
+    )
+
+
+@aliases_router.delete("/{alias_id}")
+def delete_alias_by_id(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        alias_id: int
+) -> Response:
+    """Delete an alias by ID.
+
+    Args:
+        db: Database session
+        alias_id: Alias ID
+
+    Returns:
+        Empty response with 204 status
+
+    Raises:
+        HTTPException: 404 if alias not found
+    """
+    success = crud_food.delete_alias_by_id(db=db, alias_id=alias_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Alias with ID {alias_id} not found"
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ================================================================== #
+# Food Item Conversions CRUD                                        #
+# ================================================================== #
+
+@conversions_router.post("/", response_model=FoodItemUnitConversionRead, status_code=status.HTTP_201_CREATED)
+def create_food_unit_conversion(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        conversion_data: FoodItemUnitConversionCreate
+) -> FoodItemUnitConversionRead:
+    """Create a new food item unit conversion.
+
+    Args:
+        db: Database session
+        conversion_data: Unit conversion creation data
+
+    Returns:
+        Created unit conversion data
+
+    Raises:
+        HTTPException: 400 if food item, units don't exist or conversion already exists
+    """
+    # Validate food item exists
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=conversion_data.food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Food item with ID {conversion_data.food_item_id} not found"
+        )
+
+    # Validate units exist
+    from_unit = crud_core.get_unit_by_id(db=db, unit_id=conversion_data.from_unit_id)
+    to_unit = crud_core.get_unit_by_id(db=db, unit_id=conversion_data.to_unit_id)
+
+    if not from_unit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"From unit with ID {conversion_data.from_unit_id} not found"
+        )
+    if not to_unit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"To unit with ID {conversion_data.to_unit_id} not found"
+        )
+
+    try:
+        return crud_food.create_food_unit_conversion(db=db, conversion_data=conversion_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unit conversion from {from_unit.name} to {to_unit.name} "
+                f"already exists for food item '{food_item.name}'"
+            )
+        )
+
+
+@conversions_router.get("/{food_item_id}/", response_model=list[FoodItemUnitConversionRead])
+def get_food_unit_conversions(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int
+) -> list[FoodItemUnitConversionRead]:
+    """Get all unit conversions for a specific food item.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+
+    Returns:
+        List of unit conversions for the food item
+
+    Raises:
+        HTTPException: 404 if food item not found
+    """
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    return crud_food.get_conversions_for_food_item(db=db, food_item_id=food_item_id)
+
+
+@conversions_router.delete("/{food_item_id}/{from_unit_id}/{to_unit_id}")
+def delete_food_unit_conversion(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int,
+        from_unit_id: int,
+        to_unit_id: int
+) -> Response:
+    """Delete a food item unit conversion.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        from_unit_id: Source unit ID
+        to_unit_id: Target unit ID
+
+    Returns:
+        Empty response with 204 status
+
+    Raises:
+        HTTPException: 404 if conversion not found
+    """
+    success = crud_food.delete_food_unit_conversion(
+        db=db,
+        food_item_id=food_item_id,
+        from_unit_id=from_unit_id,
+        to_unit_id=to_unit_id
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unit conversion not found for food item {food_item_id}"
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ================================================================== #
+# Food Item Operations                                              #
+# ================================================================== #
+
+@operations_router.get("/search-by-alias", response_model=list[FoodItemRead])
+def search_food_items_by_alias(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        alias_term: str,
+        user_id: int | None = None,
+        skip: int = 0,
+        limit: int = 100
+) -> list[FoodItemRead]:
+    """Search food items by alias term.
+
+    Args:
+        db: Database session
+        alias_term: Term to search for in aliases
+        user_id: Optional user ID to include user-specific aliases
+        skip: Number of items to skip
+        limit: Maximum number of items to return
+
+    Returns:
+        List of food items that have matching aliases
+    """
+    return crud_food.search_food_items_by_alias(
+        db=db, alias_term=alias_term, user_id=user_id, skip=skip, limit=limit
+    )
+
+
+@operations_router.post("/{food_item_id}/convert", response_model=FoodConversionResult)
+def convert_food_units(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int,
+        value: float,
+        from_unit_id: int,
+        to_unit_id: int
+) -> FoodConversionResult:
+    """Convert a value for a specific food item between units.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        value: Value to convert
+        from_unit_id: Source unit ID
+        to_unit_id: Target unit ID
+
+    Returns:
+        Conversion result with details
+
+    Raises:
+        HTTPException: 400 if food item or units don't exist
+        HTTPException: 422 if conversion is not possible
+    """
+    # Validate food item exists
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    # Validate units exist
+    from_unit = crud_core.get_unit_by_id(db=db, unit_id=from_unit_id)
+    to_unit = crud_core.get_unit_by_id(db=db, unit_id=to_unit_id)
+
+    if not from_unit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"From unit with ID {from_unit_id} not found"
+        )
+    if not to_unit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"To unit with ID {to_unit_id} not found"
+        )
+
+    # Perform conversion
+    result = crud_food.convert_food_value(
+        db=db,
+        food_item_id=food_item_id,
+        value=value,
+        from_unit_id=from_unit_id,
+        to_unit_id=to_unit_id
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Cannot convert from {from_unit.name} to {to_unit.name} for {food_item.name}"
+        )
+
+    converted_value, is_food_specific = result
+    factor = converted_value / value if value != 0 else 1.0
+
+    return FoodConversionResult(
+        food_item_id=food_item_id,
+        food_item_name=food_item.name,
+        original_value=value,
+        original_unit_id=from_unit_id,
+        original_unit_name=from_unit.name,
+        converted_value=converted_value,
+        target_unit_id=to_unit_id,
+        target_unit_name=to_unit.name,
+        conversion_factor=factor,
+        is_food_specific=is_food_specific
+    )
+
+
+@operations_router.get("/{food_item_id}/can-convert/{from_unit_id}/{to_unit_id}")
+def can_convert_food_units(
+        *,
+        db: Annotated[Session, Depends(get_db)],
+        food_item_id: int,
+        from_unit_id: int,
+        to_unit_id: int
+) -> dict[str, bool]:
+    """Check if conversion between two units is possible for a specific food item.
+
+    Args:
+        db: Database session
+        food_item_id: Food item ID
+        from_unit_id: Source unit ID
+        to_unit_id: Target unit ID
+
+    Returns:
+        True if conversion is possible, False otherwise
+
+    Raises:
+        HTTPException: 400 if food item or units don't exist
+    """
+    # Validate food item exists
+    food_item = crud_food.get_food_item_by_id(db=db, food_item_id=food_item_id)
+    if not food_item:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Food item with ID {food_item_id} not found"
+        )
+
+    # Validate units exist
+    from_unit = crud_core.get_unit_by_id(db=db, unit_id=from_unit_id)
+    to_unit = crud_core.get_unit_by_id(db=db, unit_id=to_unit_id)
+
+    if not from_unit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"From unit with ID {from_unit_id} not found"
+        )
+    if not to_unit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"To unit with ID {to_unit_id} not found"
+        )
+
+    can_convert = crud_food.can_convert_food_units(
+        db=db,
+        food_item_id=food_item_id,
+        from_unit_id=from_unit_id,
+        to_unit_id=to_unit_id
+    )
+
+    return {"can_convert": can_convert}
+
+
+# ================================================================== #
+# Main Router Assembly                                               #
+# ================================================================== #
+
+router = APIRouter(prefix="/food-items")
+
+# Include all sub-routers
+router.include_router(food_items_router)
+router.include_router(aliases_router)
+router.include_router(conversions_router)
+router.include_router(operations_router)
