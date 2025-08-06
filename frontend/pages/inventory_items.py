@@ -6,7 +6,7 @@ Features
 • View all inventory items of a kitchen
 • Add new items (create-or-update endpoint)
 • Bulk delete / single-row edit (scaffolding)
-• “Min Qty” column shown
+• “Min Quantity” column shown
 • Filter bar: All · Low stock · Expires soon · Expired
 """
 
@@ -101,6 +101,7 @@ class InventoryController:
         )
         return symbol or item.get("base_unit_name", "N/A")
 
+
     @staticmethod
     def _apply_filter(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Return rows filtered according to current selection."""
@@ -111,7 +112,7 @@ class InventoryController:
             return [r for r in rows if r.get("expires_soon")]
         if mode == "Expired":
             return [r for r in rows if r.get("is_expired")]
-        return rows  # All
+        return rows
 
 
     # ------------------------- table rendering ----------------------- #
@@ -127,8 +128,8 @@ class InventoryController:
                 "ID": [r["id"] for r in rows],
                 "Food": [r["food_item"]["name"] for r in rows],
                 "Location": [r["storage_location"]["name"] for r in rows],
-                "Qty": [r["quantity"] for r in rows],
-                "Min Qty": [r.get("min_quantity") or "–" for r in rows],
+                "Quantity": [r["quantity"] for r in rows],
+                "Min Quantity": [r.get("min_quantity") or "–" for r in rows],
                 "Unit": [self._unit_cell(r) for r in rows],
                 "Expires": [r.get("expiration_date") or "–" for r in rows],
                 "Updated": [r["updated_at"][:10] for r in rows],
@@ -274,33 +275,55 @@ class InventoryController:
 
     # ------------------------------ render --------------------------- #
     def render(self) -> None:
+        """Main page renderer: action buttons above the filter and Apply/Clear filter
+        buttons – aligned with the Food-Items page UX."""
         st.title("Inventory Items")
 
+        # Kitchen selector (kept unchanged)
         kitchen_id = st.number_input(
-            "Kitchen ID",
-            min_value=1,
-            step=1,
-            key="kitchen_id",
+            "Kitchen ID", min_value=1, step=1, key="kitchen_id"
         )
         self._load_master_data(kitchen_id)
 
-        # Filter bar
-        st.selectbox(
-            "Filter",
-            ("All", "Low stock", "Expires soon", "Expired"),
-            key="inv_filter",
-        )
-
-        # Top buttons
-        col1, col2, _ = st.columns([1, 1, 4])
-        if col1.button("Refresh"):
+        # ----------------------------------------------------------------
+        # Action buttons (Refresh / Add)    – first row
+        # ----------------------------------------------------------------
+        col_ref, col_add, _ = st.columns([1, 1, 6])
+        if col_ref.button("Refresh"):
             self._load_inventory(kitchen_id)
-        if col2.button("Add Item"):
+        if col_add.button("Add Item"):
             st.session_state.show_add = True
+
+        # ----------------------------------------------------------------
+        # Filter selector with Apply / Clear buttons  – second row
+        # ----------------------------------------------------------------
+        col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
+
+        with col_f1:
+            selected_mode = st.selectbox(
+                "Filter",
+                ("All", "Low stock", "Expires soon", "Expired"),
+                index=("All", "Low stock", "Expires soon", "Expired").index(
+                    st.session_state.inv_filter
+                ),
+                key="inv_filter_select",
+            )
+
+        with col_f2:
+            if st.button("Apply Filter"):
+                st.session_state.inv_filter = selected_mode
+                st.rerun()
+
+        with col_f3:
+            if st.button("Clear Filter"):
+                st.session_state.inv_filter = "All"
+                st.rerun()
 
         st.divider()
 
-        # Forms
+        # ----------------------------------------------------------------
+        # Forms (add / edit)
+        # ----------------------------------------------------------------
         if st.session_state.show_add:
             self._render_form(is_new=True, kitchen_id=kitchen_id)
 
@@ -311,10 +334,11 @@ class InventoryController:
                 defaults=st.session_state.row_for_edit,
             )
 
-        st.divider()
-
-        raw_rows = self._load_inventory(kitchen_id)
-        filtered_rows = self._apply_filter(raw_rows)
+        # ----------------------------------------------------------------
+        # Data table
+        # ----------------------------------------------------------------
+        all_rows = self._load_inventory(kitchen_id)
+        filtered_rows = self._apply_filter(all_rows)
         self.render_table(filtered_rows)
 
 
