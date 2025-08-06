@@ -6,6 +6,9 @@ from .inventory_items_client import InventoryItemsClient
 from .kitchens_client import KitchensClient
 from .storage_locations_client import StorageLocationsClient
 from .units_client import UnitsClient
+from .user_credentials_client import UserCredentialsClient
+from .user_health_client import UserHealthClient
+from .users_client import UsersClient
 
 __all__ = [
     "BaseClient",
@@ -14,6 +17,8 @@ __all__ = [
     "InventoryItemsClient",
     "KitchensClient",
     "StorageLocationsClient",
-    "UnitsClient"
-
+    "UnitsClient",
+    "UserCredentialsClient",
+    "UserHealthClient",
+    "UsersClient"
 ]
