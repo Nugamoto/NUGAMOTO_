@@ -15,6 +15,7 @@ from backend.schemas.user_credentials import (
     UserCredentialsSummary,
     UserCredentialsUpdate
 )
+from backend.security.passwords import is_password_hashed, hash_password
 
 
 # ================================================================== #
@@ -42,17 +43,7 @@ def create_user_credentials(
 ) -> UserCredentialsRead:
     """Create new user credentials - returns schema.
 
-    Args:
-        db: Database session.
-        user_id: ID of the user to create credentials for.
-        credentials_data: Validated credential creation data.
-
-    Returns:
-        The newly created user credentials schema.
-
-    Raises:
-        ValueError: If user_id is invalid or user doesn't exist.
-        IntegrityError: If credentials already exist for this user.
+    Normalizes and hashes password before persisting (if provided).
     """
     if user_id <= 0:
         raise ValueError("user_id must be a positive integer")
@@ -65,9 +56,13 @@ def create_user_credentials(
     if existing_credentials:
         raise ValueError("Credentials already exist for this user")
 
+    # Treat incoming 'password_hash' as plain unless it is already a bcrypt hash.
+    incoming = credentials_data.password_hash
+    final_hash = hash_password(incoming) if incoming and not is_password_hashed(incoming) else incoming
+
     db_credentials = UserCredentials(
         user_id=user_id,
-        password_hash=credentials_data.password_hash,
+        password_hash=final_hash,
         first_name=credentials_data.first_name,
         last_name=credentials_data.last_name,
         address=credentials_data.address,
@@ -136,20 +131,17 @@ def update_user_credentials(
 ) -> UserCredentialsRead | None:
     """Update existing user credentials with partial data - returns schema.
 
-    Args:
-        db: Database session.
-        user_id: ID of the user whose credentials are to update.
-        credentials_data: Partial credentials data to update (only non-None fields are updated).
-
-    Returns:
-        Updated UserCredentials schema if found, None otherwise.
+    Hashes password if 'password_hash' is provided and not already hashed.
     """
     credentials_orm = get_user_credentials_orm_by_user_id(db, user_id)
     if not credentials_orm:
         return None
 
-    # Update only the fields that are not None
     update_data = credentials_data.model_dump(exclude_unset=True)
+
+    if "password_hash" in update_data and update_data["password_hash"]:
+        incoming = update_data["password_hash"]
+        update_data["password_hash"] = hash_password(incoming) if not is_password_hashed(incoming) else incoming
 
     for field, value in update_data.items():
         setattr(credentials_orm, field, value)
