@@ -22,13 +22,60 @@ from backend.schemas.user_health import (
 # ================================================================== #
 
 def build_user_health_profile_read(profile_orm: UserHealthProfile) -> UserHealthProfileRead:
-    """Convert UserHealthProfile ORM to Read schema."""
-    return UserHealthProfileRead.model_validate(profile_orm, from_attributes=True)
+    """Convert a UserHealthProfile ORM object to a read DTO.
+
+    Normalisiert leere Strings (Alt-Daten) zu None, bevor das Pydantic-Read-
+    Schema validiert wird. So schlagen strikte Validatoren (min_length etc.)
+    nicht beim Lesen fehl.
+
+    Args:
+        profile_orm: Vollständig geladenes ORM-Objekt.
+
+    Returns:
+        UserHealthProfileRead: Validiere, normalisierte Leserepräsentation.
+    """
+    data = {
+        "id": profile_orm.id,
+        "user_id": profile_orm.user_id,
+        "age": profile_orm.age,
+        "gender": _none_if_empty(profile_orm.gender),
+        "height_cm": profile_orm.height_cm,
+        "weight_kg": profile_orm.weight_kg,
+        "activity_level": _none_if_empty(profile_orm.activity_level),
+        "health_conditions": _none_if_empty(profile_orm.health_conditions),
+        "goal": _none_if_empty(profile_orm.goal),
+        "created_at": profile_orm.created_at,
+        "updated_at": profile_orm.updated_at,
+        "bmi": profile_orm.bmi,
+        "is_complete": profile_orm.is_complete,
+    }
+    return UserHealthProfileRead.model_validate(data)
 
 
 def build_user_health_profile_summary(profile_orm: UserHealthProfile) -> UserHealthProfileSummary:
-    """Convert UserHealthProfile ORM to Summary schema."""
-    return UserHealthProfileSummary.model_validate(profile_orm, from_attributes=True)
+    """Convert a UserHealthProfile ORM object to a summary DTO.
+
+    Normalisiert leere Strings (Alt-Daten) zu None, bevor das Pydantic-Summary-
+    Schema validiert wird.
+
+    Args:
+        profile_orm: Vollständig geladenes ORM-Objekt.
+
+    Returns:
+        UserHealthProfileSummary: Validiere, normalisierte Zusammenfassung.
+    """
+    data = {
+        "id": profile_orm.id,
+        "user_id": profile_orm.user_id,
+        "age": profile_orm.age,
+        "gender": _none_if_empty(profile_orm.gender),
+        "bmi": profile_orm.bmi,
+        "activity_level": _none_if_empty(profile_orm.activity_level),
+        "goal": _none_if_empty(profile_orm.goal),
+        "is_complete": profile_orm.is_complete,
+        "updated_at": profile_orm.updated_at,
+    }
+    return UserHealthProfileSummary.model_validate(data)
 
 
 # ================================================================== #
@@ -40,19 +87,20 @@ def create_user_health_profile(
         user_id: int,
         profile_data: UserHealthProfileCreate
 ) -> UserHealthProfileRead:
-    """Create new health profile for a user - returns schema.
+    """Create a new health profile for a user and return the read schema.
+
+    Normalizes empty strings to None for text fields before persisting.
 
     Args:
         db: Database session.
-        user_id: ID of the user to create profile for.
-        profile_data: Validated health profile creation data.
+        user_id: Target user ID.
+        profile_data: Validated health profile payload.
 
     Returns:
-        The newly created health profile schema.
+        UserHealthProfileRead: Created profile.
 
     Raises:
-        ValueError: If user_id is invalid or user doesn't exist.
-        IntegrityError: If health profile already exists for this user.
+        ValueError: If user_id is invalid or user doesn't exist, or a profile already exists.
     """
     if user_id <= 0:
         raise ValueError("user_id must be a positive integer")
@@ -65,17 +113,23 @@ def create_user_health_profile(
     if existing_profile:
         raise ValueError("Health profile already exists for this user")
 
+    # Normalize possibly empty strings
+    gender = _none_if_empty(profile_data.gender)
+    activity_level = _none_if_empty(profile_data.activity_level)
+    health_conditions = _none_if_empty(profile_data.health_conditions)
+    goal = _none_if_empty(profile_data.goal)
+
     db_profile = UserHealthProfile(
         user_id=user_id,
         age=profile_data.age,
-        gender=profile_data.gender,
+        gender=gender,
         height_cm=profile_data.height_cm,
         weight_kg=profile_data.weight_kg,
-        activity_level=profile_data.activity_level,
-        health_conditions=profile_data.health_conditions,
-        goal=profile_data.goal,
+        activity_level=activity_level,
+        health_conditions=health_conditions,
+        goal=goal,
         created_at=datetime.datetime.now(datetime.timezone.utc),
-        updated_at=datetime.datetime.now(datetime.timezone.utc)
+        updated_at=datetime.datetime.now(datetime.timezone.utc),
     )
 
     db.add(db_profile)
@@ -151,22 +205,29 @@ def update_user_health_profile(
         user_id: int,
         profile_data: UserHealthProfileUpdate
 ) -> UserHealthProfileRead | None:
-    """Update existing health profile with partial data - returns schema.
+    """Update an existing health profile with partial data and return the read schema.
+
+    Only updates provided fields (PATCH semantics). Empty strings will be
+    normalized to None for text fields to keep data consistent.
 
     Args:
         db: Database session.
-        user_id: ID of the user whose health profile is to update.
-        profile_data: Partial health profile data to update (only non-None fields are updated).
+        user_id: ID of the user whose profile is updated.
+        profile_data: Partial update payload (unset fields are ignored).
 
     Returns:
-        Updated UserHealthProfile schema if found, None otherwise.
+        UserHealthProfileRead if found and updated, otherwise None.
     """
     profile_orm = get_user_health_profile_orm_by_user_id(db, user_id)
     if not profile_orm:
         return None
 
-    # Update only the fields that are not None
     update_data = profile_data.model_dump(exclude_unset=True)
+
+    # Normalize possibly empty strings for text fields
+    for field in ("gender", "activity_level", "health_conditions", "goal"):
+        if field in update_data:
+            update_data[field] = _none_if_empty(update_data[field])
 
     for field, value in update_data.items():
         setattr(profile_orm, field, value)
@@ -247,3 +308,23 @@ def get_user_health_profile_orm_by_id(db: Session, profile_id: int) -> UserHealt
     return db.scalar(
         select(UserHealthProfile).where(UserHealthProfile.id == profile_id)
     )
+
+
+# ================================================================== #
+#  Helper Functions                                                  #
+# ================================================================== #
+
+
+def _none_if_empty(value: str | None) -> str | None:
+    """Convert empty/whitespace strings to None.
+
+    Args:
+        value: Optional string value.
+
+    Returns:
+        None if the value is empty or whitespace, otherwise the trimmed value.
+    """
+    if value is None:
+        return None
+    trimmed = value.strip()
+    return trimmed or None
