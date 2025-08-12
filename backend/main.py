@@ -1,73 +1,88 @@
-"""FastAPI application main entry point."""
+from __future__ import annotations
 
-# start development server: uvicorn app.main:app --reload
+from typing import Any, Dict
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from .api.v1 import (
-    user as user_router,
-    kitchen as kitchen_router,
-    inventory as inventory_router,
-    shopping as shopping_router,
-    core as core_router,
-    food as food_router,
-    ai_model_output as ai_model_output_router,
-    user_health as user_health_router,
-    user_credentials as user_credentials_router,
-    device as device_router,
-    recipe as recipe_router,
-    ai_service_recipe as ai_router
+# v1 routers
+from backend.api.v1 import (
+    auth,
+    user_me,
+    ai_model_output,
+    ai_service_recipe,
+    core,
+    device,
+    food,
+    inventory,
+    kitchen,
+    recipe,
+    shopping,
+    user,
+    user_credentials,
+    user_health,
 )
 
-app = FastAPI(
-    title="NUGAMOTO - Smart Kitchen Assistant",
-    description="Clean Architecture Backend for Smart Kitchen Management",
-    version="1.0.0"
-)
 
-default_router = APIRouter(tags=["Default"])
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application instance.
 
-# Root route for health check
-@default_router.get(
-    "/",
-    summary="Root"
-)
-async def root():
-    """API health check endpoint."""
-    return {
-        "name": "NUGAMOTO - Smart Kitchen Assistant",
-        "version": "1.0.0",
-        "status": "online",
-        "description": "Clean Architecture Backend for Smart Kitchen Management"
-    }
+    Returns:
+        FastAPI: Configured FastAPI app.
+    """
+    app = FastAPI(
+        title="NUGAMOTO API",
+        version="1.0.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+    )
+
+    # CORS (development-friendly defaults; tighten for production)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # TODO: restrict to trusted origins in production
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Public routers (no auth required)
+    app.include_router(auth.router, prefix="/v1")
+
+    # Users (includes /users/me which is protected inside its endpoint)
+    app.include_router(user_me.router, prefix="/v1")
+
+    # Domain routers (adjust protection as needed using dependencies=[...])
+    app.include_router(core.router, prefix="/v1")
+    app.include_router(device.router, prefix="/v1")
+    app.include_router(food.router, prefix="/v1")
+    app.include_router(inventory.router, prefix="/v1")
+    app.include_router(kitchen.router, prefix="/v1")
+    app.include_router(recipe.router, prefix="/v1")
+    app.include_router(shopping.router, prefix="/v1")
+    app.include_router(user.router, prefix="/v1")
+    app.include_router(user_credentials.router, prefix="/v1")
+    app.include_router(user_health.router, prefix="/v1")
+    app.include_router(ai_model_output.router, prefix="/v1")
+    app.include_router(ai_service_recipe.router, prefix="/v1")
 
 
-app.include_router(default_router)
+    # Basic service endpoints
+    @app.get("/", tags=["Service"])
+    def root() -> Dict[str, Any]:
+        """Root endpoint to verify the service is running."""
+        return {"status": "ok", "service": "NUGAMOTO API"}
 
-# Core system routes
-app.include_router(core_router.router, prefix="/v1")
-app.include_router(food_router.router, prefix="/v1")
 
-# User routes
-app.include_router(user_router.router, prefix="/v1")
-app.include_router(user_health_router.router, prefix="/v1")
-app.include_router(user_credentials_router.router, prefix="/v1")
+    @app.get("/health", tags=["Service"])
+    def health() -> Dict[str, Any]:
+        """Health check endpoint."""
+        return {"status": "healthy"}
 
-# Kitchen routes
-app.include_router(kitchen_router.router, prefix="/v1")
 
-# Inventory routes
-app.include_router(inventory_router.router, prefix="/v1")
+    return app
 
-# Shopping routes
-app.include_router(shopping_router.router, prefix="/v1")
 
-# AI routes
-app.include_router(ai_model_output_router.router, prefix="/v1")
-
-# Device routes
-app.include_router(device_router.router, prefix="/v1")
-
-# Recipe routes
-app.include_router(recipe_router.router, prefix="/v1")
-app.include_router(ai_router.router, prefix="/v1")
+# ASGI entrypoint
+app = create_app()
