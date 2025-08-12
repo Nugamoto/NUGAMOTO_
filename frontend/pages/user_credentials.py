@@ -52,6 +52,7 @@ class UserCredentialsController:
     def _init_state() -> None:
         """Initialize default values in Streamlit session state."""
         defaults: dict[str, Any] = {
+            "credentials_rows_all": [],
             "credentials_rows": [],
             "users_master": [],
             "show_add": False,
@@ -61,14 +62,13 @@ class UserCredentialsController:
             "row_for_edit": None,
             "row_for_details": None,
             "credentials_filter": "All",
-            # Caching and search state
             "credentials_rows_loaded": False,
             "is_search_active": False,
-            # Search clear flag
             "cred_search_clear_requested": False,
         }
         for key, val in defaults.items():
             st.session_state.setdefault(key, val)
+
 
     # ----------------------------- data loading ---------------------- #
     def _load_master_data(self) -> None:
@@ -82,18 +82,19 @@ class UserCredentialsController:
     def _load_credentials(self, *, force: bool = False) -> list[dict[str, Any]]:
         """Fetch credentials summaries unless cached or force=True.
 
-        Args:
-            force: If True, always reload from API.
-
-        Returns:
-            List of user credentials summary rows.
+        Keeps both the full dataset (credentials_rows_all) and the current
+        view (credentials_rows). On reload, the view is reset to the full set.
         """
         try:
             if not force and st.session_state.credentials_rows_loaded:
                 return st.session_state.credentials_rows
 
             rows = self.credentials_client.get_all_user_credentials_summary(limit=1000)
-            st.session_state.credentials_rows = sorted(rows, key=lambda x: x["user_id"])
+            rows = sorted(rows, key=lambda x: x["user_id"])
+
+            st.session_state.credentials_rows_all = rows
+            st.session_state.credentials_rows = rows.copy()
+
             st.session_state.credentials_rows_loaded = True
             st.session_state.is_search_active = False
             return st.session_state.credentials_rows
@@ -106,22 +107,19 @@ class UserCredentialsController:
     def _get_users_without_credentials() -> dict[str, int]:
         """Return users that do not yet have credentials.
 
-        Reads users and existing credentials from Streamlit session state
-        and returns a mapping of display labels to user IDs for users
-        without credentials.
-
-        Returns:
-            Mapping of "Name (Email)" to user ID for eligible users.
+        Always uses the full dataset (credentials_rows_all) so that search/filter
+        in the current view does not affect availability calculations.
         """
         all_users = st.session_state.users_master
-        existing = st.session_state.credentials_rows
-        users_with_creds = {row["user_id"] for row in existing}
+        full_creds = st.session_state.credentials_rows_all or st.session_state.credentials_rows
+        users_with_creds = {row["user_id"] for row in full_creds}
 
         return {
             f'{user["name"]} ({user["email"]})': user["id"]
             for user in all_users
             if user["id"] not in users_with_creds
         }
+
 
     @staticmethod
     def _apply_filter(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -279,22 +277,10 @@ class UserCredentialsController:
 
     # ----------------------------- search form ----------------------- #
     def _render_search_form(self) -> None:
-        """Render client-side Advanced Search for credentials.
-
-        The search is performed locally on the currently loaded summary
-        rows (no dedicated backend endpoint). It filters by:
-        - Full Name contains
-        - City contains
-        - Country contains
-
-        Includes buttons:
-        - Search: apply filters to credentials_rows
-        - Clear: clear fields and reload full dataset
-        - Cancel: hide the search form
-        """
+        """Render client-side Advanced Search (affects the view only)."""
         st.subheader("🔍 Advanced Search")
 
-        # Handle pending clear before creating widgets
+        # Clear request must be processed before creating widgets
         if st.session_state.get("cred_search_clear_requested"):
             for key in ("cred_search_name", "cred_search_city", "cred_search_country"):
                 if key in st.session_state:
@@ -332,15 +318,14 @@ class UserCredentialsController:
             cancel_clicked = col_cancel.form_submit_button("Cancel")
 
             if search_clicked:
-                # Ensure data is loaded (use cached if available)
-                rows = self._load_credentials()
-
+                # Always search against the full dataset (ground truth)
+                base_rows = st.session_state.credentials_rows_all or self._load_credentials(force=True)
 
                 def _contains(val: str | None, q: str) -> bool:
                     return bool(val) and q.lower() in val.lower()
 
 
-                filtered = rows
+                filtered = base_rows
                 if name_q.strip():
                     filtered = [r for r in filtered if _contains(r.get("full_name"), name_q.strip())]
                 if city_q.strip():
@@ -356,7 +341,6 @@ class UserCredentialsController:
                 st.rerun()
 
             if clear_clicked:
-                # Defer clearing widget keys until next render cycle
                 st.session_state["cred_search_clear_requested"] = True
                 st.session_state.is_search_active = False
                 self._load_credentials(force=True)
@@ -366,6 +350,7 @@ class UserCredentialsController:
             if cancel_clicked:
                 st.session_state.show_search = False
                 st.rerun()
+
 
     # ----------------------------- CRUD helpers ---------------------- #
     def _save_credentials(
