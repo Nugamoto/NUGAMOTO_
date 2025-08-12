@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from passlib.exc import MissingBackendError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.core.dependencies import get_db
@@ -11,11 +13,7 @@ from backend.crud import user_credentials as crud_user_credentials
 from backend.schemas.auth import LoginRequest, RegisterRequest, TokenPair
 from backend.schemas.user import UserCreate
 from backend.schemas.user_credentials import UserCredentialsCreate
-from backend.security import (
-    create_access_token,
-    create_refresh_token,
-    decode_token,
-)
+from backend.security import create_access_token, create_refresh_token, decode_token
 from backend.security.passwords import verify_password
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -27,27 +25,17 @@ def register(
         payload: RegisterRequest,
         db: Annotated[Session, Depends(get_db)],
 ) -> TokenPair:
-    """Register a new user and return token pair (auto-login).
-
-    Flow:
-        1) Check if email already exists
-        2) Create user
-        3) Create credentials (hashing is handled by the credentials CRUD)
-        4) Issue tokens
-
-    If credential creation fails, the newly created user is removed to avoid
-    partial data leftovers.
-    """
+    """Register a new user and return token pair (auto-login)."""
     # 1) Check uniqueness by email
     existing = crud_user.get_user_orm_by_email(db, email=payload.email)
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
-    # 2) Create user
+    # 2) Create user (returns a schema)
     user = crud_user.create_user(db=db, user_data=UserCreate(name=payload.name, email=payload.email))
 
     try:
-        # 3) Create credentials
+        # 3) Create credentials (hashing handled in the CRUD)
         cred_in = UserCredentialsCreate(
             password_hash=payload.password,
             first_name=None,
@@ -59,10 +47,31 @@ def register(
             phone=None,
         )
         crud_user_credentials.create_user_credentials(db=db, user_id=user.id, credentials_data=cred_in)
-    except Exception:
-        db.delete(user)  # direct ORM delete
-        db.commit()
-        raise
+
+    except MissingBackendError:
+        # bcrypt backend not installed; cleanup user ORM and return a clear error
+        user_orm = crud_user.get_user_orm_by_email(db, email=payload.email)
+        if user_orm:
+            db.delete(user_orm)
+            db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Password hashing backend not available. Please install 'bcrypt' and restart the service.",
+        )
+
+    except Exception as exc:
+        # Any other failure during credential creation -> cleanup newly created user (ORM)
+        user_orm = crud_user.get_user_orm_by_email(db, email=payload.email)
+        if user_orm:
+            try:
+                db.delete(user_orm)
+                db.commit()
+            except SQLAlchemyError:
+                db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed. Please try again later.",
+        ) from exc
 
     # 4) Issue token pair (auto-login)
     access = create_access_token(user_id=user.id, extra_claims={"email": cast(str, user.email)})
@@ -88,8 +97,7 @@ def login(
     if not verify_password(payload.password, stored_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    email_str: str = cast(str, user_orm.email)
-    access = create_access_token(user_id=user_orm.id, extra_claims={"email": email_str})
+    access = create_access_token(user_id=user_orm.id, extra_claims={"email": cast(str, user_orm.email)})
     refresh = create_refresh_token(user_id=user_orm.id)
 
     return TokenPair(access_token=access, refresh_token=refresh)
@@ -115,9 +123,5 @@ def refresh(refresh_token: str) -> TokenPair:
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Logout (stateless)")
 def logout() -> Response:
-    """Stateless logout.
-
-    There is nothing to invalidate server-side for stateless JWT.
-    The client MUST delete stored access and refresh tokens after calling this.
-    """
+    """Stateless logout. Client must delete stored tokens."""
     return Response(status_code=status.HTTP_204_NO_CONTENT)
