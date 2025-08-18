@@ -1,14 +1,5 @@
 """
 User Credentials Management Page for NUGAMOTO Admin.
-
-Features
---------
-• View all user credentials with complete backend data
-• Add credentials for users (only for users without credentials)
-• Edit user credentials
-• View detailed credential information
-• Filters and client-side Advanced Search (name/city/country)
-• Cached data loading with explicit refresh
 """
 
 from __future__ import annotations
@@ -20,9 +11,6 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-# ------------------------------------------------------------------ #
-# Import path so IDE + runtime both resolve client modules           #
-# ------------------------------------------------------------------ #
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 try:
@@ -31,7 +19,7 @@ try:
         UsersClient,
         APIException,
     )
-except ImportError:  # fallback for "python …"
+except ImportError:
     from frontend.clients import (
         UserCredentialsClient,
         UsersClient,
@@ -40,9 +28,8 @@ except ImportError:  # fallback for "python …"
 
 
 class UserCredentialsController:
-    """Encapsulates all UI and API logic for the user credentials page."""
+    """UI and API logic for the user credentials page."""
 
-    # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         self.credentials_client = UserCredentialsClient()
         self.users_client = UsersClient()
@@ -50,7 +37,6 @@ class UserCredentialsController:
 
     @staticmethod
     def _init_state() -> None:
-        """Initialize default values in Streamlit session state."""
         defaults: dict[str, Any] = {
             "credentials_rows_all": [],
             "credentials_rows": [],
@@ -69,22 +55,13 @@ class UserCredentialsController:
         for key, val in defaults.items():
             st.session_state.setdefault(key, val)
 
-
-    # ----------------------------- data loading ---------------------- #
     def _load_master_data(self) -> None:
-        """Load users into the session state."""
         try:
             st.session_state.users_master = self.users_client.list_users(limit=1000)
         except APIException as exc:
             st.error(f"Failed to load users: {exc.message}")
 
-
     def _load_credentials(self, *, force: bool = False) -> list[dict[str, Any]]:
-        """Fetch credentials summaries unless cached or force=True.
-
-        Keeps both the full dataset (credentials_rows_all) and the current
-        view (credentials_rows). On reload, the view is reset to the full set.
-        """
         try:
             if not force and st.session_state.credentials_rows_loaded:
                 return st.session_state.credentials_rows
@@ -102,14 +79,8 @@ class UserCredentialsController:
             st.error(f"Failed to load user credentials: {exc.message}")
             return []
 
-    # ----------------------------- helpers --------------------------- #
     @staticmethod
     def _get_users_without_credentials() -> dict[str, int]:
-        """Return users that do not yet have credentials.
-
-        Always uses the full dataset (credentials_rows_all) so that search/filter
-        in the current view does not affect availability calculations.
-        """
         all_users = st.session_state.users_master
         full_creds = st.session_state.credentials_rows_all or st.session_state.credentials_rows
         users_with_creds = {row["user_id"] for row in full_creds}
@@ -120,17 +91,8 @@ class UserCredentialsController:
             if user["id"] not in users_with_creds
         }
 
-
     @staticmethod
     def _apply_filter(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Return rows filtered according to the current selection.
-
-        Args:
-            rows: Full list of credentials rows.
-
-        Returns:
-            Filtered list based on the active filter mode.
-        """
         mode = st.session_state.get("credentials_filter", "All")
         if mode == "With Name":
             return [r for r in rows if r.get("full_name")]
@@ -144,39 +106,16 @@ class UserCredentialsController:
 
     @staticmethod
     def _format_optional_field(value: str | None) -> str:
-        """Format optional text for table display.
-
-        Args:
-            value: Optional value.
-
-        Returns:
-            A string suitable for display (dash if missing).
-        """
         return value if value else "–"
 
     @staticmethod
     def _get_user_email_by_id(user_id: int, users_list: list[dict[str, Any]]) -> str:
-        """Resolve user email by ID from the master users list.
-
-        Args:
-            user_id: User identifier.
-            users_list: Full list of users.
-
-        Returns:
-            Email address or a fallback label.
-        """
         for user in users_list:
             if user["id"] == user_id:
                 return user.get("email", f"user{user_id}@unknown")
         return f"user{user_id}@unknown"
 
-    # ------------------------- table rendering ----------------------- #
     def render_table(self, rows: list[dict[str, Any]]) -> None:
-        """Render credentials rows and handle selection actions.
-
-        Args:
-            rows: Rows to display (after filtering/search).
-        """
         if not rows:
             st.info("No user credentials found.")
             return
@@ -235,13 +174,7 @@ class UserCredentialsController:
             else:
                 st.info("Please select exactly one user to view details or edit.")
 
-    # ----------------------------- detailed view ---------------------- #
     def _show_detailed_view(self, credentials: dict[str, Any]) -> None:
-        """Show all credential details in an expandable section.
-
-        Args:
-            credentials: Full credentials payload for a user.
-        """
         with st.expander("📋 Complete User Credentials Details", expanded=True):
             col1, col2 = st.columns(2)
 
@@ -274,13 +207,9 @@ class UserCredentialsController:
             with col4:
                 st.write(f"**Password Hash:** {'***' if credentials.get('password_hash') else 'N/A'}")
 
-
-    # ----------------------------- search form ----------------------- #
     def _render_search_form(self) -> None:
-        """Render client-side Advanced Search (affects the view only)."""
         st.subheader("🔍 Advanced Search")
 
-        # Clear request must be processed before creating widgets
         if st.session_state.get("cred_search_clear_requested"):
             for key in ("cred_search_name", "cred_search_city", "cred_search_country"):
                 if key in st.session_state:
@@ -291,26 +220,12 @@ class UserCredentialsController:
             col_left, col_right = st.columns(2)
 
             with col_left:
-                name_q = st.text_input(
-                    "Full Name contains",
-                    value="",
-                    key="cred_search_name",
-                    placeholder="e.g. John",
-                )
-                city_q = st.text_input(
-                    "City contains",
-                    value="",
-                    key="cred_search_city",
-                    placeholder="e.g. Berlin",
-                )
+                name_q = st.text_input("Full Name contains", value="", key="cred_search_name", placeholder="e.g. John")
+                city_q = st.text_input("City contains", value="", key="cred_search_city", placeholder="e.g. Berlin")
 
             with col_right:
-                country_q = st.text_input(
-                    "Country contains",
-                    value="",
-                    key="cred_search_country",
-                    placeholder="e.g. Germany",
-                )
+                country_q = st.text_input("Country contains", value="", key="cred_search_country",
+                                          placeholder="e.g. Germany")
 
             col_search, col_clear, col_cancel = st.columns(3)
             search_clicked = col_search.form_submit_button("🔍 Search", type="primary")
@@ -318,12 +233,10 @@ class UserCredentialsController:
             cancel_clicked = col_cancel.form_submit_button("Cancel")
 
             if search_clicked:
-                # Always search against the full dataset (ground truth)
                 base_rows = st.session_state.credentials_rows_all or self._load_credentials(force=True)
 
                 def _contains(val: str | None, q: str) -> bool:
                     return bool(val) and q.lower() in val.lower()
-
 
                 filtered = base_rows
                 if name_q.strip():
@@ -351,8 +264,6 @@ class UserCredentialsController:
                 st.session_state.show_search = False
                 st.rerun()
 
-
-    # ----------------------------- CRUD helpers ---------------------- #
     def _save_credentials(
             self,
             *,
@@ -360,13 +271,6 @@ class UserCredentialsController:
             user_id: int,
             payload: dict[str, Any],
     ) -> None:
-        """Create or update a credentials record and handle UI state.
-
-        Args:
-            is_new: Create (True) or update (False).
-            user_id: Target user ID.
-            payload: Data to send to the API.
-        """
         try:
             if is_new:
                 self.credentials_client.create_user_credentials(user_id, payload)
@@ -375,56 +279,38 @@ class UserCredentialsController:
             st.success("User credentials saved")
             st.session_state.show_add = False
             st.session_state.show_edit = False
-            # Reload to reflect changes
             self._load_credentials(force=True)
             st.rerun()
         except APIException as exc:
             st.error(f"API error: {exc.message}")
 
-
-    # ------------------------- forms (add/edit) ---------------------- #
     def _render_credentials_form(
             self,
             *,
             is_new: bool,
             defaults: dict[str, Any] | None = None,
     ) -> None:
-        """Render the Add/Edit Credentials form.
-
-        Args:
-            is_new: Whether form is for creation.
-            defaults: Existing record (for edit).
-        """
         st.subheader("Add User Credentials" if is_new else "Edit User Credentials")
 
         def _def(key: str) -> Any:
             return defaults.get(key) if defaults else None
 
         with st.form("credentials_form", clear_on_submit=is_new):
-            # User selection only for new credentials
             if is_new:
                 available_users = self._get_users_without_credentials()
                 if not available_users:
-                    st.warning("⚠️ All users already have credentials!")
-                    st.info("Create new users first or edit existing credentials.")
-                    close_clicked = st.form_submit_button("Close", type="secondary")
-                    if close_clicked:
-                        st.session_state.show_add = False
-                        st.rerun()
+                    st.warning("All users already have credentials.")
+                    st.form_submit_button("Close", disabled=True)
                     return
 
-                user_sel = st.selectbox(
-                    "User *",
-                    list(available_users.keys()),
-                    help="Only users without existing credentials are shown",
-                )
+                user_sel = st.selectbox("User *", list(available_users.keys()))
                 selected_user_id = available_users[user_sel]
             else:
-                user_email = self._get_user_email_by_id(_def("user_id"), st.session_state.users_master)
-                st.text_input("User", value=f"User {_def('user_id')} ({user_email})", disabled=True)
                 selected_user_id = _def("user_id")
+                email = next((u.get("email", "") for u in st.session_state.users_master if u["id"] == selected_user_id),
+                             "")
+                st.text_input("User", value=f"User {selected_user_id} ({email})", disabled=True)
 
-            # Personal Information
             st.subheader("Personal Information")
             col1, col2 = st.columns(2)
             with col1:
@@ -432,7 +318,6 @@ class UserCredentialsController:
             with col2:
                 last_name = st.text_input("Last Name", value=_def("last_name") or "")
 
-            # Address Information
             st.subheader("Address Information")
             address = st.text_area("Address", value=_def("address") or "", height=80)
             col_a, col_b, col_c = st.columns(3)
@@ -443,34 +328,22 @@ class UserCredentialsController:
             with col_c:
                 country = st.text_input("Country", value=_def("country") or "")
 
-            # Contact Information
             st.subheader("Contact Information")
-            phone = st.text_input(
-                "Phone",
-                value=_def("phone") or "",
-                help="Include country code (e.g., +1-555-0123)",
-            )
+            phone = st.text_input("Phone", value=_def("phone") or "", help="Include country code (e.g., +1-555-0123)")
 
-            # Security (only for new credentials)
+            st.subheader("Security")
             if is_new:
-                st.subheader("Security")
-                password = st.text_input("Password *", type="password", help="This will be hashed before storage")
+                password = st.text_input("Password *", type="password", help="Will be hashed by the server")
                 confirm_password = st.text_input("Confirm Password *", type="password")
+            else:
+                new_password = st.text_input("New Password (optional)", type="password")
+                confirm_new_password = st.text_input("Confirm New Password", type="password")
 
-            # Submit buttons
             col_save, col_cancel = st.columns(2)
-            save_clicked = col_save.form_submit_button("💾 Save", type="primary")
+            save_clicked = col_save.form_submit_button("Save", type="primary")
             cancel_clicked = col_cancel.form_submit_button("Cancel")
 
             if save_clicked:
-                if is_new:
-                    if not password:
-                        st.error("Password is required")
-                        return
-                    if password != confirm_password:
-                        st.error("Passwords don't match")
-                        return
-
                 payload: dict[str, Any] = {
                     "first_name": first_name or None,
                     "last_name": last_name or None,
@@ -480,29 +353,36 @@ class UserCredentialsController:
                     "country": country or None,
                     "phone": phone or None,
                 }
-                if is_new:
-                    payload["password_hash"] = f"hashed_{password}"
 
-                self._save_credentials(
-                    is_new=is_new,
-                    user_id=selected_user_id,
-                    payload=payload,
-                )
+                if is_new:
+                    if not password:
+                        st.error("Password is required")
+                        return
+                    if password != confirm_password:
+                        st.error("Passwords don't match")
+                        return
+                    payload["password_hash"] = password  # plain; backend hashes
+                else:
+                    if new_password or confirm_new_password:
+                        if not new_password:
+                            st.error("Please provide the new password.")
+                            return
+                        if new_password != confirm_new_password:
+                            st.error("New passwords do not match.")
+                            return
+                        payload["password_hash"] = new_password  # plain; backend hashes
+
+                self._save_credentials(is_new=is_new, user_id=selected_user_id, payload=payload)
 
             if cancel_clicked:
                 st.session_state.show_add = False
                 st.session_state.show_edit = False
                 st.rerun()
 
-    # ------------------------------ render --------------------------- #
     def render(self) -> None:
-        """Main page renderer following the user_health pattern."""
         st.title("📇 User Credentials Management")
-
-        # Load master users
         self._load_master_data()
 
-        # Actions row
         col_ref, col_add, col_search, col_info = st.columns([1, 1, 1, 3])
         if col_ref.button("🔄 Refresh"):
             self._load_credentials(force=True)
@@ -520,7 +400,6 @@ class UserCredentialsController:
         else:
             col_info.info(f"ℹ️ {available_count} users available for new credentials")
 
-        # Filter row
         col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
         with col_f1:
             selected_mode = st.selectbox(
@@ -538,30 +417,25 @@ class UserCredentialsController:
         with col_f3:
             if st.button("Clear Filter"):
                 st.session_state.credentials_filter = "All"
-                # Reset search and reload full dataset
                 self._load_credentials(force=True)
                 st.rerun()
 
         st.divider()
 
-        # Advanced Search
         if st.session_state.show_search:
             self._render_search_form()
             st.divider()
 
-        # Details view
         if st.session_state.show_details and st.session_state.row_for_details:
             self._show_detailed_view(st.session_state.row_for_details)
             st.divider()
 
-        # Forms
         if st.session_state.show_add:
             self._render_credentials_form(is_new=True)
 
         if st.session_state.show_edit and st.session_state.row_for_edit:
             self._render_credentials_form(is_new=False, defaults=st.session_state.row_for_edit)
 
-        # Data retrieval honoring cache/search state
         if not st.session_state.credentials_rows_loaded:
             all_rows = self._load_credentials()
         else:
@@ -571,11 +445,7 @@ class UserCredentialsController:
         self.render_table(filtered_rows)
 
 
-# ----------------------------------------------------------------------
-# Page entry point
-# ----------------------------------------------------------------------
 def main() -> None:
-    """Streamlit app entry point for the credentials page."""
     st.set_page_config(page_title="User Credentials - NUGAMOTO", page_icon="📇")
     UserCredentialsController().render()
 
