@@ -1,5 +1,6 @@
 """API clients for NUGAMOTO backend."""
 
+from .auth_client import AuthClient
 from .base import BaseClient, APIException
 from .food_items_client import FoodItemsClient
 from .inventory_items_client import InventoryItemsClient
@@ -20,5 +21,6 @@ __all__ = [
     "UnitsClient",
     "UserCredentialsClient",
     "UserHealthClient",
-    "UsersClient"
+    "UsersClient",
+    "AuthClient",
 ]
