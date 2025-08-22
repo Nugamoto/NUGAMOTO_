@@ -1,14 +1,15 @@
+"""Base HTTP client for NUGAMOTO frontend."""
+
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
 
 class APIException(Exception):
     """Generic API exception wrapping HTTP errors."""
-
 
     def __init__(self, status_code: int, message: str) -> None:
         super().__init__(message)
@@ -24,32 +25,28 @@ class BaseClient:
         client.clear_tokens()
     """
 
-
     def __init__(self, base_url: str = "http://localhost:8000") -> None:
         self.base_url = base_url.rstrip("/")
-        self._access_token: Optional[str] = None
-        self._refresh_token: Optional[str] = None
+        self._access_token: str | None = None
+        self._refresh_token: str | None = None
         # Lazy import to avoid hard dependency loop
         self._auth_client = None
 
-
     # ------------------------- token management ------------------------- #
-    def set_tokens(self, access_token: str, refresh_token: Optional[str] = None) -> None:
+    def set_tokens(self, access_token: str, refresh_token: str | None = None) -> None:
         """Set access/refresh tokens for authenticated requests."""
         self._access_token = access_token
         if refresh_token is not None:
             self._refresh_token = refresh_token
-
 
     def clear_tokens(self) -> None:
         """Clear stored tokens."""
         self._access_token = None
         self._refresh_token = None
 
-
     # ------------------------- core http methods ------------------------ #
-    def _headers(self, extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-        headers: Dict[str, str] = {"Content-Type": "application/json"}
+    def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._access_token:
             headers["Authorization"] = f"Bearer {self._access_token}"
         if extra:
@@ -57,29 +54,28 @@ class BaseClient:
         return headers
 
 
-    def get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         return self._request("GET", path, params=params)
 
 
-    def post(self, path: str, json_data: Optional[Dict[str, Any]] = None, data: Any = None) -> Any:
-        return self._request("POST", path, json_data=json_data, data=data)
+    def post(self, path: str, json_data: dict[str, Any] | None = None, data: Any = None,
+             params: dict[str, Any] | None = None) -> Any:
+        return self._request("POST", path, json_data=json_data, data=data, params=params)
 
 
-    def patch(self, path: str, json_data: Optional[Dict[str, Any]] = None) -> Any:
-        return self._request("PATCH", path, json_data=json_data)
-
+    def patch(self, path: str, json_data: dict[str, Any] | None = None, params: dict[str, Any] | None = None) -> Any:
+        return self._request("PATCH", path, json_data=json_data, params=params)
 
     def delete(self, path: str) -> Any:
         return self._request("DELETE", path)
-
 
     def _request(
             self,
             method: str,
             path: str,
             *,
-            params: Optional[Dict[str, Any]] = None,
-            json_data: Optional[Dict[str, Any]] = None,
+            params: dict[str, Any] | None = None,
+            json_data: dict[str, Any] | None = None,
             data: Any = None,
             retry_on_401: bool = True,
     ) -> Any:
