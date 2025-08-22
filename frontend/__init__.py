@@ -1,0 +1,1 @@
+"""NUGAMOTO Frontend package."""
