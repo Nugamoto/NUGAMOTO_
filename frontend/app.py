@@ -1,65 +1,135 @@
-"""
-NUGAMOTO Admin Frontend - Main Application Entry Point.
-
-This script serves as the main entry point for the Streamlit application.
-It sets up the global page configuration and displays the main landing page.
-Streamlit automatically discovers and handles the navigation to other pages
-located in the 'pages/' directory.
-"""
-
-from __future__ import annotations
+"""Main Streamlit application for NUGAMOTO Smart Kitchen Assistant."""
 
 import streamlit as st
 
+# Configure page
+st.set_page_config(
+    page_title="NUGAMOTO Smart Kitchen",
+    page_icon="🍳",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-def main() -> None:
-    """
-    Render the main landing page of the application.
-    """
-    st.set_page_config(
-        page_title="NUGAMOTO Admin Dashboard",
-        page_icon="🍳",  # Favicon
-        layout="wide",
-        initial_sidebar_state="expanded",
-        menu_items={
-            "Get Help": "https://www.nugamoto.com/help",
-            "Report a bug": "https://www.nugamoto.com/bug",
-            "About": "# NUGAMOTO - Smart Kitchen Assistant",
-        },
-    )
 
-    st.title("Welcome to the NUGAMOTO Admin Dashboard 🍳")
-    st.write(
-        "Use the navigation sidebar on the left to manage different parts of "
-        "the NUGAMOTO system."
-    )
+def main():
+    """Main application entry point."""
 
-    st.divider()
+    # Initialize session state
+    if 'current_user' not in st.session_state:
+        st.session_state.current_user = None
 
-    st.header("Available Management Pages:")
+    # Check authentication
+    if not st.session_state.current_user:
+        st.switch_page("pages/login.py")  # Ohne "frontend/" prefix
+        return
 
+    # Sidebar navigation
+    with st.sidebar:
+        st.title("🍳 NUGAMOTO")
+        st.markdown(f"Welcome, **{st.session_state.current_user.get('name', 'User')}**!")
+
+        # Kitchen selection (if available)
+        if hasattr(st.session_state, 'selected_kitchen_id'):
+            st.info(f"📍 Kitchen: {st.session_state.get('selected_kitchen_name', 'Unknown')}")
+
+        st.markdown("---")
+
+        # Navigation menu
+        page = st.selectbox(
+            "Navigation",
+            [
+                "🏠 Dashboard",
+                "📖 Recipes",
+                "🤖 AI Recipes",
+                "📦 Inventory",
+                "🥬 Food Items",
+                "🏪 Storage Locations",
+                "⚖️ Units",
+                "🏠 Kitchens",
+                "👥 Users",
+                "🔐 Credentials",
+                "💊 Health",
+            ]
+        )
+
+        st.markdown("---")
+
+        # Logout button
+        if st.button("🚪 Logout"):
+            # Clear session state
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+
+    # Route to appropriate page
+    if page == "🏠 Dashboard":
+        show_dashboard()
+    elif page == "📖 Recipes":
+        st.switch_page("pages/recipes.py")  # Ohne "frontend/" prefix
+    elif page == "🤖 AI Recipes":
+        st.switch_page("pages/ai_recipes.py")  # Ohne "frontend/" prefix
+    elif page == "📦 Inventory":
+        st.switch_page("pages/inventory_items.py")
+    elif page == "🥬 Food Items":
+        st.switch_page("pages/food_items.py")
+    elif page == "🏪 Storage Locations":
+        st.switch_page("pages/storage_locations.py")
+    elif page == "⚖️ Units":
+        st.switch_page("pages/units.py")
+    elif page == "🏠 Kitchens":
+        st.switch_page("pages/kitchens.py")
+    elif page == "👥 Users":
+        st.switch_page("pages/users.py")
+    elif page == "🔐 Credentials":
+        st.switch_page("pages/user_credentials.py")
+    elif page == "💊 Health":
+        st.switch_page("pages/user_health.py")
+
+
+def show_dashboard():
+    """Display main dashboard."""
+    st.title("🏠 Dashboard")
+    st.markdown("Welcome to your Smart Kitchen Assistant!")
+
+    # Quick stats
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        with st.container(border=True):
-            st.subheader("📦 Units")
-            st.write("Manage measurement units like 'kg', 'liter', or 'piece'.")
-            if st.button("Go to Units", key="nav_units"):
-                st.switch_page("pages/units.py")
+        st.metric("📖 My Recipes", "0", help="Number of your saved recipes")
 
     with col2:
-        with st.container(border=True):
-            st.subheader("🍎 Food Items")
-            st.write("Manage the master data for all food items.")
-            if st.button("Go to Food Items", key="nav_food_items"):
-                st.switch_page("pages/food_items.py")
+        st.metric("🤖 AI Recipes", "0", help="Number of AI-generated recipes")
 
     with col3:
-        with st.container(border=True):
-            st.subheader("🗄️ Storage Locations")
-            st.write("Manage kitchen storage locations like 'fridge' or 'pantry'.")
-            if st.button("Go to Storage Locations", key="nav_storage"):
-                st.switch_page("pages/storage_locations.py")
+        st.metric("📦 Inventory Items", "0", help="Number of items in your kitchen inventory")
+
+    st.markdown("---")
+
+    # Quick actions
+    st.subheader("🚀 Quick Actions")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        if st.button("🤖 Generate AI Recipe", type="primary"):
+            st.switch_page("pages/ai_recipes.py")
+
+    with col2:
+        if st.button("📖 Browse Recipes"):
+            st.switch_page("pages/recipes.py")
+
+    with col3:
+        if st.button("📦 Manage Inventory"):
+            st.switch_page("pages/inventory_items.py")
+
+    with col4:
+        if st.button("🥬 Add Food Items"):
+            st.switch_page("pages/food_items.py")
+
+    # Recent activity section
+    st.markdown("---")
+    st.subheader("📊 Recent Activity")
+    st.info("Your recent activities will be displayed here (in development).")
 
 
 if __name__ == "__main__":
