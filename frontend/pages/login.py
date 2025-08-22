@@ -6,15 +6,14 @@ from typing import Any, Dict, Optional
 
 import streamlit as st
 
-# Add frontend to path for runtime (wie in anderen Seiten)
+# Add frontend to path for runtime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Direkte Importe für IDE-Auflösung
+# Direct imports for IDE resolution
 try:
     from clients.auth_client import AuthClient
     from clients.base import APIException
 except ImportError:
-    # Fallback für unterschiedliche Ausführungskontexte
     from frontend.clients.auth_client import AuthClient
     from frontend.clients.base import APIException
 
@@ -27,6 +26,7 @@ def _init_auth_state() -> None:
         "auth_email": None,
         "auth_inflight": False,
         "auth_next_page": None,
+        "current_user": None,  # Für Kompatibilität mit app.py
     }
     for key, val in defaults.items():
         st.session_state.setdefault(key, val)
@@ -42,6 +42,8 @@ def _store_tokens(access: str, refresh: Optional[str], email: str) -> None:
     st.session_state.auth_access_token = access
     st.session_state.auth_refresh_token = refresh
     st.session_state.auth_email = email
+    # Set current_user for app.py compatibility
+    st.session_state.current_user = {"email": email, "name": email}
 
 
 def _clear_tokens() -> None:
@@ -49,12 +51,13 @@ def _clear_tokens() -> None:
     st.session_state.auth_access_token = None
     st.session_state.auth_refresh_token = None
     st.session_state.auth_email = None
+    st.session_state.current_user = None
 
 
 def main() -> None:
     """Render a robust login/logout page with clear UX."""
     st.set_page_config(page_title="Login - NUGAMOTO", page_icon="🔐")
-    st.title("Login")
+    st.title("🔐 Login")
 
     _init_auth_state()
     client = AuthClient()
@@ -82,6 +85,10 @@ def main() -> None:
                 st.rerun()
             finally:
                 st.session_state.auth_inflight = False
+
+        # Redirect to main app if logged in
+        if st.button("Go to Dashboard"):
+            st.switch_page("app.py")
         return
 
     # Login form
@@ -111,10 +118,10 @@ def main() -> None:
                     else:
                         _store_tokens(access, refresh, email.strip())
                         st.success("Login successful.")
-                        # Optional: redirect to next page if configured
-                        next_page = st.session_state.get("auth_next_page")
-                        if next_page:
-                            st.session_state.auth_next_page = None
+                        # Set selected kitchen for testing
+                        st.session_state.selected_kitchen_id = 1
+                        st.session_state.selected_kitchen_name = "Test Kitchen"
+                        # Optional: redirect to main app
                         st.rerun()
                 except APIException as exc:
                     st.error(f"Login failed: {exc.message}")
