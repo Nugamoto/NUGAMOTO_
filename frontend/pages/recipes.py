@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 import streamlit as st
 
@@ -50,6 +51,31 @@ def _ensure_client() -> RecipesClient:
     return st.session_state.recipes_client
 
 
+def _compute_rating_summary_from_reviews(reviews: list[dict]) -> dict[str, Any]:
+    """Build a rating summary dict compatible with display_recipe_reviews() from raw reviews."""
+    if not reviews:
+        return {
+            "recipe_id": None,
+            "total_reviews": 0,
+            "average_rating": 0.0,
+            "rating_distribution": {str(i): 0 for i in range(1, 6)},
+        }
+
+    total = len(reviews)
+    ratings = [int(r.get("rating", 0) or 0) for r in reviews]
+    ratings = [r for r in ratings if r in (1, 2, 3, 4, 5)]
+    avg = (sum(ratings) / len(ratings)) if ratings else 0.0
+    dist: dict[str, int] = {str(i): 0 for i in range(1, 6)}
+    for r in ratings:
+        dist[str(r)] += 1
+    return {
+        "recipe_id": None,
+        "total_reviews": total,
+        "average_rating": float(avg),
+        "rating_distribution": dist,
+    }
+
+
 def show_recipe_list() -> None:
     """Display the main recipe list with filtering."""
     st.title("📖 Recipes")
@@ -68,7 +94,7 @@ def show_recipe_list() -> None:
 
         st.success(f"📚 {len(recipes)} recipe(s) found")
         for recipe in recipes:
-            display_recipe_card(recipe, show_details_button=True)
+            display_recipe_card(recipe)
 
     except APIException as e:
         st.error(f"API error while loading recipes: {e.message}")
@@ -82,6 +108,7 @@ def show_recipe_details(recipe_id: int) -> None:
 
     try:
         with st.spinner("Loading recipe..."):
+            # Use details endpoint to get the full recipe payload in one go
             recipe = client.get_recipe_with_details(recipe_id)
 
         if st.button("← Back to Recipe List"):
@@ -136,10 +163,29 @@ def show_recipe_details(recipe_id: int) -> None:
 
         with tab4:
             try:
+                # 1) Load reviews first (single reliable route)
                 reviews = client.get_recipe_reviews(recipe_id)
-                rating_summary = client.get_recipe_rating_summary(recipe_id)
+
+                # 2) If there are no reviews, skip summary call; otherwise try backend summary
+                if not reviews:
+                    rating_summary = None
+                else:
+                    try:
+                        rating_summary = client.get_recipe_rating_summary(recipe_id)
+                    except APIException:
+                        rating_summary = _compute_rating_summary_from_reviews(reviews)
+                    except Exception:
+                        rating_summary = _compute_rating_summary_from_reviews(reviews)
+
+                # 3) Normalize to what the UI expects (string keys for distribution)
+                if rating_summary and "rating_distribution" in rating_summary:
+                    rating_summary["rating_distribution"] = {
+                        str(k): v for k, v in rating_summary["rating_distribution"].items()
+                    }
+
                 display_recipe_reviews(reviews, rating_summary)
 
+                # 4) Allow adding a review
                 current_user = getattr(st.session_state, "current_user", None)
                 if current_user and current_user.get("id"):
                     user_id = int(current_user["id"])
