@@ -26,7 +26,7 @@ class RecipesClient(BaseClient):
             has_nutrition: bool | None = None,
             max_kcal: int | None = None,
             min_protein_g: float | None = None,
-            tags_contains: list[str] | None = None,
+            tags_contains: list[str] | str | None = None,
             skip: int = 0,
             limit: int = 100
     ) -> list[dict[str, Any]]:
@@ -51,8 +51,26 @@ class RecipesClient(BaseClient):
             params["max_kcal"] = max_kcal
         if min_protein_g:
             params["min_protein_g"] = min_protein_g
+
+        # Normalize tags_contains:
         if tags_contains:
-            params["tags_contains"] = tags_contains
+            normalized: list[str] | None = None
+            if isinstance(tags_contains, list):
+                normalized = [t.strip() for t in tags_contains if isinstance(t, str) and t.strip()]
+            elif isinstance(tags_contains, str):
+                s = tags_contains.strip()
+                try:
+                    import json
+                    parsed = json.loads(s)
+                    if isinstance(parsed, list):
+                        normalized = [str(x).strip() for x in parsed if str(x).strip()]
+                    else:
+                        normalized = [p.strip() for p in s.split(",") if p.strip()]
+                except Exception:
+                    normalized = [p.strip() for p in s.split(",") if p.strip()]
+
+            if normalized:
+                params["tags_contains"] = normalized
 
         return self.get(self.BASE_PATH, params=params)
 
