@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from backend.core.dependencies import get_db
+from backend.core.enums import DifficultyLevel
 from backend.crud import recipe as crud_recipe
 from backend.crud.recipe import InsufficientIngredientsError, cook_recipe
 from backend.schemas.recipe import (
@@ -76,7 +77,7 @@ def get_all_recipes(
         title_contains: Annotated[str | None, Query(description="Filter by title containing text")] = None,
         is_ai_generated: Annotated[bool | None, Query(description="Filter by AI generated flag")] = None,
         created_by_user_id: Annotated[int | None, Query(description="Filter by creator user ID")] = None,
-        difficulty: Annotated[str | None, Query(description="Filter by difficulty")] = None,
+        difficulty: Annotated[DifficultyLevel | None, Query(description="Filter by difficulty")] = None,
         has_nutrition: Annotated[bool | None, Query(description="Filter by nutrition availability")] = None,
         max_kcal: Annotated[int | None, Query(description="Filter by max calories")] = None,
         min_protein_g: Annotated[float | None, Query(description="Filter by min protein (g)")] = None,
@@ -91,7 +92,7 @@ def get_all_recipes(
         title_contains: Filter by title containing text.
         is_ai_generated: Filter by AI generated flag.
         created_by_user_id: Filter by creator user ID.
-        difficulty: Filter by difficulty level.
+        difficulty: Filter by difficulty level (enum: easy, medium, hard).
         has_nutrition: Filter by nutrition availability.
         max_kcal: Filter by maximum calories.
         min_protein_g: Filter by minimum protein (g).
