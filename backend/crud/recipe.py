@@ -7,6 +7,7 @@ from typing import Any, TYPE_CHECKING, cast
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.orm import Session, selectinload
 
+from backend.core.enums import DifficultyLevel
 from backend.models.food import FoodItem
 from backend.models.recipe import Recipe, RecipeIngredient, RecipeStep, RecipeNutrition, RecipeReview
 from backend.schemas.recipe import (
@@ -47,7 +48,47 @@ def build_recipe_with_details(recipe_orm: Recipe) -> RecipeWithDetails:
     Returns:
         RecipeWithDetails schema
     """
-    return RecipeWithDetails.model_validate(recipe_orm, from_attributes=True)
+    # Manually construct to ensure computed fields are populated correctly
+    ingredients = [build_recipe_ingredient_read(ing) for ing in recipe_orm.ingredients]
+    steps = [build_recipe_step_read(step) for step in getattr(recipe_orm, "steps", [])]
+    nutrition = (
+        build_recipe_nutrition_read(recipe_orm.nutrition)
+        if getattr(recipe_orm, "nutrition", None) is not None
+        else None
+    )
+
+    # Ensure difficulty is an Enum instance (ORM likely stores a string)
+    orm_difficulty = getattr(recipe_orm, "difficulty", None)
+    difficulty_enum = (
+        DifficultyLevel(orm_difficulty) if isinstance(orm_difficulty, str) else orm_difficulty
+    )
+
+    return RecipeWithDetails(
+        # Base recipe fields
+        id=recipe_orm.id,
+        title=recipe_orm.title,
+        description=recipe_orm.description,
+        cuisine_type=recipe_orm.cuisine_type,
+        meal_type=recipe_orm.meal_type,
+        prep_time_minutes=recipe_orm.prep_time_minutes,
+        cook_time_minutes=recipe_orm.cook_time_minutes,
+        total_time_minutes=recipe_orm.total_time_minutes,
+        is_ai_generated=recipe_orm.is_ai_generated,
+        created_by_user_id=recipe_orm.created_by_user_id,
+        difficulty=difficulty_enum,
+        servings=recipe_orm.servings,
+        tags=recipe_orm.tags,
+
+        # Timestamps
+        created_at=recipe_orm.created_at,
+        updated_at=recipe_orm.updated_at,
+
+        # Relations
+        created_by_user=recipe_orm.created_by_user,  # schema uses from_attributes=True
+        ingredients=ingredients,
+        steps=steps,
+        nutrition=nutrition,
+    )
 
 
 def build_recipe_ingredient_read(ingredient_orm: RecipeIngredient) -> RecipeIngredientRead:
@@ -59,7 +100,29 @@ def build_recipe_ingredient_read(ingredient_orm: RecipeIngredient) -> RecipeIngr
     Returns:
         RecipeIngredientRead schema
     """
-    return RecipeIngredientRead.model_validate(ingredient_orm, from_attributes=True)
+    # Compute display amount/unit and related names
+    display_amount, display_unit = ingredient_orm.display_amount()
+    food_item_name = ingredient_orm.food_item.name
+    base_unit_name = ingredient_orm.food_item.base_unit.name
+    original_unit_name = ingredient_orm.original_unit.name if ingredient_orm.original_unit else None
+
+    return RecipeIngredientRead(
+        # Base fields
+        recipe_id=ingredient_orm.recipe_id,
+        food_item_id=ingredient_orm.food_item_id,
+        amount_in_base_unit=ingredient_orm.amount_in_base_unit,
+        original_unit_id=ingredient_orm.original_unit_id,
+        original_amount=ingredient_orm.original_amount,
+        created_at=ingredient_orm.created_at,
+        updated_at=ingredient_orm.updated_at,
+
+        # Computed/derived fields required by the schema
+        food_item_name=food_item_name,
+        base_unit_name=base_unit_name,
+        original_unit_name=original_unit_name,
+        display_amount=float(display_amount),
+        display_unit=display_unit,
+    )
 
 
 def build_recipe_step_read(step_orm: RecipeStep) -> RecipeStepRead:
@@ -83,7 +146,22 @@ def build_recipe_nutrition_read(nutrition_orm: RecipeNutrition) -> RecipeNutriti
     Returns:
         RecipeNutritionRead schema
     """
-    return RecipeNutritionRead.model_validate(nutrition_orm, from_attributes=True)
+    return RecipeNutritionRead(
+        # Base nutrition fields
+        recipe_id=nutrition_orm.recipe_id,
+        kcal=nutrition_orm.kcal,
+        protein_g=nutrition_orm.protein_g,
+        fat_g=nutrition_orm.fat_g,
+        carbs_g=nutrition_orm.carbs_g,
+        fiber_g=nutrition_orm.fiber_g,
+        source=nutrition_orm.source,
+        created_at=nutrition_orm.created_at,
+        updated_at=nutrition_orm.updated_at,
+
+        # Computed fields (call the methods to get values)
+        has_complete_macros=nutrition_orm.has_complete_macros(),
+        calculated_kcal=nutrition_orm.calculated_kcal(),
+    )
 
 
 def build_recipe_review_read(review_orm: RecipeReview) -> RecipeReviewRead:
