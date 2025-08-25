@@ -291,7 +291,9 @@ def get_all_recipes(
                 RecipeNutrition.protein_g >= search_params.min_protein_g)
         if search_params.tags_contains:
             for tag in search_params.tags_contains:
-                query = query.where(Recipe.tags.op('JSON_EXTRACT')('$[*]').like(f'%{tag}%'))
+                safe = str(tag).strip()
+                if safe:
+                    query = query.where(Recipe.tags.like(f'%"{safe}"%'))
 
     query = query.offset(skip).limit(limit)
     result = db.execute(query)
