@@ -67,6 +67,48 @@ def get_current_user(
     return user
 
 
+def require_super_admin(
+        credentials: Annotated[HTTPAuthorizationCredentials, Depends(_auth_scheme)],
+) -> None:
+    """Ensure the caller has a global admin/superadmin privilege.
+
+    Supported token claims (any one is sufficient):
+      - is_superadmin: true
+      - is_admin: true
+      - role: "superadmin" or "admin"
+      - permissions: contains "users:create"
+
+    Raise 403 otherwise.
+    """
+    try:
+        payload = decode_token(credentials.credentials)
+        if payload.get("type") != "access":
+            raise ValueError("Not an access token")
+
+        is_superadmin = bool(payload.get("is_superadmin"))
+        is_admin = bool(payload.get("is_admin"))
+        role = str(payload.get("role", "") or "").lower()
+        perms = payload.get("permissions") or []
+        if isinstance(perms, str):
+            perms = [perms]
+
+        allowed_by_role = role in {"superadmin", "admin"}
+        allowed_by_perm = "users:create" in {str(p).lower() for p in perms}
+
+        if not (is_superadmin or is_admin or allowed_by_role or allowed_by_perm):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin privileges required",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
+        )
+
+
 def require_kitchen_role(required_roles: set[KitchenRole]):
     """Dependency factory enforcing a required role set within a kitchen.
 
