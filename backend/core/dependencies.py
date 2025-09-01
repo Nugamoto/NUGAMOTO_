@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.enums import KitchenRole
 from backend.crud import kitchen as crud_kitchen
+from backend.crud import recipe as crud_recipe
 from backend.crud import user as crud_user
 from backend.db.session import SessionLocal
 from backend.security import decode_token
@@ -163,3 +164,51 @@ def require_same_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to access this resource",
         )
+
+
+def require_recipe_owner_or_admin(
+        recipe_id: int,
+        current_user_id: Annotated[int, Depends(get_current_user_id)],
+        db: Annotated[Session, Depends(get_db)],
+        credentials: Annotated[HTTPAuthorizationCredentials, Depends(_auth_scheme)] = None,
+) -> None:
+    """Ensure current user is the recipe owner or has admin privileges.
+
+    Expects:
+        - Path parameter: recipe_id: int
+        - Recipe exists with created_by_user_id set.
+
+    Behavior:
+        - Allows if recipe.created_by_user_id == current_user_id
+        - Otherwise, allows if token has admin claims (same logic as require_super_admin)
+        - Raises 404 if recipe doesn't exist
+        - Raises 403 otherwise
+    """
+    # Fetch owner
+    recipe_orm = crud_recipe.get_recipe_orm_by_id(db, recipe_id)
+    if not recipe_orm:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found")
+
+    if getattr(recipe_orm, "created_by_user_id", None) == current_user_id:
+        return
+
+    # Fallback to admin claim check (inline to avoid double-decoding in require_super_admin)
+    try:
+        payload = decode_token(credentials.credentials)
+        is_superadmin = bool(payload.get("is_superadmin"))
+        is_admin = bool(payload.get("is_admin"))
+        role = str(payload.get("role", "") or "").lower()
+        perms = payload.get("permissions") or []
+        if isinstance(perms, str):
+            perms = [perms]
+        allowed_by_role = role in {"superadmin", "admin"}
+        allowed_by_perm = "users:create" in {str(p).lower() for p in perms}
+        if is_superadmin or is_admin or allowed_by_role or allowed_by_perm:
+            return
+    except Exception:
+        pass
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Only the recipe owner or an admin may perform this action",
+    )

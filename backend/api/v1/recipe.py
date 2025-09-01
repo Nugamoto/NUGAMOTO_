@@ -7,7 +7,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import (
+    get_db,
+    get_current_user_id,
+    require_kitchen_member,
+    require_recipe_owner_or_admin,
+    require_same_user,
+)
 from backend.core.enums import DifficultyLevel
 from backend.crud import recipe as crud_recipe
 from backend.crud.recipe import InsufficientIngredientsError, cook_recipe
@@ -32,15 +38,15 @@ reviews_router = APIRouter(prefix="/{recipe_id}/reviews", tags=["Recipe Reviews"
 
 
 # ================================================================== #
-# Recipe CRUD Endpoints                                         #
+# Recipe CRUD Endpoints                                              #
 # ================================================================== #
-
 
 @recipe_router.post(
     "/",
     response_model=RecipeRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new recipe"
+    summary="Create a new recipe",
+    dependencies=[Depends(get_current_user_id)],
 )
 def create_recipe(
         recipe_data: RecipeCreate,
@@ -70,7 +76,8 @@ def create_recipe(
 @recipe_router.get(
     "/",
     response_model=list[RecipeRead],
-    summary="Get all recipes with optional filtering"
+    summary="Get all recipes with optional filtering",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_all_recipes(
         db: Annotated[Session, Depends(get_db)],
@@ -129,7 +136,8 @@ def get_all_recipes(
 @recipe_router.get(
     "/summary",
     response_model=RecipeSummary,
-    summary="Get recipe statistics summary"
+    summary="Get recipe statistics summary",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_recipe_summary(
         db: Annotated[Session, Depends(get_db)]
@@ -148,7 +156,8 @@ def get_recipe_summary(
 @recipe_router.get(
     "/suggestions/by-ingredients",
     response_model=list[RecipeRead],
-    summary="Get recipe suggestions by available ingredients"
+    summary="Get recipe suggestions by available ingredients",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_recipe_suggestions_by_ingredients(
         food_item_ids: Annotated[list[int], Query(description="List of available food item IDs")],
@@ -182,7 +191,8 @@ def get_recipe_suggestions_by_ingredients(
 @recipe_router.get(
     "/ai-generated",
     response_model=list[RecipeRead],
-    summary="Get AI-generated recipes"
+    summary="Get AI-generated recipes",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_ai_generated_recipes(
         db: Annotated[Session, Depends(get_db)],
@@ -205,7 +215,8 @@ def get_ai_generated_recipes(
 @recipe_router.get(
     "/{recipe_id}",
     response_model=RecipeRead,
-    summary="Get a recipe by ID"
+    summary="Get a recipe by ID",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_recipe(
         recipe_id: int,
@@ -242,7 +253,8 @@ def get_recipe(
 @recipe_router.get(
     "/{recipe_id}/details",
     response_model=RecipeWithDetails,
-    summary="Get a recipe with full details"
+    summary="Get a recipe with full details",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_recipe_details(
         recipe_id: int,
@@ -279,7 +291,8 @@ def get_recipe_details(
 @recipe_router.patch(
     "/{recipe_id}",
     response_model=RecipeRead,
-    summary="Update an existing recipe"
+    summary="Update an existing recipe",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def update_recipe(
         recipe_id: int,
@@ -323,7 +336,8 @@ def update_recipe(
 @recipe_router.delete(
     "/{recipe_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a recipe"
+    summary="Delete a recipe",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def delete_recipe(
         recipe_id: int,
@@ -359,7 +373,11 @@ def delete_recipe(
 
 # new Endpoint
 
-@recipe_router.post("/{recipe_id}/cook", response_model=RecipeCookResponse)
+@recipe_router.post(
+    "/{recipe_id}/cook",
+    response_model=RecipeCookResponse,
+    dependencies=[Depends(require_kitchen_member())],  # members can cook
+)
 async def cook_recipe_endpoint(
         recipe_id: int,
         kitchen_id: int,
@@ -412,7 +430,8 @@ async def cook_recipe_endpoint(
     "",
     response_model=RecipeIngredientRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Add an ingredient to a recipe"
+    summary="Add an ingredient to a recipe",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def add_recipe_ingredient(
         recipe_id: int,
@@ -460,7 +479,8 @@ def add_recipe_ingredient(
 @ingredients_router.get(
     "",
     response_model=list[RecipeIngredientRead],
-    summary="Get all ingredients for a recipe"
+    summary="Get all ingredients for a recipe",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_recipe_ingredients(
         recipe_id: int,
@@ -487,7 +507,8 @@ def get_recipe_ingredients(
 @ingredients_router.patch(
     "/{food_item_id}",
     response_model=RecipeIngredientRead,
-    summary="Update a recipe ingredient"
+    summary="Update a recipe ingredient",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def update_recipe_ingredient(
         recipe_id: int,
@@ -540,7 +561,8 @@ def update_recipe_ingredient(
 @ingredients_router.delete(
     "/{food_item_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a recipe ingredient"
+    summary="Delete a recipe ingredient",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def delete_recipe_ingredient(
         recipe_id: int,
@@ -594,7 +616,8 @@ def delete_recipe_ingredient(
     "",
     response_model=RecipeStepRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Add a step to a recipe"
+    summary="Add a step to a recipe",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def add_recipe_step(
         recipe_id: int,
@@ -636,7 +659,8 @@ def add_recipe_step(
 @steps_router.get(
     "",
     response_model=list[RecipeStepRead],
-    summary="Get all steps for a recipe"
+    summary="Get all steps for a recipe",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_recipe_steps(
         recipe_id: int,
@@ -672,7 +696,8 @@ def get_recipe_steps(
 @steps_router.patch(
     "/{step_id}",
     response_model=RecipeStepRead,
-    summary="Update a recipe step"
+    summary="Update a recipe step",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def update_recipe_step(
         recipe_id: int,
@@ -725,7 +750,8 @@ def update_recipe_step(
 @steps_router.delete(
     "/{step_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a recipe step"
+    summary="Delete a recipe step",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def delete_recipe_step(
         recipe_id: int,
@@ -779,7 +805,8 @@ def delete_recipe_step(
     "",
     response_model=RecipeNutritionRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create or update recipe nutrition"
+    summary="Create or update recipe nutrition",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def create_recipe_nutrition(
         recipe_id: int,
@@ -821,7 +848,8 @@ def create_recipe_nutrition(
 @nutrition_router.patch(
     "",
     response_model=RecipeNutritionRead,
-    summary="Update recipe nutrition"
+    summary="Update recipe nutrition",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def update_recipe_nutrition(
         recipe_id: int,
@@ -865,7 +893,8 @@ def update_recipe_nutrition(
 @nutrition_router.delete(
     "",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete recipe nutrition"
+    summary="Delete recipe nutrition",
+    dependencies=[Depends(require_recipe_owner_or_admin)],
 )
 def delete_recipe_nutrition(
         recipe_id: int,
@@ -907,7 +936,8 @@ def delete_recipe_nutrition(
     "",
     response_model=RecipeReviewRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create or update a recipe review"
+    summary="Create or update a recipe review",
+    dependencies=[Depends(require_same_user)],
 )
 def create_recipe_review(
         recipe_id: int,
@@ -949,7 +979,8 @@ def create_recipe_review(
 @reviews_router.get(
     "",
     response_model=list[RecipeReviewRead],
-    summary="Get all reviews for a recipe"
+    summary="Get all reviews for a recipe",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_recipe_reviews(
         recipe_id: int,
@@ -985,7 +1016,8 @@ def get_recipe_reviews(
 @reviews_router.get(
     "/rating-summary",
     response_model=RecipeRatingSummary,
-    summary="Get rating summary for a recipe"
+    summary="Get rating summary for a recipe",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_recipe_rating_summary(
         recipe_id: int,
@@ -1012,7 +1044,8 @@ def get_recipe_rating_summary(
 @reviews_router.patch(
     "/{user_id}",
     response_model=RecipeReviewRead,
-    summary="Update a recipe review"
+    summary="Update a recipe review",
+    dependencies=[Depends(require_same_user)],
 )
 def update_recipe_review(
         recipe_id: int,
@@ -1065,7 +1098,8 @@ def update_recipe_review(
 @reviews_router.delete(
     "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a recipe review"
+    summary="Delete a recipe review",
+    dependencies=[Depends(require_same_user)],
 )
 def delete_recipe_review(
         recipe_id: int,
