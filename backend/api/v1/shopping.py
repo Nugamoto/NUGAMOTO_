@@ -5,7 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import (
+    get_db,
+    get_current_user_id,
+    require_super_admin,
+    require_kitchen_member,
+    require_kitchen_role,
+)
+from backend.core.enums import KitchenRole
 from backend.crud import shopping as crud_shopping
 from backend.schemas.shopping import (
     ShoppingListCreate, ShoppingListRead, ShoppingListUpdate,
@@ -26,13 +33,15 @@ products_router = APIRouter(prefix="/shopping-products", tags=["Shopping Product
 
 # ================================================================== #
 # Shopping Products Management (Global)                             #
+# Policy: any authenticated user can create/read; admin can update/delete
 # ================================================================== #
 
 @products_router.post(
     "/",
     response_model=ShoppingProductRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create shopping product"
+    summary="Create shopping product",
+    dependencies=[Depends(get_current_user_id)],
 )
 def create_shopping_product(
     product_data: ShoppingProductCreate,
@@ -86,7 +95,8 @@ def create_shopping_product(
     "/",
     response_model=list[ShoppingProductRead],
     status_code=status.HTTP_200_OK,
-    summary="Search shopping products"
+    summary="Search shopping products",
+    dependencies=[Depends(get_current_user_id)],
 )
 def search_shopping_products(
     food_item_id: int | None = Query(None, description="Filter by food item ID"),
@@ -133,7 +143,8 @@ def search_shopping_products(
     "/{product_id}",
     response_model=ShoppingProductRead,
     status_code=status.HTTP_200_OK,
-    summary="Get shopping product by ID"
+    summary="Get shopping product by ID",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_shopping_product(
     product_id: int,
@@ -164,7 +175,8 @@ def get_shopping_product(
     "/{product_id}",
     response_model=ShoppingProductRead,
     status_code=status.HTTP_200_OK,
-    summary="Update shopping product"
+    summary="Update shopping product",
+    dependencies=[Depends(require_super_admin)],
 )
 def update_shopping_product(
     product_id: int,
@@ -196,7 +208,8 @@ def update_shopping_product(
 @products_router.delete(
     "/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete shopping product"
+    summary="Delete shopping product",
+    dependencies=[Depends(require_super_admin)],
 )
 def delete_shopping_product(
     product_id: int,
@@ -235,7 +248,8 @@ def delete_shopping_product(
     "/by-food-item/{food_item_id}",
     response_model=list[ShoppingProductRead],
     status_code=status.HTTP_200_OK,
-    summary="Get products for food item"
+    summary="Get products for food item",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_products_for_food_item(
     food_item_id: int,
@@ -264,13 +278,15 @@ def get_products_for_food_item(
 
 # ================================================================== #
 # Shopping Lists Management (Kitchen-scoped)                        #
+# Policy: members can read; owner/admin can write                    #
 # ================================================================== #
 
 @lists_router.post(
     "/",
     response_model=ShoppingListRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create shopping list"
+    summary="Create shopping list",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def create_shopping_list(
     kitchen_id: int,
@@ -314,7 +330,8 @@ def create_shopping_list(
     "/",
     response_model=list[ShoppingListRead],
     status_code=status.HTTP_200_OK,
-    summary="Get kitchen shopping lists"
+    summary="Get kitchen shopping lists",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_kitchen_shopping_lists(
     kitchen_id: int,
@@ -336,7 +353,8 @@ def get_kitchen_shopping_lists(
     "/{list_id}",
     response_model=ShoppingListRead,
     status_code=status.HTTP_200_OK,
-    summary="Get shopping list by ID"
+    summary="Get shopping list by ID",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_shopping_list(
     kitchen_id: int,
@@ -377,7 +395,8 @@ def get_shopping_list(
     "/{list_id}/with-products",
     response_model=ShoppingListWithProducts,
     status_code=status.HTTP_200_OK,
-    summary="Get shopping list with products and totals"
+    summary="Get shopping list with products and totals",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_shopping_list_with_products(
     kitchen_id: int,
@@ -431,7 +450,8 @@ def get_shopping_list_with_products(
     "/{list_id}",
     response_model=ShoppingListRead,
     status_code=status.HTTP_200_OK,
-    summary="Update shopping list"
+    summary="Update shopping list",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def update_shopping_list(
     kitchen_id: int,
@@ -481,7 +501,8 @@ def update_shopping_list(
 @lists_router.delete(
     "/{list_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete shopping list"
+    summary="Delete shopping list",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def delete_shopping_list(
     kitchen_id: int,
@@ -531,13 +552,15 @@ def delete_shopping_list(
 
 # ================================================================== #
 # Shopping List Product Assignments                                 #
+# Policy: members can read; owner/admin can write                    #
 # ================================================================== #
 
 @assignments_router.post(
     "/",
     response_model=ShoppingProductAssignmentRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Assign product to shopping list"
+    summary="Assign product to shopping list",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def assign_product_to_list(
     kitchen_id: int,
@@ -608,7 +631,8 @@ def assign_product_to_list(
     "/create-and-assign",
     response_model=ShoppingProductAssignmentRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create product and assign to shopping list"
+    summary="Create product and assign to shopping list",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def create_product_and_assign_to_list(
     kitchen_id: int,
@@ -708,7 +732,8 @@ def create_product_and_assign_to_list(
     "/",
     response_model=list[ShoppingProductAssignmentRead],
     status_code=status.HTTP_200_OK,
-    summary="Get shopping list products"
+    summary="Get shopping list products",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_shopping_list_products(
     kitchen_id: int,
@@ -767,7 +792,8 @@ def get_shopping_list_products(
     "/{product_id}",
     response_model=ShoppingProductAssignmentRead,
     status_code=status.HTTP_200_OK,
-    summary="Update product assignment"
+    summary="Update product assignment",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def update_product_assignment(
     kitchen_id: int,
@@ -832,7 +858,8 @@ def update_product_assignment(
 @assignments_router.delete(
     "/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Remove product from shopping list"
+    summary="Remove product from shopping list",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def remove_product_from_list(
     kitchen_id: int,
