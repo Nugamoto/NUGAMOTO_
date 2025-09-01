@@ -5,7 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import (
+    get_db,
+    get_current_user_id,
+    require_super_admin,
+    require_kitchen_member,
+    require_kitchen_role,
+)
+from backend.core.enums import KitchenRole
 from backend.crud import device as crud_device
 from backend.schemas.device import (
     DeviceTypeCreate, DeviceTypeRead, DeviceTypeUpdate,
@@ -26,13 +33,16 @@ summary_router = APIRouter(prefix="/kitchens/{kitchen_id}/devices", tags=["Devic
 
 # ================================================================== #
 # Device Type Management Routes                                     #
+# (not kitchen-bound: any authenticated user can create/read;
+#  only admins can update/delete)                                    #
 # ================================================================== #
 
 @device_types_router.post(
     "/",
     response_model=DeviceTypeRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create device type"
+    summary="Create device type",
+    dependencies=[Depends(get_current_user_id)],
 )
 def create_device_type(
         device_type_data: DeviceTypeCreate,
@@ -72,7 +82,8 @@ def create_device_type(
     "/",
     response_model=list[DeviceTypeRead],
     status_code=status.HTTP_200_OK,
-    summary="Get all device types"
+    summary="Get all device types",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_all_device_types(
         category: str | None = Query(None, description="Filter by category"),
@@ -96,7 +107,8 @@ def get_all_device_types(
     "/{device_type_id}",
     response_model=DeviceTypeRead,
     status_code=status.HTTP_200_OK,
-    summary="Get device type by ID"
+    summary="Get device type by ID",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_device_type(
         device_type_id: int,
@@ -127,7 +139,8 @@ def get_device_type(
     "/{device_type_id}",
     response_model=DeviceTypeRead,
     status_code=status.HTTP_200_OK,
-    summary="Update device type"
+    summary="Update device type",
+    dependencies=[Depends(require_super_admin)],
 )
 def update_device_type(
         device_type_id: int,
@@ -167,7 +180,8 @@ def update_device_type(
 @device_types_router.delete(
     "/{device_type_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete device type"
+    summary="Delete device type",
+    dependencies=[Depends(require_super_admin)],
 )
 def delete_device_type(
         device_type_id: int,
@@ -204,13 +218,15 @@ def delete_device_type(
 
 # ================================================================== #
 # Appliance Management Routes                                       #
+# (kitchen-bound: members can read/search; owner/admin can write)    #
 # ================================================================== #
 
 @appliances_router.post(
     "/",
     response_model=ApplianceRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create appliance"
+    summary="Create appliance",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def create_appliance(
         kitchen_id: int,
@@ -256,7 +272,8 @@ def create_appliance(
     "/",
     response_model=list[ApplianceWithDeviceType],
     status_code=status.HTTP_200_OK,
-    summary="Get kitchen appliances"
+    summary="Get kitchen appliances",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_kitchen_appliances(
         kitchen_id: int,
@@ -278,7 +295,8 @@ def get_kitchen_appliances(
     "/search",
     response_model=list[ApplianceWithDeviceType],
     status_code=status.HTTP_200_OK,
-    summary="Search kitchen appliances"
+    summary="Search kitchen appliances",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def search_kitchen_appliances(
         kitchen_id: int,
@@ -313,7 +331,8 @@ def search_kitchen_appliances(
     "/{appliance_id}",
     response_model=ApplianceRead,
     status_code=status.HTTP_200_OK,
-    summary="Get appliance by ID"
+    summary="Get appliance by ID",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_appliance(
         kitchen_id: int,
@@ -354,7 +373,8 @@ def get_appliance(
     "/{appliance_id}",
     response_model=ApplianceRead,
     status_code=status.HTTP_200_OK,
-    summary="Update appliance"
+    summary="Update appliance",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def update_appliance(
         kitchen_id: int,
@@ -404,7 +424,8 @@ def update_appliance(
 @appliances_router.delete(
     "/{appliance_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete appliance"
+    summary="Delete appliance",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def delete_appliance(
         kitchen_id: int,
@@ -451,13 +472,15 @@ def delete_appliance(
 
 # ================================================================== #
 # Kitchen Tool Management Routes                                    #
+# (kitchen-bound: members can read/search; owner/admin can write)    #
 # ================================================================== #
 
 @tools_router.post(
     "/",
     response_model=KitchenToolRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create kitchen tool"
+    summary="Create kitchen tool",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def create_kitchen_tool(
         kitchen_id: int,
@@ -503,7 +526,8 @@ def create_kitchen_tool(
     "/",
     response_model=list[KitchenToolWithDeviceType],
     status_code=status.HTTP_200_OK,
-    summary="Get kitchen tools"
+    summary="Get kitchen tools",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_kitchen_tools(
         kitchen_id: int,
@@ -525,7 +549,8 @@ def get_kitchen_tools(
     "/search",
     response_model=list[KitchenToolWithDeviceType],
     status_code=status.HTTP_200_OK,
-    summary="Search kitchen tools"
+    summary="Search kitchen tools",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def search_kitchen_tools(
         kitchen_id: int,
@@ -559,7 +584,8 @@ def search_kitchen_tools(
     "/{tool_id}",
     response_model=KitchenToolRead,
     status_code=status.HTTP_200_OK,
-    summary="Get kitchen tool by ID"
+    summary="Get kitchen tool by ID",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_kitchen_tool(
         kitchen_id: int,
@@ -600,7 +626,8 @@ def get_kitchen_tool(
     "/{tool_id}",
     response_model=KitchenToolRead,
     status_code=status.HTTP_200_OK,
-    summary="Update kitchen tool"
+    summary="Update kitchen tool",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def update_kitchen_tool(
         kitchen_id: int,
@@ -650,7 +677,8 @@ def update_kitchen_tool(
 @tools_router.delete(
     "/{tool_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete kitchen tool"
+    summary="Delete kitchen tool",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def delete_kitchen_tool(
         kitchen_id: int,
@@ -697,13 +725,15 @@ def delete_kitchen_tool(
 
 # ================================================================== #
 # Device Summary and Analytics Routes                               #
+# (kitchen-bound: members can read)                                  #
 # ================================================================== #
 
 @summary_router.get(
     "/summary",
     response_model=KitchenDeviceSummary,
     status_code=status.HTTP_200_OK,
-    summary="Get kitchen device summary"
+    summary="Get kitchen device summary",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_kitchen_device_summary(
         kitchen_id: int,
