@@ -1,4 +1,4 @@
-"""API endpoints for food system."""
+"""API endpoints for the food system."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import get_db, get_current_user_id, require_super_admin
 from backend.crud import core as crud_core
 from backend.crud import food as crud_food
 from backend.schemas.food import (
@@ -32,7 +32,12 @@ operations_router = APIRouter(prefix="/operations", tags=["Food Item Operations"
 # Food Items CRUD                                                   #
 # ================================================================== #
 
-@food_items_router.post("/", response_model=FoodItemRead, status_code=status.HTTP_201_CREATED)
+@food_items_router.post(
+    "/",
+    response_model=FoodItemRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_user_id)],
+)
 def create_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -68,7 +73,11 @@ def create_food_item(
         )
 
 
-@food_items_router.get("/", response_model=list[FoodItemRead])
+@food_items_router.get(
+    "/",
+    response_model=list[FoodItemRead],
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_food_items(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -92,7 +101,11 @@ def get_food_items(
     )
 
 
-@food_items_router.get("/{food_item_id}", response_model=FoodItemRead)
+@food_items_router.get(
+    "/{food_item_id}",
+    response_model=FoodItemRead,
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_food_item_by_id(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -120,7 +133,11 @@ def get_food_item_by_id(
     return food_item
 
 
-@food_items_router.patch("/{food_item_id}", response_model=FoodItemRead)
+@food_items_router.patch(
+    "/{food_item_id}",
+    response_model=FoodItemRead,
+    dependencies=[Depends(require_super_admin)],
+)
 def update_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -168,7 +185,10 @@ def update_food_item(
         )
 
 
-@food_items_router.delete("/{food_item_id}")
+@food_items_router.delete(
+    "/{food_item_id}",
+    dependencies=[Depends(require_super_admin)],
+)
 def delete_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -196,7 +216,11 @@ def delete_food_item(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@food_items_router.get("/{food_item_id}/with-conversions", response_model=FoodItemWithConversions)
+@food_items_router.get(
+    "/{food_item_id}/with-conversions",
+    response_model=FoodItemWithConversions,
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_food_item_with_conversions(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -229,7 +253,11 @@ def get_food_item_with_conversions(
     )
 
 
-@food_items_router.get("/{food_item_id}/with-aliases", response_model=FoodItemWithAliases)
+@food_items_router.get(
+    "/{food_item_id}/with-aliases",
+    response_model=FoodItemWithAliases,
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_food_item_with_aliases(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -270,7 +298,12 @@ def get_food_item_with_aliases(
 # Food Item Aliases CRUD                                            #
 # ================================================================== #
 
-@aliases_router.post("/{food_item_id}/", response_model=FoodItemAliasRead, status_code=status.HTTP_201_CREATED)
+@aliases_router.post(
+    "/{food_item_id}/",
+    response_model=FoodItemAliasRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_user_id)],
+)
 def create_food_item_alias(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -326,7 +359,11 @@ def create_food_item_alias(
         )
 
 
-@aliases_router.get("/{food_item_id}/", response_model=list[FoodItemAliasRead])
+@aliases_router.get(
+    "/{food_item_id}/",
+    response_model=list[FoodItemAliasRead],
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_aliases_for_food_item(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -359,7 +396,11 @@ def get_aliases_for_food_item(
     )
 
 
-@aliases_router.get("/users/{user_id}/", response_model=list[FoodItemAliasRead])
+@aliases_router.get(
+    "/users/{user_id}/",
+    response_model=list[FoodItemAliasRead],
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_all_aliases_for_user(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -395,7 +436,10 @@ def get_all_aliases_for_user(
     )
 
 
-@aliases_router.delete("/{alias_id}")
+@aliases_router.delete(
+    "/{alias_id}",
+    dependencies=[Depends(require_super_admin)],
+)
 def delete_alias_by_id(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -427,7 +471,12 @@ def delete_alias_by_id(
 # Food Item Conversions CRUD                                        #
 # ================================================================== #
 
-@conversions_router.post("/", response_model=FoodItemUnitConversionRead, status_code=status.HTTP_201_CREATED)
+@conversions_router.post(
+    "/",
+    response_model=FoodItemUnitConversionRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_user_id)],
+)
 def create_food_unit_conversion(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -481,7 +530,11 @@ def create_food_unit_conversion(
         )
 
 
-@conversions_router.get("/{food_item_id}/", response_model=list[FoodItemUnitConversionRead])
+@conversions_router.get(
+    "/{food_item_id}/",
+    response_model=list[FoodItemUnitConversionRead],
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_food_unit_conversions(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -509,7 +562,10 @@ def get_food_unit_conversions(
     return crud_food.get_conversions_for_food_item(db=db, food_item_id=food_item_id)
 
 
-@conversions_router.delete("/{food_item_id}/{from_unit_id}/{to_unit_id}")
+@conversions_router.delete(
+    "/{food_item_id}/{from_unit_id}/{to_unit_id}",
+    dependencies=[Depends(require_super_admin)],
+)
 def delete_food_unit_conversion(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -550,7 +606,11 @@ def delete_food_unit_conversion(
 # Food Item Operations                                              #
 # ================================================================== #
 
-@operations_router.get("/search-by-alias", response_model=list[FoodItemRead])
+@operations_router.get(
+    "/search-by-alias",
+    response_model=list[FoodItemRead],
+    dependencies=[Depends(get_current_user_id)],
+)
 def search_food_items_by_alias(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -576,7 +636,11 @@ def search_food_items_by_alias(
     )
 
 
-@operations_router.post("/{food_item_id}/convert", response_model=FoodConversionResult)
+@operations_router.post(
+    "/{food_item_id}/convert",
+    response_model=FoodConversionResult,
+    dependencies=[Depends(get_current_user_id)],
+)
 def convert_food_units(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -656,7 +720,10 @@ def convert_food_units(
     )
 
 
-@operations_router.get("/{food_item_id}/can-convert/{from_unit_id}/{to_unit_id}")
+@operations_router.get(
+    "/{food_item_id}/can-convert/{from_unit_id}/{to_unit_id}",
+    dependencies=[Depends(get_current_user_id)],
+)
 def can_convert_food_units(
         *,
         db: Annotated[Session, Depends(get_db)],
