@@ -7,6 +7,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from backend.core.enums import KitchenRole
+from backend.crud import kitchen as crud_kitchen
 from backend.crud import user as crud_user
 from backend.db.session import SessionLocal
 from backend.security import decode_token
@@ -63,3 +65,51 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
+
+
+def require_kitchen_role(required_roles: set[KitchenRole]):
+    """Dependency factory enforcing a required role set within a kitchen.
+
+    Usage:
+        @router.post(..., dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))])
+
+    Expects:
+        - Path parameter: kitchen_id: int
+        - Uses: crud_kitchen.get_user_kitchen_relationship(db, kitchen_id, user_id)
+                and checks the 'role' field on the returned schema.
+    """
+
+
+    def checker(
+            kitchen_id: int,
+            user_id: Annotated[int, Depends(get_current_user_id)],
+            db: Annotated[Session, Depends(get_db)],
+    ) -> None:
+        rel = crud_kitchen.get_user_kitchen_relationship(db, kitchen_id=kitchen_id, user_id=user_id)
+        if rel is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of this kitchen",
+            )
+
+        # rel is a UserKitchenRead schema; it should expose 'role'
+        role_value = getattr(rel, "role", None)
+        try:
+            role = KitchenRole(role_value) if role_value is not None else None
+        except ValueError:
+            role = None
+
+        if role is None or role not in required_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient role for this action",
+            )
+        # If ok, the dependency returns None and allows the request to proceed.
+
+
+    return checker
+
+
+def require_kitchen_member():
+    """Shortcut: requires membership in the kitchen (any role)."""
+    return require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN, KitchenRole.MEMBER})
