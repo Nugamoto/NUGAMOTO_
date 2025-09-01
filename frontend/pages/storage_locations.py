@@ -23,11 +23,16 @@ class StorageLocationsController:
     """Controller for Storage Locations management page."""
 
 
+    # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         """Initialize the controller."""
         self.client = StorageLocationsClient()
+        # Tokens aus Session setzen (falls vorhanden)
+        access = getattr(st.session_state, "auth_access_token", None)
+        refresh = getattr(st.session_state, "auth_refresh_token", None)
+        if access:
+            self.client.set_tokens(access, refresh)
         self._initialize_session_state()
-
 
     @staticmethod
     def _initialize_session_state() -> None:

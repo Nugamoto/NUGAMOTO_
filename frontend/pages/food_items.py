@@ -28,12 +28,18 @@ class FoodItemsPageController:
     """Controller for Food Items management page."""
 
 
+    # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         """Initialize the Food Items page controller."""
         self.client = FoodItemsClient()
         self.units_client = UnitsClient()
+        # Tokens aus Session setzen (falls vorhanden)
+        access = getattr(st.session_state, "auth_access_token", None)
+        refresh = getattr(st.session_state, "auth_refresh_token", None)
+        if access:
+            self.client.set_tokens(access, refresh)
+            self.units_client.set_tokens(access, refresh)
         self._initialize_session_state()
-
 
     @staticmethod
     def _initialize_session_state() -> None:

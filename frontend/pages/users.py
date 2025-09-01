@@ -43,6 +43,11 @@ class UsersController:
     # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         self.users_client = UsersClient()
+        # Tokens aus Session setzen (falls vorhanden)
+        access = getattr(st.session_state, "auth_access_token", None)
+        refresh = getattr(st.session_state, "auth_refresh_token", None)
+        if access:
+            self.users_client.set_tokens(access, refresh)
         self._init_state()
 
 

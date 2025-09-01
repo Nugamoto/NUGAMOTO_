@@ -1,10 +1,13 @@
 """Kitchens Management Page (pattern identical to Food-Items)."""
 
 from __future__ import annotations
-import os, sys
+
+import os
+import sys
+from typing import Any
+
 import pandas as pd
 import streamlit as st
-from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -17,8 +20,15 @@ except ImportError:
 class KitchensController:
     """Same structure as FoodItemsController."""
 
+
+    # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         self.client = KitchensClient()
+        # Tokens aus Session setzen (falls vorhanden)
+        access = getattr(st.session_state, "auth_access_token", None)
+        refresh = getattr(st.session_state, "auth_refresh_token", None)
+        if access:
+            self.client.set_tokens(access, refresh)
         self._init_state()
 
     @staticmethod

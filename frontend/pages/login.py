@@ -65,6 +65,28 @@ def _extract_user_id_from_jwt(access_token: str) -> int | None:
         return None
 
 
+def _is_admin_from_jwt(access_token: str) -> bool:
+    """Return True if JWT payload contains admin-like claims."""
+    try:
+        parts = access_token.split(".")
+        if len(parts) != 3:
+            return False
+        payload_raw = _base64url_decode(parts[1])
+        payload = json.loads(payload_raw.decode("utf-8"))
+
+        is_superadmin = bool(payload.get("is_superadmin"))
+        is_admin = bool(payload.get("is_admin"))
+        role = str(payload.get("role") or "").strip().lower()
+        perms = payload.get("permissions") or []
+        if isinstance(perms, str):
+            perms = [perms]
+        by_role = role in {"admin", "superadmin"}
+        by_perm = "users:create" in {str(p).strip().lower() for p in perms}
+        return bool(is_superadmin or is_admin or by_role or by_perm)
+    except Exception:
+        return False
+
+
 def _store_tokens_and_context(access: str, refresh: str | None, email: str) -> None:
     """Store tokens and derive user context from access token."""
     st.session_state.auth_access_token = access
@@ -78,6 +100,8 @@ def _store_tokens_and_context(access: str, refresh: str | None, email: str) -> N
     st.session_state.current_user["email"] = email
     if user_id is not None:
         st.session_state.current_user["id"] = int(user_id)
+
+    st.session_state.is_admin = _is_admin_from_jwt(access)
 
 
 def _clear_tokens() -> None:

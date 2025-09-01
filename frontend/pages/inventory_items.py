@@ -50,6 +50,13 @@ class InventoryController:
         self.inv_client = InventoryItemsClient()
         self.food_client = FoodItemsClient()
         self.loc_client = StorageLocationsClient()
+        # Tokens aus Session setzen (falls vorhanden)
+        access = getattr(st.session_state, "auth_access_token", None)
+        refresh = getattr(st.session_state, "auth_refresh_token", None)
+        if access:
+            self.inv_client.set_tokens(access, refresh)
+            self.food_client.set_tokens(access, refresh)
+            self.loc_client.set_tokens(access, refresh)
         self._init_state()
 
     @staticmethod
