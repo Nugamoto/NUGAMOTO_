@@ -40,22 +40,40 @@ users_router = APIRouter(prefix="/users", tags=["Kitchen Users"])
     response_model=KitchenRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new kitchen",
-    dependencies=[Depends(get_current_user_id)],  # Auth required (no kitchen_id to check role against)
 )
 def create_kitchen(
         kitchen_data: KitchenCreate,
         db: Session = Depends(get_db),
+        current_user_id: int = Depends(get_current_user_id),
 ) -> KitchenRead:
-    """Create a new kitchen.
+    """Create a new kitchen and assign the creator as OWNER.
 
     Args:
         kitchen_data: Validated kitchen payload.
         db: Injected database session.
+        current_user_id: ID of the authenticated user (taken from JWT).
 
     Returns:
         The newly created kitchen.
     """
-    return crud_kitchen.create_kitchen(db, kitchen_data)
+    kitchen = crud_kitchen.create_kitchen(db, kitchen_data)
+
+    try:
+        crud_kitchen.add_user_to_kitchen(
+            db=db,
+            kitchen_id=kitchen.id,
+            user_kitchen_data=UserKitchenCreate(
+                user_id=current_user_id,
+                role=KitchenRole.OWNER,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to assign owner role to the creator.",
+        ) from exc
+
+    return kitchen
 
 
 @kitchens_router.get(
@@ -63,7 +81,7 @@ def create_kitchen(
     response_model=list[KitchenRead],
     status_code=status.HTTP_200_OK,
     summary="Get all kitchens",
-    dependencies=[Depends(get_current_user_id)],  # Auth required (no specific membership to check here)
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
     """Retrieve all kitchens from the database.
@@ -82,7 +100,7 @@ def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
     response_model=KitchenWithUsers,
     status_code=status.HTTP_200_OK,
     summary="Get kitchen details with users",
-    dependencies=[Depends(require_kitchen_member())],  # Member/Admin/Owner of this kitchen
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUsers:
     """Retrieve a kitchen by ID including all associated users.
@@ -111,7 +129,7 @@ def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUs
     response_model=KitchenRead,
     status_code=status.HTTP_200_OK,
     summary="Update an existing kitchen",
-    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def update_kitchen(
         kitchen_id: int,
@@ -146,7 +164,7 @@ def update_kitchen(
     "/{kitchen_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a kitchen",
-    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def delete_kitchen(
         kitchen_id: int,
@@ -185,7 +203,7 @@ def delete_kitchen(
     response_model=UserKitchenRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add user to kitchen",
-    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def add_user_to_kitchen(
         kitchen_id: int,
@@ -235,7 +253,7 @@ def add_user_to_kitchen(
     response_model=UserKitchenRead,
     status_code=status.HTTP_200_OK,
     summary="Get user's role in kitchen",
-    dependencies=[Depends(require_kitchen_member())],  # Member/Admin/Owner
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_user_role_in_kitchen(
         kitchen_id: int,
@@ -269,7 +287,7 @@ def get_user_role_in_kitchen(
     response_model=UserKitchenRead,
     status_code=status.HTTP_200_OK,
     summary="Update user role in kitchen",
-    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def update_user_role_in_kitchen(
         kitchen_id: int,
@@ -306,7 +324,7 @@ def update_user_role_in_kitchen(
     "/{kitchen_id}/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove user from kitchen",
-    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def remove_user_from_kitchen(
         kitchen_id: int,
@@ -340,7 +358,7 @@ def remove_user_from_kitchen(
     response_model=list[UserKitchenRead],
     status_code=status.HTTP_200_OK,
     summary="Get all kitchens for a user",
-    dependencies=[Depends(get_current_user_id)],  # Auth required (no specific kitchen to check)
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_user_kitchens(
         user_id: int,
