@@ -84,6 +84,7 @@ def get_ai_output_by_id(db: Session, output_id: int) -> AIModelOutputRead | None
         >>> if output:
         ...     print(f"Found output for user: {output.user_id}")
         ...     print(f"Target: {output.target_type} (ID: {output.target_id})")
+        :rtype: AIModelOutputRead | None
     """
     output_orm = get_ai_output_orm_by_id(db, output_id)
 
