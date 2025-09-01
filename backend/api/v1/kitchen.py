@@ -1,4 +1,3 @@
-
 """FastAPI router exposing the kitchens endpoints."""
 
 from __future__ import annotations
@@ -6,7 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import (
+    get_db,
+    get_current_user_id,
+    require_kitchen_role,
+    require_kitchen_member,
+)
+from backend.core.enums import KitchenRole
 from backend.crud import kitchen as crud_kitchen
 from backend.schemas.kitchen import (
     KitchenCreate,
@@ -35,10 +40,11 @@ users_router = APIRouter(prefix="/users", tags=["Kitchen Users"])
     response_model=KitchenRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new kitchen",
+    dependencies=[Depends(get_current_user_id)],  # Auth required (no kitchen_id to check role against)
 )
 def create_kitchen(
         kitchen_data: KitchenCreate,
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
 ) -> KitchenRead:
     """Create a new kitchen.
 
@@ -57,6 +63,7 @@ def create_kitchen(
     response_model=list[KitchenRead],
     status_code=status.HTTP_200_OK,
     summary="Get all kitchens",
+    dependencies=[Depends(get_current_user_id)],  # Auth required (no specific membership to check here)
 )
 def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
     """Retrieve all kitchens from the database.
@@ -75,6 +82,7 @@ def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
     response_model=KitchenWithUsers,
     status_code=status.HTTP_200_OK,
     summary="Get kitchen details with users",
+    dependencies=[Depends(require_kitchen_member())],  # Member/Admin/Owner of this kitchen
 )
 def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUsers:
     """Retrieve a kitchen by ID including all associated users.
@@ -93,9 +101,8 @@ def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUs
     if kitchen is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Kitchen not found"
+            detail="Kitchen not found",
         )
-
     return kitchen
 
 
@@ -104,6 +111,7 @@ def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUs
     response_model=KitchenRead,
     status_code=status.HTTP_200_OK,
     summary="Update an existing kitchen",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
 )
 def update_kitchen(
         kitchen_id: int,
@@ -112,9 +120,7 @@ def update_kitchen(
 ) -> KitchenRead:
     """Partially update an existing kitchen.
 
-    This endpoint allows partial updates of kitchen data. Only the fields provided
-    in the request body will be updated. All fields in the KitchenUpdate schema
-    are optional, enabling granular updates.
+    Only the fields provided in the request body will be updated.
 
     Args:
         kitchen_id: Primary key of the kitchen to update.
@@ -126,22 +132,13 @@ def update_kitchen(
 
     Raises:
         HTTPException: 404 if the kitchen does not exist.
-
-    Example:
-        ```json
-        {
-            "name": "Updated Kitchen Name"
-        }
-        ```
-        Only the specified fields will be updated, other fields remain unchanged.
     """
     updated_kitchen = crud_kitchen.update_kitchen(db, kitchen_id, kitchen_data)
     if updated_kitchen is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Kitchen not found"
+            detail="Kitchen not found",
         )
-
     return updated_kitchen
 
 
@@ -149,6 +146,7 @@ def update_kitchen(
     "/{kitchen_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a kitchen",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
 )
 def delete_kitchen(
         kitchen_id: int,
@@ -157,7 +155,7 @@ def delete_kitchen(
     """Delete a kitchen by primary key.
 
     This will also automatically delete all user-kitchen relationships
-    due to the cascade="all, delete-orphan" configuration.
+    due to the cascade configuration.
 
     Args:
         kitchen_id: ID of the kitchen to delete.
@@ -173,9 +171,8 @@ def delete_kitchen(
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Kitchen not found"
+            detail="Kitchen not found",
         )
-
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -188,6 +185,7 @@ def delete_kitchen(
     response_model=UserKitchenRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add user to kitchen",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
 )
 def add_user_to_kitchen(
         kitchen_id: int,
@@ -215,23 +213,20 @@ def add_user_to_kitchen(
         error_msg = str(exc)
         if "Kitchen not found" in error_msg:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Kitchen not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Kitchen not found"
             ) from exc
-        elif "User not found" in error_msg:
+        if "User not found" in error_msg:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
             ) from exc
-        elif "already a member" in error_msg:
+        if "already a member" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User is already a member of this kitchen"
+                detail="User is already a member of this kitchen",
             ) from exc
-        # Re-raise unexpected errors
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to add user to kitchen: {error_msg}"
+            detail=f"Failed to add user to kitchen: {error_msg}",
         ) from exc
 
 
@@ -240,11 +235,12 @@ def add_user_to_kitchen(
     response_model=UserKitchenRead,
     status_code=status.HTTP_200_OK,
     summary="Get user's role in kitchen",
+    dependencies=[Depends(require_kitchen_member())],  # Member/Admin/Owner
 )
 def get_user_role_in_kitchen(
         kitchen_id: int,
         user_id: int,
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
 ) -> UserKitchenRead:
     """Get a user's role in a specific kitchen.
 
@@ -263,9 +259,8 @@ def get_user_role_in_kitchen(
     if user_kitchen is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not a member of this kitchen"
+            detail="User is not a member of this kitchen",
         )
-
     return user_kitchen
 
 
@@ -274,6 +269,7 @@ def get_user_role_in_kitchen(
     response_model=UserKitchenRead,
     status_code=status.HTTP_200_OK,
     summary="Update user role in kitchen",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
 )
 def update_user_role_in_kitchen(
         kitchen_id: int,
@@ -282,9 +278,6 @@ def update_user_role_in_kitchen(
         db: Session = Depends(get_db),
 ) -> UserKitchenRead:
     """Update a user's role in a kitchen.
-
-    This endpoint allows updating the role of a user within a specific kitchen.
-    Only the role field will be updated as specified in the request body.
 
     Args:
         kitchen_id: Primary key of the kitchen.
@@ -297,14 +290,6 @@ def update_user_role_in_kitchen(
 
     Raises:
         HTTPException: 404 if the user-kitchen relationship does not exist.
-
-    Example:
-        ```json
-        {
-            "role": "ADMIN"
-        }
-        ```
-        Only the role will be updated, preserving other relationship data.
     """
     user_kitchen = crud_kitchen.update_user_role_in_kitchen(
         db, kitchen_id, user_id, role_data
@@ -312,9 +297,8 @@ def update_user_role_in_kitchen(
     if user_kitchen is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not a member of this kitchen"
+            detail="User is not a member of this kitchen",
         )
-
     return user_kitchen
 
 
@@ -322,11 +306,12 @@ def update_user_role_in_kitchen(
     "/{kitchen_id}/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove user from kitchen",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],  # Admin/Owner
 )
 def remove_user_from_kitchen(
         kitchen_id: int,
         user_id: int,
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
 ) -> Response:
     """Remove a user from a kitchen.
 
@@ -345,9 +330,8 @@ def remove_user_from_kitchen(
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not a member of this kitchen"
+            detail="User is not a member of this kitchen",
         )
-
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -356,10 +340,11 @@ def remove_user_from_kitchen(
     response_model=list[UserKitchenRead],
     status_code=status.HTTP_200_OK,
     summary="Get all kitchens for a user",
+    dependencies=[Depends(get_current_user_id)],  # Auth required (no specific kitchen to check)
 )
 def get_user_kitchens(
         user_id: int,
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
 ) -> list[UserKitchenRead]:
     """Get all kitchens a user belongs to.
 
