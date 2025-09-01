@@ -7,10 +7,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from backend.crud import user as crud_user
 from backend.db.session import SessionLocal
-from backend.security import decode_token  # import via public package API
+from backend.security import decode_token
 
-_auth_scheme = HTTPBearer()  # default auto_error=True
+_auth_scheme = HTTPBearer()
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -51,3 +52,14 @@ def get_current_user_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
+
+
+def get_current_user(
+        user_id: Annotated[int, Depends(get_current_user_id)],
+        db: Annotated[Session, Depends(get_db)],
+):
+    """Load and return the current user (schema)."""
+    user = crud_user.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
