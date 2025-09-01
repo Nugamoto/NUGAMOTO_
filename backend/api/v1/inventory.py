@@ -81,6 +81,7 @@ def get_kitchen_storage_locations(
     "/{storage_location_id}",
     response_model=StorageLocationRead,
     summary="Get a storage location by ID",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_storage_location(
         *,
@@ -101,6 +102,7 @@ def get_storage_location(
     "/{storage_location_id}",
     response_model=StorageLocationRead,
     summary="Update a storage location",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def update_storage_location(
         *,
@@ -126,6 +128,7 @@ def update_storage_location(
     "/{storage_location_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a storage location",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def delete_storage_location(
         *,
@@ -193,6 +196,7 @@ def get_kitchen_inventory(
     "/{inventory_id}",
     response_model=InventoryItemRead,
     summary="Get an inventory item by ID",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_inventory_item(
         *,
@@ -213,6 +217,7 @@ def get_inventory_item(
     "/{inventory_id}",
     response_model=InventoryItemRead,
     summary="Update an inventory item",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def update_inventory_item(
         *,
@@ -238,6 +243,7 @@ def update_inventory_item(
     "/{inventory_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an inventory item",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def delete_inventory_item(
         *,
