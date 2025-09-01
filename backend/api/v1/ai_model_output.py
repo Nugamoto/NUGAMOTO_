@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -111,12 +111,13 @@ def get_ai_output(
     "/outputs/{output_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a specific AI output",
+    response_class=Response,
     dependencies=[Depends(require_super_admin)],
 )
 def delete_ai_output(
         output_id: int,
         db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     """Delete a specific AI output by its unique identifier.
 
     Security:
@@ -129,6 +130,8 @@ def delete_ai_output(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"AI output with ID {output_id} not found"
         )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
