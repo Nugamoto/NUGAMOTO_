@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import get_db, get_current_user_id, require_same_user
 from backend.crud import user as crud_user
 from backend.schemas.user import UserCreate, UserRead, UserUpdate
 
@@ -19,11 +19,16 @@ router = APIRouter(prefix="/users", tags=["Users"])
 # User Endpoints                                                     #
 # ================================================================== #
 
-@router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_user_id)],
+)
 def create_user(
         *,
         db: Annotated[Session, Depends(get_db)],
-        user_data: UserCreate
+        user_data: UserCreate,
 ) -> UserRead:
     """Create a new user.
 
@@ -37,31 +42,33 @@ def create_user(
     Raises:
         HTTPException: 400 if email already registered
     """
-    # Check if email already exists
     existing_user = crud_user.get_user_by_email(db=db, email=user_data.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Email already registered",
         )
 
     try:
-        # crud_user.create_user now returns UserRead schema
         return crud_user.create_user(db=db, user_data=user_data)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Email already registered",
         )
 
 
-@router.get("/", response_model=list[UserRead])
+@router.get(
+    "/",
+    response_model=list[UserRead],
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_users(
         *,
         db: Annotated[Session, Depends(get_db)],
         skip: int = 0,
-        limit: int = 100
+        limit: int = 100,
 ) -> list[UserRead]:
     """Get all users.
 
@@ -73,15 +80,18 @@ def get_users(
     Returns:
         List of users
     """
-    # crud_user.get_all_users now returns list[UserRead]
     return crud_user.get_all_users(db=db, skip=skip, limit=limit)
 
 
-@router.get("/{user_id}", response_model=UserRead)
+@router.get(
+    "/{user_id}",
+    response_model=UserRead,
+    dependencies=[Depends(require_same_user)],
+)
 def get_user_by_id(
         *,
         db: Annotated[Session, Depends(get_db)],
-        user_id: int
+        user_id: int,
 ) -> UserRead:
     """Get user by ID.
 
@@ -95,29 +105,30 @@ def get_user_by_id(
     Raises:
         HTTPException: 404 if user not found
     """
-    # crud_user.get_user_by_id now returns UserRead or None
     user = crud_user.get_user_by_id(db=db, user_id=user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID {user_id} not found"
+            detail=f"User with ID {user_id} not found",
         )
 
     return user
 
 
-@router.patch("/{user_id}", response_model=UserRead)
+@router.patch(
+    "/{user_id}",
+    response_model=UserRead,
+    dependencies=[Depends(require_same_user)],
+)
 def update_user(
         *,
         db: Annotated[Session, Depends(get_db)],
         user_id: int,
-        user_data: UserUpdate
+        user_data: UserUpdate,
 ) -> UserRead:
     """Update an existing user with partial data (PATCH operation).
 
-    This endpoint allows partial updates of user data. Only the fields provided
-    in the request body will be updated. All fields in the UserUpdate schema
-    are optional, enabling granular updates.
+    Only the fields provided in the request body will be updated.
 
     Args:
         db: Database session
@@ -131,23 +142,13 @@ def update_user(
         HTTPException:
             * 404 – if the user does not exist
             * 400 – if another user already has the email address
-
-    Example:
-        ```json
-        {
-            "name": "Updated Name",
-            "diet_type": "vegetarian"
-        }
-        ```
-        Only the specified fields will be updated, other fields remain unchanged.
     """
     try:
-        # crud_user.update_user now returns UserRead or None
         updated_user = crud_user.update_user(db=db, user_id=user_id, user_data=user_data)
         if not updated_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with ID {user_id} not found"
+                detail=f"User with ID {user_id} not found",
             )
 
         return updated_user
@@ -155,19 +156,22 @@ def update_user(
         if "Email is already taken" in str(exc):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
+                detail="Email already registered",
             ) from exc
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc)
+            detail=str(exc),
         ) from exc
 
 
-@router.delete("/{user_id}")
+@router.delete(
+    "/{user_id}",
+    dependencies=[Depends(require_same_user)],
+)
 def delete_user(
         *,
         db: Annotated[Session, Depends(get_db)],
-        user_id: int
+        user_id: int,
 ) -> Response:
     """Delete a user by primary key.
 
@@ -185,7 +189,7 @@ def delete_user(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID {user_id} not found"
+            detail=f"User with ID {user_id} not found",
         )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -195,29 +199,32 @@ def delete_user(
 # Additional User Endpoints                                          #
 # ================================================================== #
 
-@router.get("/by-email/{email}", response_model=UserRead)
+@router.get(
+    "/by-email/{email}",
+    response_model=UserRead,
+    dependencies=[Depends(get_current_user_id)],
+)
 def get_user_by_email(
         *,
         db: Annotated[Session, Depends(get_db)],
-        email: str
+        email: str,
+        current_user_id: int = Depends(get_current_user_id),
 ) -> UserRead:
-    """Get user by email address.
+    """Get user by email address (only your own account).
 
-    Args:
-        db: Database session
-        email: Email address to search for
-
-    Returns:
-        User data
-
-    Raises:
-        HTTPException: 404 if user not found
+    Prevents leaking existence of other users' emails.
     """
     user = crud_user.get_user_by_email(db=db, email=email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with email '{email}' not found"
+            detail=f"User with email '{email}' not found",
+        )
+
+    if getattr(user, "id", None) != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to access this resource",
         )
 
     return user
