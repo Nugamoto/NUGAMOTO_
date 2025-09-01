@@ -1,4 +1,3 @@
-
 """API endpoints for user health profiles management."""
 
 from __future__ import annotations
@@ -9,13 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import get_db, get_current_user_id, require_same_user
 from backend.crud import user_health as crud_user_health
 from backend.schemas.user_health import (
     UserHealthProfileCreate,
     UserHealthProfileRead,
     UserHealthProfileSummary,
-    UserHealthProfileUpdate
+    UserHealthProfileUpdate,
 )
 
 router = APIRouter(prefix="/users", tags=["User Health Profiles"])
@@ -25,12 +24,13 @@ router = APIRouter(prefix="/users", tags=["User Health Profiles"])
     "/{user_id}/health-profile",
     response_model=UserHealthProfileRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create user health profile"
+    summary="Create user health profile",
+    dependencies=[Depends(require_same_user)],
 )
 def create_health_profile(
     user_id: int,
     profile_data: UserHealthProfileCreate,
-    db: Annotated[Session, Depends(get_db)]
+        db: Annotated[Session, Depends(get_db)],
 ) -> UserHealthProfileRead:
     """Create new health profile for a user.
 
@@ -49,7 +49,6 @@ def create_health_profile(
             - 409 if health profile already exists for this user.
 
     Example:
-        ```json
         {
             "age": 30,
             "gender": "male",
@@ -58,52 +57,52 @@ def create_health_profile(
             "activity_level": "moderately active",
             "goal": "maintain health"
         }
-        ```
     """
     if user_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User ID must be a positive integer"
+            detail="User ID must be a positive integer",
         )
 
     try:
         return crud_user_health.create_user_health_profile(
             db=db,
             user_id=user_id,
-            profile_data=profile_data
+            profile_data=profile_data,
         )
     except ValueError as e:
         if "does not exist" in str(e):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User {user_id} not found"
+                detail=f"User {user_id} not found",
             )
         elif "already exists" in str(e):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Health profile already exists for user {user_id}. Use PATCH to update."
+                detail=f"Health profile already exists for user {user_id}. Use PATCH to update.",
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
+                detail=str(e),
             )
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Health profile already exists for this user"
+            detail="Health profile already exists for this user",
         )
 
 
 @router.get(
     "/{user_id}/health-profile",
     response_model=UserHealthProfileRead,
-    summary="Get user health profile"
+    summary="Get user health profile",
+    dependencies=[Depends(require_same_user)],
 )
 def get_user_health_profile(
     user_id: int,
-    db: Annotated[Session, Depends(get_db)]
+        db: Annotated[Session, Depends(get_db)],
 ) -> UserHealthProfileRead:
     """Retrieve a user's health profile.
 
@@ -125,14 +124,14 @@ def get_user_health_profile(
     if user_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User ID must be a positive integer"
+            detail="User ID must be a positive integer",
         )
 
     profile = crud_user_health.get_user_health_profile_by_user_id(db, user_id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No health profile found for user {user_id}"
+            detail=f"No health profile found for user {user_id}",
         )
 
     return profile
@@ -141,12 +140,13 @@ def get_user_health_profile(
 @router.patch(
     "/{user_id}/health-profile",
     response_model=UserHealthProfileRead,
-    summary="Update user health profile"
+    summary="Update user health profile",
+    dependencies=[Depends(require_same_user)],
 )
 def update_health_profile(
     user_id: int,
         profile_data: UserHealthProfileUpdate,
-    db: Annotated[Session, Depends(get_db)]
+        db: Annotated[Session, Depends(get_db)],
 ) -> UserHealthProfileRead:
     """Update existing health profile with partial data.
 
@@ -164,13 +164,11 @@ def update_health_profile(
             - 404 if no health profile found for the user.
 
     Example:
-        ```json
         {
             "weight_kg": 72.5,
             "activity_level": "very active",
             "goal": "lose weight"
         }
-        ```
 
     Note:
         All fields are optional. Only provided fields will be updated.
@@ -178,19 +176,17 @@ def update_health_profile(
     if user_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User ID must be a positive integer"
+            detail="User ID must be a positive integer",
         )
 
     updated_profile = crud_user_health.update_user_health_profile(
-        db=db,
-        user_id=user_id,
-        profile_data=profile_data
+        db=db, user_id=user_id, profile_data=profile_data
     )
 
     if not updated_profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No health profile found for user {user_id}"
+            detail=f"No health profile found for user {user_id}",
         )
 
     return updated_profile
@@ -199,12 +195,13 @@ def update_health_profile(
 @router.get(
     "/health-profiles/summary",
     response_model=list[UserHealthProfileSummary],
-    summary="Get all health profiles summary"
+    summary="Get all health profiles summary",
+    dependencies=[Depends(get_current_user_id)],
 )
 def get_all_health_profiles_summary(
         db: Annotated[Session, Depends(get_db)],
         skip: int = 0,
-        limit: int = 100
+        limit: int = 100,
 ) -> list[UserHealthProfileSummary]:
     """Retrieve a summary of all health profiles with pagination.
 
@@ -219,17 +216,14 @@ def get_all_health_profiles_summary(
     Example:
         GET /users/health-profiles/summary?skip=0&limit=50
     """
-    return crud_user_health.get_all_health_profiles(
-        db=db,
-        skip=skip,
-        limit=limit
-    )
+    return crud_user_health.get_all_health_profiles(db=db, skip=skip, limit=limit)
 
 
 @router.get(
     "/health-profiles/search",
     response_model=list[UserHealthProfileSummary],
-    summary="Search health profiles by criteria"
+    summary="Search health profiles by criteria",
+    dependencies=[Depends(get_current_user_id)],
 )
 def search_health_profiles(
         db: Annotated[Session, Depends(get_db)],
@@ -238,7 +232,7 @@ def search_health_profiles(
         gender: str | None = None,
         activity_level: str | None = None,
         min_bmi: float | None = None,
-        max_bmi: float | None = None
+        max_bmi: float | None = None,
 ) -> list[UserHealthProfileSummary]:
     """Search health profiles by various criteria.
 
@@ -264,5 +258,5 @@ def search_health_profiles(
         gender=gender,
         activity_level=activity_level,
         min_bmi=min_bmi,
-        max_bmi=max_bmi
+        max_bmi=max_bmi,
     )
