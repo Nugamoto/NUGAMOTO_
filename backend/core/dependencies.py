@@ -79,7 +79,6 @@ def require_kitchen_role(required_roles: set[KitchenRole]):
                 and checks the 'role' field on the returned schema.
     """
 
-
     def checker(
             kitchen_id: int,
             user_id: Annotated[int, Depends(get_current_user_id)],
@@ -92,7 +91,6 @@ def require_kitchen_role(required_roles: set[KitchenRole]):
                 detail="Not a member of this kitchen",
             )
 
-        # rel is a UserKitchenRead schema; it should expose 'role'
         role_value = getattr(rel, "role", None)
         try:
             role = KitchenRole(role_value) if role_value is not None else None
@@ -104,8 +102,6 @@ def require_kitchen_role(required_roles: set[KitchenRole]):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient role for this action",
             )
-        # If ok, the dependency returns None and allows the request to proceed.
-
 
     return checker
 
@@ -113,3 +109,15 @@ def require_kitchen_role(required_roles: set[KitchenRole]):
 def require_kitchen_member():
     """Shortcut: requires membership in the kitchen (any role)."""
     return require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN, KitchenRole.MEMBER})
+
+
+def require_same_user(
+        user_id: int,
+        current_user_id: Annotated[int, Depends(get_current_user_id)],
+) -> None:
+    """Ensure the path user_id matches the authenticated user."""
+    if user_id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to access this resource",
+        )
