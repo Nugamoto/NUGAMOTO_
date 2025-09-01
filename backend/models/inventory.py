@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from backend.models.kitchen import Kitchen
 
 # Threshold for considering items as "expiring soon" (in days)
-EXPIRING_ITEMS_THRESHOLD_DAYS = settings.expiring_items_threshold_days
+EXPIRING_ITEMS_THRESHOLD_DAYS = settings.EXPIRING_ITEMS_THRESHOLD_DAYS
 
 
 class StorageLocation(Base):

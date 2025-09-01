@@ -179,7 +179,7 @@ class InventoryItemRead(_InventoryItemBase):
             return False
 
         from backend.core.config import settings
-        threshold_days = settings.expiring_items_threshold_days
+        threshold_days = settings.EXPIRING_ITEMS_THRESHOLD_DAYS
         threshold_date = datetime.date.today() + datetime.timedelta(days=threshold_days)
         return self.expiration_date <= threshold_date
 

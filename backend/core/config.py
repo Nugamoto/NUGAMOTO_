@@ -19,16 +19,27 @@ PROJECT_ROOT = find_project_root()
 
 
 class Settings(BaseSettings):
-    expiring_items_threshold_days: int = 3
+    # Application settings
+    EXPIRING_ITEMS_THRESHOLD_DAYS: int = 3
+
+    # Database settings
     DATABASE_URL: str = "sqlite:///./nugamoto.sqlite"
+
+    # API keys
     OPENAI_API_KEY: str = "dummy-key"
+
+    # JWT settings
+    SECRET_KEY: str = "CHANGE_ME_TO_A_SECURE_RANDOM_VALUE"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 14
+
+    # Admin settings
+    ADMIN_EMAILS: str = ""
+    ADMIN_EMAIL_DOMAINS: str = ""
 
     class Config:
         env_file = str(PROJECT_ROOT / '.env')
         env_file_encoding = 'utf-8'
 
 settings = Settings()
-
-# Debug output - can be removed later
-if settings.OPENAI_API_KEY == "dummy-key":
-    print(f"Warning: Using dummy API key. Check that your .env file exists at {PROJECT_ROOT / '.env'}")
