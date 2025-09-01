@@ -2,12 +2,13 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import get_db, get_current_user_id, require_same_user
 from backend.core.enums import OutputType, OutputFormat, AIOutputTargetType
 from backend.crud import ai_model_output as crud_ai_output
+from backend.crud import kitchen as crud_kitchen
 from backend.schemas.ai_model_output import AIModelOutputCreate, AIModelOutputUpdate
 from backend.schemas.ai_service import (
     RecipeGenerationAPIRequest,
@@ -27,8 +28,24 @@ async def generate_recipe(
         *,
         db: Annotated[Session, Depends(get_db)],
         data: RecipeGenerationAPIRequest,
+        current_user_id: int = Depends(get_current_user_id),
 ) -> RecipeWithAIOutput:
-    """Generate a recipe using AI based on user input and kitchen context."""
+    """Generate a recipe using AI based on user input and kitchen context.
+
+    Security:
+        - Auth required
+        - User must be the same as data.user_id
+        - User must be a member of the specified kitchen_id
+    """
+    # Enforce self-only
+    if current_user_id != data.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to access this resource")
+
+    # Enforce kitchen membership
+    rel = crud_kitchen.get_user_kitchen_relationship(db, kitchen_id=data.kitchen_id, user_id=current_user_id)
+    if rel is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this kitchen")
+
     try:
         ai_service = AIServiceFactory.create_ai_service(db)
 
@@ -82,14 +99,20 @@ async def generate_recipe(
         )
 
 
-@router.post("/recipes/{ai_output_id}/convert-to-recipe-create", response_model=RecipeCreate)
+@router.post("/recipes/{ai_output_id}/convert-to-recipe-create", response_model=RecipeCreate,
+             dependencies=[Depends(require_same_user)])
 async def convert_ai_recipe_to_create(
         *,
         db: Annotated[Session, Depends(get_db)],
         ai_output_id: int,
         user_id: int,
 ) -> RecipeCreate:
-    """Convert AI recipe response to RecipeCreate format for saving."""
+    """Convert AI recipe response to RecipeCreate format for saving.
+
+    Security:
+        - Auth required
+        - Self-only via require_same_user (user_id must match current user)
+    """
     try:
         ai_output = crud_ai_output.get_ai_output_by_id(db, ai_output_id)
         if not ai_output or ai_output.user_id != user_id:
@@ -112,7 +135,7 @@ async def convert_ai_recipe_to_create(
         )
 
 
-@router.patch("/recipes/{ai_output_id}/mark-saved")
+@router.patch("/recipes/{ai_output_id}/mark-saved", dependencies=[Depends(require_same_user)])
 async def mark_ai_recipe_as_saved(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -120,7 +143,19 @@ async def mark_ai_recipe_as_saved(
         recipe_id: int,
         user_id: int,
 ) -> dict[str, str]:
-    """Mark AI recipe as saved and link to created recipe."""
+    """
+    Marks an AI-generated recipe as saved by updating the respective output data
+    in the database. This endpoint ensures that the operation is performed only
+    by the authorized user who owns the AI-generated output. The process involves
+    verifying the existence and ownership of the AI output, and updating the status
+    to "saved" along with the associated recipe ID.
+
+    :param db: Database session injected using dependency
+    :param ai_output_id: ID of the AI-generated output to be updated
+    :param recipe_id: ID of the recipe to be associated with the AI output
+    :param user_id: ID of the user performing the operation
+    :return: A dictionary containing a success message
+    """
     try:
         ai_output = crud_ai_output.get_ai_output_by_id(db, ai_output_id)
         if not ai_output or ai_output.user_id != user_id:
