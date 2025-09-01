@@ -7,7 +7,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 
-from backend.core.dependencies import get_db
+from backend.core.dependencies import (
+    get_db,
+    require_kitchen_member,
+    require_kitchen_role,
+)
+from backend.core.enums import KitchenRole
 from backend.crud import inventory as crud_inventory
 from backend.schemas.inventory import (
     InventoryItemCreate,
@@ -35,6 +40,7 @@ inventory_items_router = APIRouter(prefix="/items", tags=["Inventory Items"])
     response_model=StorageLocationRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new storage location",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def create_storage_location(
         *,
@@ -60,6 +66,7 @@ def create_storage_location(
     "/",
     response_model=list[StorageLocationRead],
     summary="Get all storage locations for a kitchen",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_kitchen_storage_locations(
         *,
@@ -145,6 +152,7 @@ def delete_storage_location(
     response_model=InventoryItemRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create or update an inventory item",
+    dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
 )
 def create_or_update_inventory_item(
         *,
@@ -170,6 +178,7 @@ def create_or_update_inventory_item(
     "/",
     response_model=list[InventoryItemRead],
     summary="Get all inventory items for a kitchen",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_kitchen_inventory(
         *,
@@ -254,6 +263,7 @@ def delete_inventory_item(
     "/analysis/low-stock",
     response_model=list[InventoryItemRead],
     summary="Get items that are low in stock",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_low_stock_items(
         *,
@@ -268,6 +278,7 @@ def get_low_stock_items(
     "/analysis/expiring",
     response_model=list[InventoryItemRead],
     summary="Get items that are expiring soon",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_expiring_items(
         *,
@@ -283,6 +294,7 @@ def get_expiring_items(
     "/analysis/expired",
     response_model=list[InventoryItemRead],
     summary="Get items that have already expired",
+    dependencies=[Depends(require_kitchen_member())],
 )
 def get_expired_items(
         *,
