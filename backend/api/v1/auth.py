@@ -197,16 +197,13 @@ def refresh(
     user_id = int(payload.get("sub"))
 
     # Recompute admin claims based on user's current email
-    user_orm = crud_user.get_user_orm_by_email(
-        db, email=cast(str, crud_user.get_user_by_id(db, user_id).email)
-    ) if crud_user.get_user_by_id(db, user_id) else None
-
-    if not user_orm:
+    user_schema = crud_user.get_user_by_id(db, user_id)
+    if not user_schema:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
-    email_str = cast(str, user_orm.email)
+    email_str = cast(str, user_schema.email)
     base_claims = {"email": email_str}
     claims = {**base_claims, **_admin_claims_for_email(email_str)}
 
