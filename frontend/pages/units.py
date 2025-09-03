@@ -1,4 +1,4 @@
-"""Units Management Page for NUGAMOTO Admin."""
+"""Units Management Page for NUGAMOTO Admin (role-aware, PEP8 style)."""
 
 from __future__ import annotations
 
@@ -9,138 +9,149 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-# Add frontend to path for runtime
+# Ensure local imports work both in IDE and when run by Streamlit
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Direct imports for IDE resolution
 try:
-    from clients.units_client import UnitsClient
     from clients.base import APIException
-except ImportError:
-    # Fallback for different execution contexts
-    from frontend.clients.units_client import UnitsClient
+    from clients.units_client import UnitsClient
+except ImportError:  # Fallback for different execution contexts
     from frontend.clients.base import APIException
+    from frontend.clients.units_client import UnitsClient
 
 
 class UnitsPageController:
-    """Controller for Units management page."""
+    """Controller for Units management page with admin-aware actions."""
 
-
-    # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         """Initialize the Units page controller."""
         self.client = UnitsClient()
-        # Tokens aus Session setzen (falls vorhanden)
+
+        # Attach tokens if available (most routes are auth-protected)
         access = getattr(st.session_state, "auth_access_token", None)
         refresh = getattr(st.session_state, "auth_refresh_token", None)
         if access:
             self.client.set_tokens(access, refresh)
-        self._initialize_session_state()
+
+        # Admin flag (set in login page from JWT claims)
+        self.is_admin: bool = bool(getattr(st.session_state, "is_admin", False))
+
+        self._init_state()
 
     @staticmethod
-    def _initialize_session_state() -> None:
-        """Initialize session state variables."""
-        if "units_data" not in st.session_state:
-            st.session_state.units_data = []
-        if "show_create_form" not in st.session_state:
-            st.session_state.show_create_form = False
-        if "show_update_form" not in st.session_state:
-            st.session_state.show_update_form = False
-        if "selected_unit_for_update" not in st.session_state:
-            st.session_state.selected_unit_for_update = None
+    def _init_state() -> None:
+        """Initialize session-state variables used by this page."""
+        st.session_state.setdefault("units_data", [])
+        st.session_state.setdefault("show_create_form", False)
+        st.session_state.setdefault("show_update_form", False)
+        st.session_state.setdefault("selected_unit_for_update", None)
 
 
+    # ---------------------------------------------------------------------
+    # API interactions
+    # ---------------------------------------------------------------------
     def load_units(self) -> list[dict[str, Any]]:
         """Load units from API with error handling."""
         try:
             units = self.client.list_units()
             st.session_state.units_data = units
             return units
-        except APIException as e:
-            st.error(f"Failed to load units: {e.message}")
+        except APIException as exc:
+            st.error(f"Failed to load units: {exc.message}")
             return []
-        except Exception as e:
-            st.error(f"Unexpected error: {str(e)}")
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Unexpected error: {str(exc)}")
             return []
-
 
     def create_unit(self, name: str, unit_type: str, to_base_factor: float) -> bool:
-        """Create a new unit."""
+        """Create a new unit (admin only)."""
+        if not self.is_admin:
+            st.warning("You need admin privileges to create units.")
+            return False
         try:
-            unit_data = {
+            payload = {
                 "name": name.lower().strip(),
                 "type": unit_type,
-                "to_base_factor": to_base_factor
+                "to_base_factor": to_base_factor,
             }
-
-            created_unit = self.client.create_unit(unit_data)
-            if created_unit:
-                st.success(f"Unit '{name}' created successfully")
+            created = self.client.create_unit(payload)
+            if created:
+                st.success(f"Unit '{name}' created successfully.")
                 st.session_state.show_create_form = False
                 return True
             return False
-
-        except APIException as e:
-            st.error(f"Failed to create unit: {e.message}")
+        except APIException as exc:
+            st.error(f"Failed to create unit: {exc.message}")
             return False
-        except Exception as e:
-            st.error(f"Validation error: {str(e)}")
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Validation error: {str(exc)}")
             return False
 
 
-    def update_unit(self, unit_id: int, name: str, unit_type: str, to_base_factor: float) -> bool:
-        """Update an existing unit."""
+    def update_unit(
+            self,
+            unit_id: int,
+            name: str,
+            unit_type: str,
+            to_base_factor: float,
+    ) -> bool:
+        """Update an existing unit (admin only)."""
+        if not self.is_admin:
+            st.warning("You need admin privileges to update units.")
+            return False
         try:
-            unit_data = {
+            payload = {
                 "name": name.lower().strip(),
                 "type": unit_type,
-                "to_base_factor": to_base_factor
+                "to_base_factor": to_base_factor,
             }
-
-            updated_unit = self.client.update_unit(unit_id, unit_data)
-            if updated_unit:
-                st.success(f"Unit '{name}' updated successfully")
+            updated = self.client.update_unit(unit_id, payload)
+            if updated:
+                st.success(f"Unit '{name}' updated successfully.")
                 st.session_state.show_update_form = False
                 st.session_state.selected_unit_for_update = None
                 return True
             return False
-
-        except APIException as e:
-            st.error(f"Failed to update unit: {e.message}")
+        except APIException as exc:
+            st.error(f"Failed to update unit: {exc.message}")
             return False
-        except Exception as e:
-            st.error(f"Validation error: {str(e)}")
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Validation error: {str(exc)}")
             return False
-
 
     def delete_unit(self, unit_id: int, unit_name: str) -> bool:
-        """Delete a unit by ID."""
+        """Delete a unit by ID (admin only)."""
+        if not self.is_admin:
+            st.warning("You need admin privileges to delete units.")
+            return False
         try:
             self.client.delete_unit(unit_id)
-            st.success(f"Unit '{unit_name}' deleted successfully")
+            st.success(f"Unit '{unit_name}' deleted successfully.")
             return True
-        except APIException as e:
-            st.error(f"Failed to delete unit: {e.message}")
+        except APIException as exc:
+            st.error(f"Failed to delete unit: {exc.message}")
             return False
-        except Exception as e:
-            st.error(f"Unexpected error: {str(e)}")
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Unexpected error: {str(exc)}")
             return False
-
 
     def delete_multiple_units(self, unit_ids: list[int]) -> int:
-        """Delete multiple units."""
-        deleted_count = 0
-        errors = []
+        """Delete multiple units (admin only)."""
+        if not self.is_admin:
+            st.warning("You need admin privileges to delete units.")
+            return 0
 
-        for unit_id in unit_ids:
+        deleted_count = 0
+        errors: list[str] = []
+        for uid in unit_ids:
             try:
-                self.client.delete_unit(unit_id)
+                self.client.delete_unit(uid)
                 deleted_count += 1
-            except APIException as e:
-                errors.append(f"Unit {unit_id}: {e.message}")
+            except APIException as exc:
+                errors.append(f"Unit {uid}: {exc.message}")
 
         if deleted_count > 0:
-            st.success(f"Successfully deleted {deleted_count} units")
+            st.success(f"Successfully deleted {deleted_count} unit(s).")
 
         if errors:
             st.error(f"Errors: {'; '.join(errors)}")
@@ -148,95 +159,91 @@ class UnitsPageController:
         return deleted_count
 
 
-    def render_units_table(self, units: list[dict[str, Any]]) -> None:
-        """Render the units data table with selection."""
+    # ---------------------------------------------------------------------
+    # Rendering helpers
+    # ---------------------------------------------------------------------
+    @staticmethod
+    def _render_table(
+            units: list[dict[str, Any]],
+            on_delete: callable,
+            on_edit: callable,
+            is_admin: bool,
+    ) -> None:
+        """Render the units table with multi-selection and role-aware actions."""
         if not units:
             st.info("No units found. Create your first unit below.")
             return
 
         st.subheader(f"Units ({len(units)} total)")
 
-        # Create DataFrame for better table handling
-        df_data = []
-        for unit in units:
-            df_data.append({
-                "ID": unit.get("id"),
-                "Name": unit.get("name", "N/A"),
-                "Type": unit.get("type", "N/A"),
-                "Base Factor": unit.get("to_base_factor", 0),
-                "Created": unit.get("created_at", "")[:10] if unit.get("created_at") else "N/A"
-            })
+        df = pd.DataFrame(
+            [
+                {
+                    "ID": u.get("id"),
+                    "Name": u.get("name") or "N/A",
+                    "Type": u.get("type") or "N/A",
+                    "Base Factor": u.get("to_base_factor", 0),
+                    "Created": (u.get("created_at") or "")[:10],
+                }
+                for u in units
+            ]
+        ).sort_values("ID")
 
-        if df_data:
-            df = pd.DataFrame(df_data)
+        event = st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="multi-row",
+        )
 
-            # Sort by ID as default
-            df = df.sort_values("ID")
+        if event.selection.rows:
+            selected_units = [units[i] for i in event.selection.rows]
+            st.write(f"**{len(selected_units)} unit(s) selected**")
 
-            # Display table with multi-selection
-            event = st.dataframe(
-                df,
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="multi-row"
+            col_del, col_edit, _ = st.columns([1, 1, 3])
+
+            col_del.button(
+                "🗑️ Delete Selected",
+                type="secondary",
+                disabled=not is_admin,
+                help=None if is_admin else "Admin privileges required to delete units",
+                on_click=lambda: on_delete([u["id"] for u in selected_units]),
             )
 
-            # Actions for selected rows
-            if event.selection.rows:
-                selected_indices = event.selection.rows
-                selected_units = [units[i] for i in selected_indices]
-
-                st.write(f"**{len(selected_units)} unit(s) selected**")
-
-                col1, col2, col3 = st.columns([1, 1, 3])
-
-                with col1:
-                    if st.button("🗑️ Delete Selected", type="secondary"):
-                        selected_ids = [unit["id"] for unit in selected_units]
-                        deleted = self.delete_multiple_units(selected_ids)
-                        if deleted > 0:
-                            st.rerun()
-
-                with col2:
-                    # Update button (only for single selection)
-                    if len(selected_units) == 1:
-                        if st.button("✏️ Edit Selected"):
-                            st.session_state.selected_unit_for_update = selected_units[0]
-                            st.session_state.show_update_form = True
-                            st.rerun()
-                    else:
-                        st.button("✏️ Edit (Select 1)", disabled=True)
-
+            if len(selected_units) == 1:
+                col_edit.button(
+                    "✏️ Edit Selected",
+                    disabled=not is_admin,
+                    help=None if is_admin else "Admin privileges required to edit units",
+                    on_click=lambda: on_edit(selected_units[0]),
+                )
+            else:
+                col_edit.button("✏️ Edit (Select 1)", disabled=True)
 
     def render_create_form(self) -> None:
-        """Render the create unit form."""
+        """Render the create unit form (admin-only action)."""
         st.subheader("Create New Unit")
+        if not self.is_admin:
+            st.info("Only admins can create units.")
 
         with st.form("create_unit_form"):
             name = st.text_input("Unit Name", placeholder="e.g., kilogram")
             unit_type = st.selectbox(
-                "Unit Type",
-                options=["weight", "volume", "count", "measure", "package"]
+                "Unit Type", options=["weight", "volume", "count", "measure", "package"]
             )
             to_base_factor = st.number_input(
-                "Base Factor",
-                min_value=0.0001,
-                value=1.0,
-                step=0.1
+                "Base Factor", min_value=0.0001, value=1.0, step=0.1
             )
 
-            col_submit, col_cancel = st.columns([1, 1])
-
-            with col_submit:
-                submitted = st.form_submit_button("Create Unit", type="primary")
-
-            with col_cancel:
-                cancelled = st.form_submit_button("Cancel")
+            col_submit, col_cancel = st.columns(2)
+            submitted = col_submit.form_submit_button(
+                "Create Unit", type="primary", disabled=not self.is_admin
+            )
+            cancelled = col_cancel.form_submit_button("Cancel")
 
             if submitted and name and unit_type:
-                success = self.create_unit(name, unit_type, to_base_factor)
-                if success:
+                if self.create_unit(name, unit_type, to_base_factor):
                     st.rerun()
             elif submitted:
                 st.error("Please fill in all required fields.")
@@ -245,40 +252,38 @@ class UnitsPageController:
                 st.session_state.show_create_form = False
                 st.rerun()
 
-
     def render_update_form(self, unit: dict[str, Any]) -> None:
-        """Render the update unit form."""
+        """Render the update unit form (admin-only action)."""
         st.subheader(f"Update Unit: {unit.get('name', 'Unknown')}")
+        if not self.is_admin:
+            st.info("Only admins can update units.")
 
         with st.form("update_unit_form"):
-            name = st.text_input(
-                "Unit Name",
-                value=unit.get("name", ""),
-                placeholder="e.g., kilogram"
-            )
+            name = st.text_input("Unit Name", value=unit.get("name", ""))
+            type_options = ["weight", "volume", "count", "measure", "package"]
+            current_type = unit.get("type", "weight")
             unit_type = st.selectbox(
                 "Unit Type",
-                options=["weight", "volume", "count", "measure", "package"],
-                index=["weight", "volume", "count", "measure", "package"].index(unit.get("type", "weight"))
+                options=type_options,
+                index=type_options.index(current_type)
+                if current_type in type_options
+                else 0,
             )
             to_base_factor = st.number_input(
                 "Base Factor",
                 min_value=0.0001,
                 value=float(unit.get("to_base_factor", 1.0)),
-                step=0.1
+                step=0.1,
             )
 
-            col_submit, col_cancel = st.columns([1, 1])
-
-            with col_submit:
-                submitted = st.form_submit_button("Update Unit", type="primary")
-
-            with col_cancel:
-                cancelled = st.form_submit_button("Cancel")
+            col_submit, col_cancel = st.columns(2)
+            submitted = col_submit.form_submit_button(
+                "Update Unit", type="primary", disabled=not self.is_admin
+            )
+            cancelled = col_cancel.form_submit_button("Cancel")
 
             if submitted and name and unit_type:
-                success = self.update_unit(unit["id"], name, unit_type, to_base_factor)
-                if success:
+                if self.update_unit(unit["id"], name, unit_type, to_base_factor):
                     st.rerun()
             elif submitted:
                 st.error("Please fill in all required fields.")
@@ -289,42 +294,64 @@ class UnitsPageController:
                 st.rerun()
 
 
-    def render_page(self) -> None:
+    # ---------------------------------------------------------------------
+    # Page composition
+    # ---------------------------------------------------------------------
+    def render(self) -> None:
         """Render the complete Units page."""
         st.title("Units Management")
 
-        # Page controls
-        col1, col2, col3 = st.columns([1, 1, 2])
+        col_refresh, col_new = st.columns([1, 1])
+        if col_refresh.button("🔄 Refresh"):
+            self.load_units()
+            st.rerun()
 
-        with col1:
-            if st.button("🔄 Refresh"):
-                self.load_units()
-                st.rerun()
-
-        with col2:
-            if st.button("➕ New Unit"):
-                st.session_state.show_create_form = True
-                st.rerun()
+        if col_new.button(
+                "➕ New Unit",
+                disabled=not self.is_admin,
+                help=None if self.is_admin else "Admin privileges required to create units",
+        ):
+            st.session_state.show_create_form = True
+            st.rerun()
 
         st.divider()
 
-        # Load and display units
         units = self.load_units()
 
-        # Show create form if requested
         if st.session_state.show_create_form:
             self.render_create_form()
             st.divider()
 
-        # Show update form if requested
         if st.session_state.show_update_form and st.session_state.selected_unit_for_update:
             self.render_update_form(st.session_state.selected_unit_for_update)
             st.divider()
 
-        # Display units table
-        self.render_units_table(units)
+
+        def _on_delete_selected(ids: list[int]) -> None:
+            deleted = self.delete_multiple_units(ids)
+            if deleted > 0:
+                st.rerun()
 
 
-# Streamlit page entry point
-controller = UnitsPageController()
-controller.render_page()
+        def _on_edit_selected(unit_row: dict[str, Any]) -> None:
+            st.session_state.selected_unit_for_update = unit_row
+            st.session_state.show_update_form = True
+            st.rerun()
+
+
+        self._render_table(
+            units=units,
+            on_delete=_on_delete_selected,
+            on_edit=_on_edit_selected,
+            is_admin=self.is_admin,
+        )
+
+
+def main() -> None:
+    """Streamlit page entry point."""
+    st.set_page_config(page_title="Units - NUGAMOTO")
+    UnitsPageController().render()
+
+
+if __name__ == "__main__":
+    main()
