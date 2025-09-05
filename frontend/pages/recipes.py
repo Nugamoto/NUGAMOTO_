@@ -6,14 +6,13 @@ from typing import Any
 
 import streamlit as st
 
-from frontend.utils.path import ensure_frontend_on_sys_path
 from frontend.utils.layout import render_sidebar
+from frontend.utils.path import ensure_frontend_on_sys_path
 
 ensure_frontend_on_sys_path(__file__)
 
 from frontend.clients import RecipesClient, APIException
 from frontend.components.recipe_components import (
-    display_recipe_card,
     display_recipe_ingredients,
     display_recipe_steps,
     display_recipe_nutrition,
@@ -71,14 +70,74 @@ class RecipesPageController:
                 st.info("No recipes found. Try different filter criteria or create a new recipe!")
                 return
             st.success(f"📚 {len(recipes)} recipe(s) found")
+            current_user = st.session_state.get("current_user") or {}
+            current_user_id = int(current_user.get("id")) if current_user.get("id") is not None else None
+
             for recipe in recipes:
-                display_recipe_card(recipe)
+                rid = int(recipe.get("id"))
+                owner_id = recipe.get("created_by_user_id") or (recipe.get("created_by") or {}).get("id")
+                is_owner = bool(current_user_id and owner_id and int(owner_id) == int(current_user_id))
+
+                # Minimal inline card (so we control the action row)
+                st.subheader(recipe.get("title", "Untitled"))
+                if recipe.get("description"):
+                    st.write(recipe["description"])
+
+                # left meta
+                lm1, lm2, lm3, lm4 = st.columns(4)
+                if recipe.get("cuisine_type"):
+                    lm1.caption(f"🍽️ Cuisine: {str(recipe['cuisine_type']).title()}")
+                if recipe.get("meal_type"):
+                    lm2.caption(f"🕐 Meal: {str(recipe['meal_type']).title()}")
+                if recipe.get("difficulty"):
+                    lm3.caption(f"🎯 Difficulty: {str(recipe['difficulty']).title()}")
+                if recipe.get("servings"):
+                    lm4.caption(f"👥 Servings: {recipe['servings']}")
+
+                # right meta (times)
+                tm1, tm2, tm3 = st.columns(3)
+                if recipe.get("prep_time_minutes") is not None:
+                    tm1.metric("Prep", f"{int(recipe['prep_time_minutes'])} min")
+                if recipe.get("cook_time_minutes") is not None:
+                    tm2.metric("Cook", f"{int(recipe['cook_time_minutes'])} min")
+                if recipe.get("total_time_minutes") is not None:
+                    tm3.metric("Total", f"{int(recipe['total_time_minutes'])} min")
+
+                # Single action row: View Details + Edit + Delete (same line)
+                a_view, a_edit, a_del, _ = st.columns([1, 1, 1, 6])
+                if a_view.button("View Details", key=f"view_{rid}"):
+                    st.session_state.selected_recipe_id = rid
+                    st.rerun()
+
+                if a_edit.button("Edit Recipe", key=f"edit_{rid}", disabled=not is_owner):
+                    st.session_state.selected_recipe_id = rid
+                    st.session_state.recipes_edit_mode = True
+                    st.rerun()
+
+                if a_del.button("Delete Recipe", key=f"del_{rid}", disabled=not is_owner, type="secondary"):
+                    st.session_state._recipes_del_candidate = rid
+                    st.rerun()
+
+                if st.session_state.get("_recipes_del_candidate") == rid:
+                    st.warning("Delete this recipe? This action cannot be undone.")
+                    d_yes, d_no = st.columns(2)
+                    if d_yes.button("Yes, delete", key=f"confirm_del_{rid}", type="primary"):
+                        try:
+                            self.client.delete_recipe(rid)
+                            st.session_state._recipes_del_candidate = None
+                            st.success("Recipe deleted.")
+                            st.rerun()
+                        except APIException as e:
+                            st.error(f"Delete failed: {e.message}")
+                    if d_no.button("Cancel", key=f"cancel_del_{rid}"):
+                        st.session_state._recipes_del_candidate = None
+                        st.rerun()
+
+                st.divider()
         except APIException as e:
             st.error(f"API error while loading recipes: {e.message}")
         except Exception as e:
             st.error(f"Error loading recipes: {str(e)}")
-
-
     def _show_recipe_details(self, recipe_id: int) -> None:
         try:
             with st.spinner("Loading recipe..."):
