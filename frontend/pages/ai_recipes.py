@@ -7,8 +7,8 @@ from typing import Any
 
 import streamlit as st
 
-from frontend.utils.path import ensure_frontend_on_sys_path
 from frontend.utils.layout import render_sidebar
+from frontend.utils.path import ensure_frontend_on_sys_path
 
 ensure_frontend_on_sys_path(__file__)
 
@@ -26,7 +26,6 @@ class AIRecipesPageController:
         render_sidebar()
         self.ai_client, self.recipes_client = self._ensure_clients()
 
-
     @staticmethod
     def _ensure_clients() -> tuple[AIRecipesClient, RecipesClient]:
         if "ai_recipes_client" not in st.session_state:
@@ -40,7 +39,6 @@ class AIRecipesPageController:
             st.session_state.recipes_client.set_tokens(access, refresh)
         return st.session_state.ai_recipes_client, st.session_state.recipes_client
 
-
     @staticmethod
     def _require_user() -> int | None:
         cu = st.session_state.get("current_user")
@@ -49,14 +47,12 @@ class AIRecipesPageController:
             st.switch_page("pages/login.py")
         return int(cu["id"])
 
-
     @staticmethod
     def _parse_recipe_from_raw_output(raw_output: str) -> dict[str, Any]:
         try:
             return json.loads(raw_output)
         except Exception:
             return {}
-
 
     def _preview_from_output_row(self, output_row: dict[str, Any]) -> None:
         ai_output_id = output_row.get("id")
@@ -66,12 +62,10 @@ class AIRecipesPageController:
         st.session_state.ai_generated_recipe = ai_result
         st.rerun()
 
-
     @staticmethod
     def _ensure_preview_caches() -> None:
         st.session_state.setdefault("_ai_preview_food_names", {})
         st.session_state.setdefault("_ai_preview_unit_names", {})
-
 
     def _resolve_food_name(self, food_item_id: int) -> str:
         cache: dict[int, str] = st.session_state._ai_preview_food_names
@@ -85,7 +79,6 @@ class AIRecipesPageController:
         cache[food_item_id] = name
         return name
 
-
     def _resolve_unit_name(self, unit_id: int) -> str:
         cache: dict[int, str] = st.session_state._ai_preview_unit_names
         if unit_id in cache:
@@ -97,7 +90,6 @@ class AIRecipesPageController:
             name = f"#{unit_id}"
         cache[unit_id] = name
         return name
-
 
     def _normalize_ingredients_for_preview(self, raw_ingredients: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         self._ensure_preview_caches()
@@ -119,7 +111,6 @@ class AIRecipesPageController:
                 }
             )
         return normalized
-
 
     def _show_generator(self) -> None:
         st.title("🤖 AI Recipe Generator")
@@ -158,7 +149,6 @@ class AIRecipesPageController:
             st.error(f"API error while generating recipe: {e.message}")
         except Exception as e:
             st.error(f"Error generating recipe: {str(e)}")
-
 
     def _display_generated_recipe(self, ai_result: dict[str, Any], user_id: int) -> None:
         st.subheader("Preview")
@@ -211,7 +201,6 @@ class AIRecipesPageController:
                     del st.session_state.ai_generated_recipe
                 st.rerun()
 
-
     def _save_ai_recipe(self, ai_output_id: int, user_id: int) -> None:
         try:
             with st.spinner("Preparing recipe for saving..."):
@@ -241,7 +230,6 @@ class AIRecipesPageController:
         except Exception as e:
             st.error(f"Error saving recipe: {str(e)}")
 
-
     def _show_recent_ai_recipes(self) -> None:
         st.header("AI Recipe Drafts")
         user_id = self._require_user()
@@ -249,14 +237,7 @@ class AIRecipesPageController:
             return
         try:
             with st.spinner("Loading AI recipe drafts..."):
-                params = {
-                    "user_id": user_id,
-                    "target_type": "Recipe",
-                    "output_type": "recipe",
-                    "skip": 0,
-                    "limit": 50,
-                }
-                outputs = self.ai_client.get("/v1/ai/outputs/", params=params)
+                outputs = self.ai_client.list_recipe_outputs(user_id=user_id, skip=0, limit=50)
             drafts: list[dict[str, Any]] = []
             for row in outputs or []:
                 extra = row.get("extra_data") or {}
@@ -272,6 +253,7 @@ class AIRecipesPageController:
                 parsed = self._parse_recipe_from_raw_output(raw) or {}
                 title = parsed.get("title") or f"Draft #{row.get('id')}"
                 description = parsed.get("description") or ""
+
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.subheader(title)
@@ -282,13 +264,35 @@ class AIRecipesPageController:
                 with col2:
                     if st.button("Preview", key=f"preview_{row.get('id')}"):
                         self._preview_from_output_row(row)
+                    if st.button("Delete", key=f"delete_{row.get('id')}", type="secondary"):
+                        st.session_state._ai_del_candidate = int(row.get("id"))
+
+                if st.session_state.get("_ai_del_candidate") == int(row.get("id")):
+                    warn = st.container()
+                    with warn:
+                        st.warning("Delete this generated recipe? This action cannot be undone.")
+                        c_yes, c_no = st.columns(2)
+                        with c_yes:
+                            if st.button("Yes, delete", key=f"confirm_del_{row.get('id')}", type="primary"):
+                                try:
+                                    self.ai_client.delete_recipe_output(ai_output_id=int(row.get("id")),
+                                                                        user_id=int(user_id))
+                                    st.session_state._ai_del_candidate = None
+                                    st.success("Deleted.")
+                                    st.rerun()
+                                except APIException as e:
+                                    st.error(f"Delete failed: {e.message}")
+                        with c_no:
+                            if st.button("Cancel", key=f"cancel_del_{row.get('id')}"):
+                                st.session_state._ai_del_candidate = None
+                                st.rerun()
+
                 st.divider()
         except APIException as e:
             st.error("Failed to load AI recipe drafts.")
             st.code(f"Status: {e.status_code}\nMessage: {e.message}")
         except Exception as e:
             st.error(f"Error loading drafts: {str(e)}")
-
 
     def _show_preview_if_present(self) -> None:
         ai_result = st.session_state.get("ai_generated_recipe")
@@ -301,7 +305,6 @@ class AIRecipesPageController:
             st.success("Preview loaded from AI draft")
             self._display_generated_recipe(ai_result, user_id)
             st.divider()
-
 
     def render(self) -> None:
         self._show_preview_if_present()
