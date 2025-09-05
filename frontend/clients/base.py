@@ -9,12 +9,15 @@ import requests
 
 
 class APIException(Exception):
-    """Generic API exception wrapping HTTP errors."""
-
-    def __init__(self, status_code: int, message: str) -> None:
+    def __init__(self, message: str, status_code: int | None = None, response_text: str | None = None) -> None:
         super().__init__(message)
-        self.status_code = status_code
         self.message = message
+        self.status_code = status_code
+        self.response_text = response_text
+
+
+    def __str__(self) -> str:
+        return self.message
 
 
 class BaseClient:
