@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from frontend.utils.path import ensure_frontend_on_sys_path
+from frontend.utils.sidebar import render_sidebar
 
 ensure_frontend_on_sys_path(__file__)
 
@@ -20,6 +21,7 @@ class KitchensController:
 
     # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
+        render_sidebar()
         self.client = KitchensClient()
         # Tokens aus Session setzen (falls vorhanden)
         access = getattr(st.session_state, "auth_access_token", None)

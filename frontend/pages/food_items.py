@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from frontend.utils.path import ensure_frontend_on_sys_path
+from frontend.utils.sidebar import render_sidebar
 
 ensure_frontend_on_sys_path(__file__)
 
@@ -23,6 +24,7 @@ class FoodItemsPageController:
     # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         """Initialize the Food Items page controller."""
+        render_sidebar()
         self.client = FoodItemsClient()
         self.units_client = UnitsClient()
         # Tokens aus Session setzen (falls vorhanden)

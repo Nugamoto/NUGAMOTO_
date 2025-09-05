@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from frontend.utils.path import ensure_frontend_on_sys_path
+from frontend.utils.sidebar import render_sidebar
 
 ensure_frontend_on_sys_path(__file__)
 
@@ -19,6 +20,7 @@ class UsersController:
 
     def __init__(self) -> None:
         """Initialize the Users controller."""
+        render_sidebar()
         self.users_client = UsersClient()
 
         # Attach tokens if available (routes are auth-protected)
