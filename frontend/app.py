@@ -10,7 +10,7 @@ from frontend.clients.recipes_client import RecipesClient
 from frontend.clients.inventory_items_client import InventoryItemsClient
 from frontend.clients.kitchens_client import KitchensClient
 from frontend.clients.base import APIException
-from frontend.utils.sidebar import render_sidebar
+from frontend.utils.layout import render_sidebar
 
 
 def show_dashboard() -> None:

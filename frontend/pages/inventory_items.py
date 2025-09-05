@@ -10,7 +10,7 @@ from frontend.utils.path import ensure_frontend_on_sys_path
 
 ensure_frontend_on_sys_path(__file__)
 
-from frontend.utils.sidebar import render_sidebar
+from frontend.utils.layout import render_sidebar
 from frontend.clients import (
     InventoryItemsClient,
     FoodItemsClient,
