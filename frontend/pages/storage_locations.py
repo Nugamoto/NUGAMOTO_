@@ -7,8 +7,8 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from frontend.utils.path import ensure_frontend_on_sys_path
 from frontend.utils.layout import render_sidebar
+from frontend.utils.path import ensure_frontend_on_sys_path
 
 ensure_frontend_on_sys_path(__file__)
 
@@ -18,13 +18,9 @@ from frontend.clients import StorageLocationsClient, APIException
 class StorageLocationsController:
     """Controller for Storage Locations management page."""
 
-
-    # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         render_sidebar()
-        """Initialize the controller."""
         self.client = StorageLocationsClient()
-        # Tokens aus Session setzen (falls vorhanden)
         access = getattr(st.session_state, "auth_access_token", None)
         refresh = getattr(st.session_state, "auth_refresh_token", None)
         if access:
@@ -33,11 +29,8 @@ class StorageLocationsController:
 
     @staticmethod
     def _initialize_session_state() -> None:
-        """Initialize session state variables for this page."""
         if "storage_locations_data" not in st.session_state:
             st.session_state.storage_locations_data = []
-        if "selected_kitchen_id" not in st.session_state:
-            st.session_state.selected_kitchen_id = 1  # Default to Kitchen 1
         if "show_create_form" not in st.session_state:
             st.session_state.show_create_form = False
         if "show_update_form" not in st.session_state:
@@ -45,14 +38,10 @@ class StorageLocationsController:
         if "selected_location_for_update" not in st.session_state:
             st.session_state.selected_location_for_update = None
 
-
     def load_locations(self, kitchen_id: int) -> list[dict[str, Any]]:
-        """Load storage locations from the API for a specific kitchen."""
         try:
             locations = self.client.list_storage_locations(kitchen_id=kitchen_id)
-            st.session_state.storage_locations_data = sorted(
-                locations, key=lambda x: x.get("id", 0)
-            )
+            st.session_state.storage_locations_data = sorted(locations, key=lambda x: x.get("id", 0))
             return st.session_state.storage_locations_data
         except APIException as e:
             st.error(f"Failed to load locations for Kitchen {kitchen_id}: {e.message}")
@@ -61,11 +50,8 @@ class StorageLocationsController:
             st.error(f"An unexpected error occurred: {str(e)}")
             return []
 
-
     def create_location(self, name: str, kitchen_id: int) -> bool:
-        """Create a new storage location."""
         try:
-            # Pass name and kitchen_id separately to the client method
             created = self.client.create_storage_location(name=name.strip(), kitchen_id=kitchen_id)
             if created:
                 st.success(f"Location '{name}' created successfully.")
@@ -79,9 +65,7 @@ class StorageLocationsController:
             st.error(f"A validation error occurred: {str(e)}")
             return False
 
-
     def update_location(self, location_id: int, name: str) -> bool:
-        """Update an existing storage location."""
         try:
             location_data = {"name": name.strip()}
             updated = self.client.update_storage_location(location_id, location_data)
@@ -98,9 +82,7 @@ class StorageLocationsController:
             st.error(f"A validation error occurred: {str(e)}")
             return False
 
-
     def delete_locations(self, location_ids: list[int]) -> int:
-        """Delete one or more storage locations."""
         deleted_count = 0
         errors = []
         for location_id in location_ids:
@@ -115,9 +97,7 @@ class StorageLocationsController:
             st.error(f"Errors: {'; '.join(errors)}")
         return deleted_count
 
-
     def render_locations_table(self, locations: list[dict[str, Any]]) -> None:
-        """Render the storage locations data table."""
         if not locations:
             st.info("No storage locations found for this kitchen.")
             return
@@ -158,13 +138,11 @@ class StorageLocationsController:
             else:
                 col2.button("Edit (Select 1)", disabled=True)
 
-
     def render_create_form(self) -> None:
-        """Render the form for creating a new location."""
         with st.form("create_location_form"):
             st.subheader("Create New Storage Location")
             name = st.text_input("Location Name*", placeholder="e.g., Refrigerator")
-            kitchen_id = st.session_state.selected_kitchen_id
+            kitchen_id = int(st.session_state["selected_kitchen_id"])
             st.info(f"This location will be added to Kitchen ID: **{kitchen_id}**")
 
             c1, c2, _ = st.columns([1, 1, 4])
@@ -178,9 +156,7 @@ class StorageLocationsController:
                 st.session_state.show_create_form = False
                 st.rerun()
 
-
     def render_update_form(self, location: dict[str, Any]) -> None:
-        """Render the form for updating a location."""
         with st.form("update_location_form"):
             st.subheader(f"Update Location: {location.get('name', '')}")
             name = st.text_input("Location Name*", value=location.get("name", ""))
@@ -196,20 +172,14 @@ class StorageLocationsController:
                 st.session_state.selected_location_for_update = None
                 st.rerun()
 
-
     def render(self) -> None:
-        """Render the main page layout."""
         st.title("Storage Locations")
 
-        # Kitchen Selector
-        kitchen_id = st.number_input(
-            "Select Kitchen ID",
-            min_value=1,
-            step=1,
-            key="selected_kitchen_id",
-            on_change=lambda: st.session_state.update(show_create_form=False, show_update_form=False)
-        )
+        if not st.session_state.get("selected_kitchen_id"):
+            st.info("Please select a kitchen in the top bar to manage locations.")
+            return
 
+        kitchen_id = int(st.session_state["selected_kitchen_id"])
         st.divider()
 
         c1, c2, _ = st.columns([1, 1, 4])
@@ -230,7 +200,6 @@ class StorageLocationsController:
             self.render_update_form(st.session_state.selected_location_for_update)
             st.divider()
         self.render_locations_table(locations)
-
 
 def main() -> None:
     """Main function to run the page."""
