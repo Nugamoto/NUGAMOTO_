@@ -196,24 +196,39 @@ def delete_food_item(
 ) -> Response:
     """Delete a food item.
 
-    Args:
-        db: Database session
-        food_item_id: Food item ID
-
     Returns:
         Empty response with 204 status
 
     Raises:
-        HTTPException: 404 if food item not found
+        HTTPException:
+            - 404 if food item not found
+            - 400 if the item is referenced by inventory items
     """
-    success = crud_food.delete_food_item(db=db, food_item_id=food_item_id)
-    if not success:
+    try:
+        success = crud_food.delete_food_item(db=db, food_item_id=food_item_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Food item with ID {food_item_id} not found",
+            )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ValueError as exc:
+        # Raised when inventory references exist
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Food item with ID {food_item_id} not found"
-        )
-
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except IntegrityError as exc:
+        # Safety net: transform DB integrity to a user-friendly 400
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Cannot delete this food item due to existing references "
+                "(e.g., inventory items or conversions). "
+                "Please remove dependencies first."
+            ),
+        ) from exc
 
 
 @food_items_router.get(

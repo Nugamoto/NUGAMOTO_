@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.crud.core import get_conversion_factor
 from backend.models.food import FoodItem, FoodItemUnitConversion, FoodItemAlias
+from backend.models.inventory import InventoryItem
 from backend.schemas.food import (
     FoodItemCreate, FoodItemRead, FoodItemUpdate,
     FoodItemUnitConversionCreate, FoodItemUnitConversionRead,
@@ -226,24 +227,36 @@ def update_food_item(
 def delete_food_item(db: Session, food_item_id: int) -> bool:
     """Delete a food item.
 
+    Will refuse deletion if the food item is currently referenced by any
+    inventory items to avoid breaking NOT NULL constraints.
+
     Args:
         db: Database session
         food_item_id: Food item ID to delete
 
     Returns:
         True if deleted, False if not found
+
+    Raises:
+        ValueError: If inventory items reference this food item.
     """
     db_food_item = db.scalar(
-        select(FoodItem)
-        .where(FoodItem.id == food_item_id)
+        select(FoodItem).where(FoodItem.id == food_item_id)
     )
-    
     if not db_food_item:
         return False
 
+    has_refs = db.scalar(
+        select(InventoryItem.id).where(InventoryItem.food_item_id == food_item_id).limit(1)
+    )
+    if has_refs is not None:
+        raise ValueError(
+            "Cannot delete this food item because it is used in inventory. "
+            "Remove or reassign related inventory items first."
+        )
+
     db.delete(db_food_item)
     db.commit()
-
     return True
 
 
