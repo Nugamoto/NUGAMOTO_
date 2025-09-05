@@ -8,23 +8,17 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-# Ensure local imports work both in IDE and when run by Streamlit
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-try:
-    from clients import (
-        InventoryItemsClient,
-        FoodItemsClient,
-        StorageLocationsClient,
-        APIException,
-    )
-except ImportError:
-    from frontend.clients import (
-        InventoryItemsClient,
-        FoodItemsClient,
-        StorageLocationsClient,
-        APIException,
-    )
+from frontend.utils.sidebar import render_sidebar
+from frontend.clients import (
+    InventoryItemsClient,
+    FoodItemsClient,
+    StorageLocationsClient,
+    APIException,
+)
 
 
 class InventoryController:
@@ -32,6 +26,8 @@ class InventoryController:
 
     # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
+        render_sidebar()
+
         self.inv_client = InventoryItemsClient()
         self.food_client = FoodItemsClient()
         self.loc_client = StorageLocationsClient()
