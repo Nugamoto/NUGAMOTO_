@@ -22,7 +22,6 @@ from frontend.clients import (
 class InventoryController:
     """Encapsulates all UI and API logic for the inventory page."""
 
-    # ----------------------------- construction ---------------------- #
     def __init__(self) -> None:
         render_sidebar()
 
@@ -30,7 +29,6 @@ class InventoryController:
         self.food_client = FoodItemsClient()
         self.loc_client = StorageLocationsClient()
 
-        # Tokens aus Session setzen (falls vorhanden)
         access = getattr(st.session_state, "auth_access_token", None)
         refresh = getattr(st.session_state, "auth_refresh_token", None)
         if access:
@@ -40,8 +38,7 @@ class InventoryController:
 
         self._init_state()
 
-        # aktuell gewählte Kitchen lokal merken (für PATCH/DELETE)
-        self.current_kitchen_id: int = int(st.session_state.get("kitchen_id", 1))
+        self.current_kitchen_id: int | None = st.session_state.get("selected_kitchen_id")
 
     @staticmethod
     def _init_state() -> None:
@@ -49,7 +46,6 @@ class InventoryController:
             "inv_rows": [],
             "food_master": [],
             "loc_master": [],
-            "kitchen_id": 1,
             "show_add": False,
             "show_edit": False,
             "row_for_edit": None,
@@ -58,20 +54,15 @@ class InventoryController:
         for key, val in defaults.items():
             st.session_state.setdefault(key, val)
 
-    # ----------------------------- data loading ---------------------- #
     def _load_master_data(self, kitchen_id: int) -> None:
-        """Load food items & storage locations into session-state."""
         self.current_kitchen_id = int(kitchen_id)
         try:
             st.session_state.food_master = self.food_client.list_food_items(limit=1000)
-            st.session_state.loc_master = self.loc_client.list_storage_locations(
-                kitchen_id
-            )
+            st.session_state.loc_master = self.loc_client.list_storage_locations(kitchen_id)
         except APIException as exc:
             st.error(f"Failed to load master data: {exc.message}")
 
     def _load_inventory(self, kitchen_id: int) -> list[dict[str, Any]]:
-        """Load inventory items and cache them."""
         try:
             rows = self.inv_client.list_inventory_items(kitchen_id)
             st.session_state.inv_rows = sorted(rows, key=lambda x: x["id"])
@@ -80,19 +71,13 @@ class InventoryController:
             st.error(f"Failed to load inventory: {exc.message}")
             return []
 
-    # ----------------------------- helpers --------------------------- #
     @staticmethod
     def _unit_cell(item: dict[str, Any]) -> str:
-        symbol = (
-            item.get("food_item", {})
-            .get("base_unit", {})
-            .get("symbol")
-        )
+        symbol = item.get("food_item", {}).get("base_unit", {}).get("symbol")
         return symbol or item.get("base_unit_name", "N/A")
 
     @staticmethod
     def _apply_filter(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Return rows filtered according to current selection."""
         mode = st.session_state.get("inv_filter", "All")
         if mode == "Low stock":
             return [r for r in rows if r.get("is_low_stock")]
@@ -102,14 +87,11 @@ class InventoryController:
             return [r for r in rows if r.get("is_expired")]
         return rows
 
-    # ------------------------- table rendering ----------------------- #
     def render_table(self, rows: list[dict[str, Any]]) -> None:
-        """Render inventory rows and handle selection actions."""
         if not rows:
             st.info("No inventory items found for this kitchen.")
             return
 
-        # Build DataFrame
         df = pd.DataFrame(
             {
                 "ID": [r["id"] for r in rows],
@@ -133,7 +115,6 @@ class InventoryController:
 
         if event.selection.rows:
             selected = [rows[df.index[i]] for i in event.selection.rows]
-
             st.write(f"**{len(selected)} item(s) selected**")
             col_del, col_edit, _ = st.columns([1, 1, 4])
 
@@ -146,11 +127,11 @@ class InventoryController:
                     st.session_state.show_edit = True
                     st.rerun()
 
-    # ----------------------------- CRUD helpers ---------------------- #
     def _bulk_delete(self, item_ids: list[int]) -> None:
         errors = 0
         for iid in item_ids:
             try:
+                assert self.current_kitchen_id is not None
                 self.inv_client.delete_item(iid, kitchen_id=self.current_kitchen_id)
             except APIException:
                 errors += 1
@@ -173,12 +154,7 @@ class InventoryController:
                 self.inv_client.create_or_update_item(kitchen_id, payload)
             else:
                 assert item_id is not None
-                # PATCH erfordert kitchen_id als Query-Parameter
-                self.inv_client.update_item_details(
-                    item_id,
-                    payload,
-                    kitchen_id=kitchen_id,
-                )
+                self.inv_client.update_item_details(item_id, payload, kitchen_id=kitchen_id)
             st.success("Inventory item saved")
             st.session_state.show_add = False
             st.session_state.show_edit = False
@@ -186,7 +162,6 @@ class InventoryController:
         except APIException as exc:
             st.error(f"API error: {exc.message}")
 
-    # ------------------------- add / edit form ----------------------- #
     def _render_form(
             self,
             *,
@@ -197,14 +172,8 @@ class InventoryController:
         title = "Add Inventory Item" if is_new else "Edit Inventory Item"
         st.subheader(title)
 
-        food_map = {
-            f'{f["name"]} (ID {f["id"]})': f["id"]
-            for f in st.session_state.food_master
-        }
-        loc_map = {
-            f'{l["name"]} (ID {l["id"]})': l["id"]
-            for l in st.session_state.loc_master
-        }
+        food_map = {f'{f["name"]} (ID {f["id"]})': f["id"] for f in st.session_state.food_master}
+        loc_map = {f'{l["name"]} (ID {l["id"]})': l["id"] for l in st.session_state.loc_master}
 
         def _def(key: str) -> Any:
             return defaults.get(key) if defaults else None
@@ -224,24 +193,12 @@ class InventoryController:
                 if _def("storage_location_id") in loc_map.values()
                 else 0,
             )
-
-            qty = st.number_input(
-                "Quantity (base unit)",
-                min_value=0.0,
-                step=0.1,
-                value=float(_def("quantity") or 0),
-            )
-            min_qty = st.number_input(
-                "Minimum Quantity (optional)",
-                min_value=0.0,
-                step=0.1,
-                value=float(_def("min_quantity") or 0),
-            )
+            qty = st.number_input("Quantity (base unit)", min_value=0.0, step=0.1, value=float(_def("quantity") or 0))
+            min_qty = st.number_input("Minimum Quantity (optional)", min_value=0.0, step=0.1,
+                                      value=float(_def("min_quantity") or 0))
             exp_date = st.date_input(
                 "Expiration Date (optional)",
-                value=dt.date.fromisoformat(_def("expiration_date"))
-                if _def("expiration_date")
-                else dt.date.today(),
+                value=dt.date.fromisoformat(_def("expiration_date")) if _def("expiration_date") else dt.date.today(),
             )
 
             col_save, col_cancel = st.columns(2)
@@ -253,52 +210,35 @@ class InventoryController:
                     "min_quantity": min_qty or None,
                     "expiration_date": exp_date.isoformat() if exp_date else None,
                 }
-                self._save_item(
-                    is_new=is_new,
-                    kitchen_id=kitchen_id,
-                    payload=payload,
-                    item_id=_def("id"),
-                )
+                self._save_item(is_new=is_new, kitchen_id=kitchen_id, payload=payload, item_id=_def("id"))
 
             if col_cancel.form_submit_button("Cancel"):
                 st.session_state.show_add = False
                 st.session_state.show_edit = False
                 st.rerun()
 
-    # ------------------------------ render --------------------------- #
     def render(self) -> None:
-        """Main page renderer."""
         st.title("Inventory Items")
 
-        # Kitchen selector
-        kitchen_id = st.number_input(
-            "Kitchen ID",
-            min_value=1,
-            step=1,
-            key="kitchen_id",
-        )
-        self.current_kitchen_id = int(kitchen_id)
+        if not st.session_state.get("selected_kitchen_id"):
+            st.info("Please select a kitchen in the top bar to view inventory.")
+            return
+
+        self.current_kitchen_id = int(st.session_state["selected_kitchen_id"])
         self._load_master_data(self.current_kitchen_id)
 
-        # Action buttons
         col_ref, col_add, _ = st.columns([1, 1, 6])
         if col_ref.button("Refresh"):
             self._load_inventory(self.current_kitchen_id)
         if col_add.button("Add Item"):
             st.session_state.show_add = True
 
-        # Filter selector with Apply / Clear
         col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
         with col_f1:
             selected_mode = st.selectbox(
                 "Filter",
                 ("All", "Low stock", "Expires soon", "Expired"),
-                index=(
-                    "All",
-                    "Low stock",
-                    "Expires soon",
-                    "Expired",
-                ).index(st.session_state.inv_filter),
+                index=("All", "Low stock", "Expires soon", "Expired").index(st.session_state.inv_filter),
                 key="inv_filter_select",
             )
         with col_f2:
@@ -312,7 +252,6 @@ class InventoryController:
 
         st.divider()
 
-        # Forms
         if st.session_state.show_add:
             self._render_form(is_new=True, kitchen_id=self.current_kitchen_id)
 
@@ -323,11 +262,9 @@ class InventoryController:
                 defaults=st.session_state.row_for_edit,
             )
 
-        # Data table
         all_rows = self._load_inventory(self.current_kitchen_id)
         filtered_rows = self._apply_filter(all_rows)
         self.render_table(filtered_rows)
-
 
 def main() -> None:
     st.set_page_config(page_title="Inventory - NUGAMOTO")
