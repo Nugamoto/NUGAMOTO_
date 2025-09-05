@@ -54,7 +54,8 @@ def create_token(
 
 
 def create_access_token(
-        user_id: int, extra_claims: dict[str, Any] | None = None
+        user_id: int,
+        extra_claims: dict[str, Any] | None = None,
 ) -> str:
     """Create a short-lived access token.
 
@@ -76,7 +77,8 @@ def create_access_token(
 
 
 def create_refresh_token(
-        user_id: int, extra_claims: dict[str, Any] | None = None
+        user_id: int,
+        extra_claims: dict[str, Any] | None = None,
 ) -> str:
     """Create a long-lived refresh token.
 
