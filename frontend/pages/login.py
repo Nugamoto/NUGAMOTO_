@@ -4,22 +4,16 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-import sys
 from typing import Any
 
 import streamlit as st
 
-# Add frontend to path for runtime
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from frontend.utils.path import ensure_frontend_on_sys_path
 
-# Direct imports for IDE resolution
-try:
-    from clients.auth_client import AuthClient
-    from clients.base import APIException
-except ImportError:
-    from frontend.clients.auth_client import AuthClient
-    from frontend.clients.base import APIException
+ensure_frontend_on_sys_path(__file__)
+
+from frontend.clients.auth_client import AuthClient
+from frontend.clients.base import APIException
 
 
 def _init_auth_state() -> None:

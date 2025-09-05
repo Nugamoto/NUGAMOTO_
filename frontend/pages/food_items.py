@@ -2,26 +2,18 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-# Add frontend to path for runtime
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from frontend.utils.path import ensure_frontend_on_sys_path
 
-# Direct imports for IDE resolution
-try:
-    from clients.food_items_client import FoodItemsClient
-    from clients.units_client import UnitsClient
-    from clients.base import APIException
-except ImportError:
-    # Fallback for different execution contexts
-    from frontend.clients.food_items_client import FoodItemsClient
-    from frontend.clients.units_client import UnitsClient
-    from frontend.clients.base import APIException
+ensure_frontend_on_sys_path(__file__)
+
+from frontend.clients.food_items_client import FoodItemsClient
+from frontend.clients.units_client import UnitsClient
+from frontend.clients.base import APIException
 
 
 class FoodItemsPageController:

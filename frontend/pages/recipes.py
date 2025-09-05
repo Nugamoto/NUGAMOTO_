@@ -2,40 +2,25 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any
 
 import streamlit as st
 
-# Add frontend to path for runtime
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from frontend.utils.path import ensure_frontend_on_sys_path
 
-# Direct imports for IDE resolution (consistent with other working pages)
-try:
-    from clients import RecipesClient, APIException
-    from components.recipe_components import (
-        display_recipe_card,
-        display_recipe_ingredients,
-        display_recipe_steps,
-        display_recipe_nutrition,
-        display_recipe_reviews,
-        create_recipe_review_form,
-        display_recipe_filter_sidebar,
-        display_cook_recipe_button,
-    )
-except ImportError:
-    from frontend.clients import RecipesClient, APIException
-    from frontend.components.recipe_components import (
-        display_recipe_card,
-        display_recipe_ingredients,
-        display_recipe_steps,
-        display_recipe_nutrition,
-        display_recipe_reviews,
-        create_recipe_review_form,
-        display_recipe_filter_sidebar,
-        display_cook_recipe_button,
-    )
+ensure_frontend_on_sys_path(__file__)
+
+from frontend.clients import RecipesClient, APIException
+from frontend.components.recipe_components import (
+    display_recipe_card,
+    display_recipe_ingredients,
+    display_recipe_steps,
+    display_recipe_nutrition,
+    display_recipe_reviews,
+    create_recipe_review_form,
+    display_recipe_filter_sidebar,
+    display_cook_recipe_button,
+)
 
 
 def _ensure_client() -> RecipesClient:

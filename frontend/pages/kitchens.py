@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from frontend.utils.path import ensure_frontend_on_sys_path
 
-try:
-    from clients import KitchensClient, APIException
-except ImportError:
-    from frontend.clients import KitchensClient, APIException
+ensure_frontend_on_sys_path(__file__)
+
+from frontend.clients import KitchensClient, APIException
 
 
 class KitchensController:

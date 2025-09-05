@@ -3,31 +3,22 @@
 from __future__ import annotations
 
 import json
-import os
-import sys
 from typing import Any
 
 import streamlit as st
 
-# Add frontend to path for runtime
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from frontend.utils.path import ensure_frontend_on_sys_path
 
-try:
-    from clients import AIRecipesClient, RecipesClient, APIException
-    from components.recipe_components import (
-        display_ai_recipe_generation_form,
-        display_recipe_ingredients,
-        display_recipe_steps,
-        display_recipe_nutrition,
-    )
-except ImportError:
-    from frontend.clients import AIRecipesClient, RecipesClient, APIException
-    from frontend.components.recipe_components import (
-        display_ai_recipe_generation_form,
-        display_recipe_ingredients,
-        display_recipe_steps,
-        display_recipe_nutrition,
-    )
+ensure_frontend_on_sys_path(__file__)
+
+from frontend.clients import AIRecipesClient, RecipesClient, APIException
+from frontend.components.recipe_components import (
+    display_ai_recipe_generation_form,
+    display_recipe_ingredients,
+    display_recipe_steps,
+    display_recipe_nutrition,
+)
+
 
 
 def _ensure_clients() -> tuple[AIRecipesClient, RecipesClient]:
@@ -48,7 +39,6 @@ def _require_user() -> int | None:
     if not isinstance(cu, dict) or cu.get("id") is None:
         st.warning("User context missing. Please login again.")
         st.switch_page("pages/login.py")
-        return None
     return int(cu["id"])
 
 

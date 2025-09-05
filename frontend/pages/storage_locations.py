@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-# Add frontend to path for runtime
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from frontend.utils.path import ensure_frontend_on_sys_path
 
-# Direct imports for IDE resolution
-try:
-    from clients import StorageLocationsClient, APIException
-except ImportError:
-    from frontend.clients import StorageLocationsClient, APIException
+ensure_frontend_on_sys_path(__file__)
+
+from frontend.clients import StorageLocationsClient, APIException
 
 
 class StorageLocationsController:

@@ -13,30 +13,21 @@ Features
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-# ------------------------------------------------------------------ #
-# Import path so IDE + runtime both resolve client modules           #
-# ------------------------------------------------------------------ #
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from frontend.utils.path import ensure_frontend_on_sys_path
 
-try:
-    from clients import (
-        UserHealthClient,
-        UsersClient,
-        APIException,
-    )
-except ImportError:  # fallback for "python …"
-    from frontend.clients import (
-        UserHealthClient,
-        UsersClient,
-        APIException,
-    )
+ensure_frontend_on_sys_path(__file__)
+
+from frontend.clients import (
+    UserHealthClient,
+    UsersClient,
+    APIException,
+)
+
 
 
 class UserHealthController:
@@ -298,7 +289,7 @@ class UserHealthController:
 
             if search_clicked:
                 # Base search on the full dataset, not the current view
-                base_rows = st.session_state.health_rows_all or self._load_health_profiles(force=True)
+                st.session_state.health_rows_all or self._load_health_profiles(force=True)
 
                 params: dict[str, Any] = {}
                 min_age = _to_int(min_age_str)

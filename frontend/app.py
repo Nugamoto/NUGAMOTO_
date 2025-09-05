@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
-import sys
-
 import streamlit as st
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+from frontend.utils.path import ensure_frontend_on_sys_path
+
+ensure_frontend_on_sys_path(__file__)
 
 from frontend.clients.recipes_client import RecipesClient
 from frontend.clients.inventory_items_client import InventoryItemsClient
