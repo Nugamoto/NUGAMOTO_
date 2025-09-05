@@ -26,7 +26,7 @@ def hide_native_pages_nav() -> None:
             white-space: nowrap;
         }
         .label {
-            opacity: 0.8; font-size: 0.9rem; margin-right: 6px;
+            opacity: 0.85; font-size: 0.9rem; margin-right: 4px;
         }
         </style>
         """,
@@ -107,12 +107,11 @@ def _render_topbar() -> None:
         left, right = st.columns([7, 5], vertical_alignment="center")
 
         with left:
-            l1, l2 = st.columns([2, 10], vertical_alignment="center")
-            with l1:
-                if email:
+            if email:
+                c1, c2 = st.columns([1, 11], vertical_alignment="center")
+                with c1:
                     st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
-            with l2:
-                if email:
+                with c2:
                     kitchens = _load_kitchens_for_user()
                     if kitchens:
                         labels = [f"{k['name']} ({k['role']})" for k in kitchens]
@@ -136,7 +135,7 @@ def _render_topbar() -> None:
                         st.session_state.selected_kitchen_role = chosen["role"]
 
         with right:
-            r1, r2, r3 = st.columns([6, 2, 2], vertical_alignment="center")
+            r1, r2, r3 = st.columns([7, 1.5, 1.5], vertical_alignment="center")
             with r1:
                 if email:
                     role_txt = "Admin" if is_admin else "User"
@@ -173,19 +172,16 @@ def _render_topbar() -> None:
 def render_sidebar() -> None:
     _render_topbar()
 
-    # responsive logo (fills sidebar width) and acts as dashboard button
-    st.sidebar.button(
-        "",
-        key="sb_logo_btn",
-        use_container_width=True,
-        on_click=lambda: st.session_state.update(_nav_target="app.py"),
-    )
-    st.sidebar.image(_logo_path(), use_container_width=True)
+    # Single clickable element: full-width page link styled by image below it.
+    # Streamlit does not support image-as-button with switch_page directly,
+    # so we provide the image and a compact page link right under it.
+    st.sidebar.image(_logo_path(), use_container_width=True, output_format="PNG", clamp=True, caption=None,
+                     channels="RGB")
+    st.sidebar.page_link("app.py", label="🏠 Dashboard", icon=None)
     st.sidebar.markdown("---")
     st.sidebar.subheader("Navigation")
 
     items = [
-        ("🏠 Dashboard", "app.py"),
         ("🤖 AI Recipes", "pages/ai_recipes.py"),
         ("📖 Recipes", "pages/recipes.py"),
         ("📦 Inventory Items", "pages/inventory_items.py"),
@@ -199,15 +195,6 @@ def render_sidebar() -> None:
     ]
 
     for label, target in items:
-        st.sidebar.button(
-            label,
-            key=f"nav_{label}",
-            use_container_width=True,
-            on_click=lambda t=target: st.session_state.update(_nav_target=t),
-        )
+        st.sidebar.page_link(target, label=label)
 
     st.sidebar.markdown("---")
-
-    nav_target = st.session_state.pop("_nav_target", None)
-    if nav_target:
-        st.switch_page(nav_target)
