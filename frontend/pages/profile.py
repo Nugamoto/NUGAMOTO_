@@ -36,9 +36,7 @@ class ProfilePageController:
         if not isinstance(cu, dict) or cu.get("id") is None:
             st.warning("User context missing. Please login.")
             st.switch_page("pages/login.py")
-            return None
         return int(cu["id"])
-
 
     @staticmethod
     def _metric_row(items: list[tuple[str, str]]) -> None:
@@ -47,7 +45,51 @@ class ProfilePageController:
             col.metric(label, value)
 
 
-    def _render_overview(self, user: dict[str, Any]) -> None:
+    @staticmethod
+    def _addr_lines(creds: dict[str, Any] | None) -> list[str]:
+        if not isinstance(creds, dict):
+            return []
+        lines: list[str] = []
+        fn = creds.get("full_name")
+        if fn:
+            lines.append(str(fn))
+        addr = creds.get("address")
+        if addr:
+            lines.append(str(addr))
+        city_line = " ".join([p for p in [creds.get("postal_code"), creds.get("city")] if p])
+        if city_line:
+            lines.append(city_line)
+        country = creds.get("country")
+        if country:
+            lines.append(str(country))
+        return lines
+
+
+    @staticmethod
+    def _health_summary(profile: dict[str, Any] | None) -> dict[str, str]:
+        if not isinstance(profile, dict):
+            return {
+                "Age": "–",
+                "Gender": "–",
+                "Height": "–",
+                "Weight": "–",
+                "BMI": "–",
+                "Activity": "–",
+                "Goal": "–",
+            }
+        bmi = profile.get("bmi")
+        return {
+            "Age": str(profile.get("age") or "–"),
+            "Gender": str(profile.get("gender") or "–").title() if profile.get("gender") else "–",
+            "Height": f"{int(profile['height_cm'])} cm" if profile.get("height_cm") else "–",
+            "Weight": f"{float(profile['weight_kg']):.1f} kg" if profile.get("weight_kg") else "–",
+            "BMI": f"{bmi:.1f}" if isinstance(bmi, (int, float)) else "–",
+            "Activity": str(profile.get("activity_level") or "–").title() if profile.get("activity_level") else "–",
+            "Goal": str(profile.get("goal") or "–"),
+        }
+
+
+    def _render_overview(self, user_id: int, user: dict[str, Any]) -> None:
         st.subheader("Overview")
         email = user.get("email", "unknown")
         name = user.get("name", "unknown")
@@ -57,221 +99,121 @@ class ProfilePageController:
         kitchen_role = st.session_state.get("selected_kitchen_role")
         kitchen_role_txt = str(kitchen_role).title() if kitchen_role else "–"
 
-        self._metric_row(
-            [
-                ("Name", name),
-                ("Email", email),
-                ("Role", role_txt),
-            ]
-        )
+        self._metric_row([("Name", name), ("Email", email), ("Role", role_txt)])
         st.markdown("---")
         st.subheader("Kitchen Context")
         self._metric_row(
+            [("Kitchen", str(kitchen_name)), ("Kitchen ID", str(kitchen_id)), ("Your Role", kitchen_role_txt)]
+        )
+
+        st.markdown("---")
+        st.subheader("Lifestyle Summary")
+        dt = user.get("diet_type") or "–"
+        allergies = user.get("allergies") or "–"
+        prefs = user.get("preferences") or "–"
+        self._metric_row(
             [
-                ("Kitchen", str(kitchen_name)),
-                ("Kitchen ID", str(kitchen_id)),
-                ("Your Role", kitchen_role_txt),
+                ("Diet", str(dt).replace("-", " ").title() if dt != "–" else "–"),
+                ("Allergies", allergies),
+                ("Preferences", prefs),
             ]
         )
-        st.markdown("---")
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("Dashboard"):
-                st.switch_page("app.py")
-        with c2:
-            if st.button("Logout"):
-                st.session_state.auth_access_token = None
-                st.session_state.auth_refresh_token = None
-                st.session_state.auth_email = None
-                st.session_state.is_admin = False
-                st.session_state.current_user = None
-                st.success("Signed out.")
-                st.rerun()
 
+        st.markdown("---")
+        st.subheader("Health Summary")
+        try:
+            profile = self.health_client.get_user_health_profile(user_id)
+        except APIException:
+            profile = None
+        hs = self._health_summary(profile)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Age", hs["Age"])
+        c2.metric("Gender", hs["Gender"])
+        c3.metric("BMI", hs["BMI"])
+        c4, c5, c6 = st.columns(3)
+        c4.metric("Height", hs["Height"])
+        c5.metric("Weight", hs["Weight"])
+        c6.metric("Activity", hs["Activity"])
+        if hs["Goal"] and hs["Goal"] != "–":
+            st.info(f"Goal: {hs['Goal']}")
+
+        if st.button("Edit Health", key="btn_overview_edit_health"):
+            st.switch_page("pages/profile_edit_health.py")
+        if st.button("Dashboard", key="btn_overview_dashboard"):
+            st.switch_page("app.py")
+        if st.button("Logout", key="btn_overview_logout"):
+            st.session_state.auth_access_token = None
+            st.session_state.auth_refresh_token = None
+            st.session_state.auth_email = None
+            st.session_state.is_admin = False
+            st.session_state.current_user = None
+            st.success("Signed out.")
+            st.rerun()
 
     def _render_credentials(self, user_id: int) -> None:
         st.subheader("Credentials")
         try:
             creds = self.creds_client.get_user_credentials(user_id)
-            mode = "edit"
         except APIException:
             creds = None
-            mode = "create"
 
+        if not creds:
+            st.info("No credentials yet.")
+            if st.button("Create Credentials", key="btn_creds_create", type="primary"):
+                st.switch_page("pages/profile_edit_credentials.py")
+            return
 
-        def _def(key: str) -> Any:
-            return creds.get(key) if isinstance(creds, dict) else None
-
-
-        with st.form("profile_credentials_form", clear_on_submit=False):
-            col_p, col_n = st.columns(2)
-            with col_p:
-                first_name = st.text_input("First Name", value=_def("first_name") or "")
-            with col_n:
-                last_name = st.text_input("Last Name", value=_def("last_name") or "")
-            address = st.text_area("Address", value=_def("address") or "", height=80)
-            col_city, col_zip, col_country = st.columns(3)
-            with col_city:
-                city = st.text_input("City", value=_def("city") or "")
-            with col_zip:
-                postal_code = st.text_input("Postal Code", value=_def("postal_code") or "")
-            with col_country:
-                country = st.text_input("Country", value=_def("country") or "")
-            phone = st.text_input("Phone", value=_def("phone") or "")
-
-            st.markdown("---")
-            pw_col1, pw_col2 = st.columns(2)
-            if mode == "create":
-                password = pw_col1.text_input("Password", type="password")
-                confirm_password = pw_col2.text_input("Confirm Password", type="password")
-            else:
-                new_password = pw_col1.text_input("New Password (optional)", type="password")
-                confirm_new_password = pw_col2.text_input("Confirm New Password", type="password")
-
-            col_save, col_cancel = st.columns(2)
-            save_clicked = col_save.form_submit_button("Save", type="primary")
-            cancel_clicked = col_cancel.form_submit_button("Cancel")
-
-            if save_clicked:
-                payload: dict[str, Any] = {
-                    "first_name": first_name or None,
-                    "last_name": last_name or None,
-                    "address": address or None,
-                    "city": city or None,
-                    "postal_code": postal_code or None,
-                    "country": country or None,
-                    "phone": phone or None,
-                }
-                try:
-                    if mode == "create":
-                        if not password:
-                            st.error("Password required")
-                            return
-                        if password != confirm_password:
-                            st.error("Passwords do not match")
-                            return
-                        payload["password_hash"] = password
-                        self.creds_client.create_user_credentials(user_id, payload)
-                        st.success("Credentials created")
-                    else:
-                        if new_password or confirm_new_password:
-                            if not new_password:
-                                st.error("Please provide the new password")
-                                return
-                            if new_password != confirm_new_password:
-                                st.error("New passwords do not match")
-                                return
-                            payload["password_hash"] = new_password
-                        self.creds_client.update_user_credentials(user_id, payload)
-                        st.success("Credentials updated")
-                    st.rerun()
-                except APIException as exc:
-                    st.error(f"Failed to save credentials: {exc.message}")
-
-            if cancel_clicked:
-                st.rerun()
-
-        if creds:
-            st.markdown("---")
-            st.caption("Computed")
-            full_name = creds.get("full_name")
-            full_address = creds.get("full_address")
-            c1, c2 = st.columns(2)
-            c1.write(f"Full Name: {full_name or '–'}")
-            if full_address:
-                c2.write("Full Address:")
-                st.text(full_address)
-
+        lines = self._addr_lines(creds)
+        if lines:
+            st.text("\n".join(lines))
+        phone = creds.get("phone")
+        if phone:
+            st.write(f"Phone: {phone}")
+        if st.button("Edit Credentials", key="btn_creds_edit"):
+            st.switch_page("pages/profile_edit_credentials.py")
 
     def _render_health(self, user_id: int) -> None:
         st.subheader("Health")
         try:
             profile = self.health_client.get_user_health_profile(user_id)
-            mode = "edit"
         except APIException:
             profile = None
-            mode = "create"
 
+        if not profile:
+            st.info("No health profile yet.")
+            if st.button("Create Health Profile", key="btn_health_create", type="primary"):
+                st.switch_page("pages/profile_edit_health.py")
+            return
 
-        def _def(key: str) -> Any:
-            return profile.get(key) if isinstance(profile, dict) else None
+        hs = self._health_summary(profile)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Age", hs["Age"])
+        c2.metric("Gender", hs["Gender"])
+        c3.metric("BMI", hs["BMI"])
+        c4, c5, c6 = st.columns(3)
+        c4.metric("Height", hs["Height"])
+        c5.metric("Weight", hs["Weight"])
+        c6.metric("Activity", hs["Activity"])
+        if hs["Goal"] and hs["Goal"] != "–":
+            st.info(f"Goal: {hs['Goal']}")
+        st.write(profile.get("health_conditions") or "–")
+        if st.button("Edit Health", key="btn_health_edit"):
+            st.switch_page("pages/profile_edit_health.py")
 
-
-        with st.form("profile_health_form", clear_on_submit=False):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                age = st.number_input("Age", min_value=10, max_value=120, value=_def("age") or 25, step=1)
-                gender_opts = ["", "male", "female", "other"]
-                gender = st.selectbox(
-                    "Gender",
-                    gender_opts,
-                    index=gender_opts.index(_def("gender")) if _def("gender") in gender_opts else 0,
-                )
-            with col_b:
-                height_cm = st.number_input("Height (cm)", min_value=50, max_value=300, value=_def("height_cm") or 170)
-                weight_kg = st.number_input(
-                    "Weight (kg)",
-                    min_value=20.0,
-                    max_value=500.0,
-                    value=_def("weight_kg") if (_def("weight_kg") and _def("weight_kg") >= 20.0) else 70.0,
-                    step=0.1,
-                )
-
-            activity_opts = ["", "sedentary", "lightly active", "moderately active", "very active", "extremely active"]
-            activity_level = st.selectbox(
-                "Activity Level",
-                activity_opts,
-                index=activity_opts.index(_def("activity_level")) if _def("activity_level") in activity_opts else 0,
-            )
-            goal = st.text_input("Goal", value=_def("goal") or "", max_chars=200)
-
-            health_conditions = st.text_area(
-                "Health Conditions & Notes",
-                value=_def("health_conditions") or "",
-                height=100,
-            )
-
-            bmi_preview = None
-            if height_cm and weight_kg and height_cm > 0 and weight_kg > 0:
-                bmi_preview = weight_kg / ((height_cm / 100) ** 2)
-                st.info(f"BMI preview: {bmi_preview:.1f}")
-
-            col_save, col_cancel = st.columns(2)
-            save_clicked = col_save.form_submit_button("Save", type="primary")
-            cancel_clicked = col_cancel.form_submit_button("Cancel")
-
-            if save_clicked:
-                payload: dict[str, Any] = {
-                    "age": int(age) if age else None,
-                    "gender": gender or None,
-                    "height_cm": int(height_cm) if height_cm else None,
-                    "weight_kg": float(weight_kg) if weight_kg else None,
-                    "activity_level": activity_level or None,
-                    "goal": goal.strip() or None,
-                    "health_conditions": health_conditions.strip() or None,
-                }
-                try:
-                    if mode == "create":
-                        self.health_client.create_user_health_profile(user_id, payload)
-                        st.success("Health profile created")
-                    else:
-                        self.health_client.update_user_health_profile(user_id, payload)
-                        st.success("Health profile updated")
-                    st.rerun()
-                except APIException as exc:
-                    st.error(f"Failed to save health profile: {exc.message}")
-
-            if cancel_clicked:
-                st.rerun()
-
-        if profile:
-            st.markdown("---")
-            bmi = profile.get("bmi")
-            is_complete = profile.get("is_complete", False)
-            c1, c2 = st.columns(2)
-            c1.metric("BMI", f"{bmi:.1f}" if isinstance(bmi, (int, float)) else "N/A")
-            c2.metric("Complete", "Yes" if is_complete else "No")
-
+        st.markdown("---")
+        st.subheader("Lifestyle & Preferences")
+        try:
+            user = self.users_client.get_user(user_id)
+        except Exception:
+            user = st.session_state.get("current_user") or {}
+        dt = user.get("diet_type") or "–"
+        allergies = user.get("allergies") or "–"
+        prefs = user.get("preferences") or "–"
+        st.write(f"• Diet Type: {str(dt).replace('-', ' ').title() if dt != '–' else '–'}")
+        st.write(f"• Allergies: {allergies}")
+        st.write(f"• Preferences: {prefs}")
+        if st.button("Edit User Profile", key="btn_health_edit_user"):
+            st.switch_page("pages/profile_edit_user.py")
 
     def render(self) -> None:
         st.title("Profile")
@@ -287,12 +229,11 @@ class ProfilePageController:
 
         tabs = st.tabs(["Overview", "Credentials", "Health"])
         with tabs[0]:
-            self._render_overview(user)
+            self._render_overview(user_id, user)
         with tabs[1]:
             self._render_credentials(user_id)
         with tabs[2]:
             self._render_health(user_id)
-
 
 def main() -> None:
     st.set_page_config(page_title="Profile - NUGAMOTO", page_icon="👤", layout="wide")
