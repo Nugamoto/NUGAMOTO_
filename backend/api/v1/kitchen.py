@@ -80,19 +80,23 @@ def create_kitchen(
     "/",
     response_model=list[KitchenRead],
     status_code=status.HTTP_200_OK,
-    summary="Get all kitchens",
-    dependencies=[Depends(get_current_user_id)],
+    summary="Get kitchens for current user",
 )
-def get_all_kitchens(db: Session = Depends(get_db)) -> list[KitchenRead]:
-    """Retrieve all kitchens from the database.
+def get_all_kitchens(
+        db: Session = Depends(get_db),
+        current_user_id: int = Depends(get_current_user_id),
+) -> list[KitchenRead]:
+    """Retrieve kitchens the current user is a member of.
 
     Args:
         db: Injected database session.
+        current_user_id: ID of the authenticated user.
 
     Returns:
-        A list of all kitchens.
+        A list of kitchens the user belongs to.
     """
-    return crud_kitchen.get_all_kitchens(db)
+    memberships = crud_kitchen.get_user_kitchens(db, current_user_id)
+    return [KitchenRead.model_validate(m.kitchen, from_attributes=True) for m in memberships]
 
 
 @kitchens_router.get(
