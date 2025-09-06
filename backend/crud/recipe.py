@@ -805,8 +805,7 @@ def delete_recipe_review(db: Session, user_id: int, recipe_id: int) -> None:
 
 
 def get_recipe_rating_summary(db: Session, recipe_id: int) -> RecipeRatingSummary:
-    """Get rating summary for a recipe."""
-    # Get all ratings for the recipe
+    """Return rating statistics for a recipe."""
     ratings_query = select(RecipeReview.rating).where(RecipeReview.recipe_id == recipe_id)
     ratings = db.execute(ratings_query).scalars().all()
 
@@ -814,23 +813,22 @@ def get_recipe_rating_summary(db: Session, recipe_id: int) -> RecipeRatingSummar
         return RecipeRatingSummary(
             recipe_id=recipe_id,
             total_reviews=0,
-            average_rating=0.0,
-            rating_distribution={1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+            average_rating=None,
+            rating_distribution={str(i): 0 for i in range(1, 6)},
         )
 
-    # Calculate average
     average_rating = sum(ratings) / len(ratings)
 
-    # Calculate distribution
-    rating_distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    rating_distribution: dict[str, int] = {str(i): 0 for i in range(1, 6)}
     for rating in ratings:
-        rating_distribution[rating] += 1
+        if rating in (1, 2, 3, 4, 5):
+            rating_distribution[str(rating)] += 1
 
     return RecipeRatingSummary(
         recipe_id=recipe_id,
         total_reviews=len(ratings),
         average_rating=average_rating,
-        rating_distribution=rating_distribution
+        rating_distribution=rating_distribution,
     )
 
 
