@@ -172,29 +172,35 @@ def _render_topbar() -> None:
 def render_sidebar() -> None:
     _render_topbar()
 
-    # Single clickable element: full-width page link styled by image below it.
-    # Streamlit does not support image-as-button with switch_page directly,
-    # so we provide the image and a compact page link right under it.
     st.sidebar.image(_logo_path(), use_container_width=True, output_format="PNG", clamp=True, caption=None,
                      channels="RGB")
     st.sidebar.page_link("app.py", label="🏠 Dashboard", icon=None)
     st.sidebar.markdown("---")
     st.sidebar.subheader("Navigation")
 
-    items = [
+    current_user = st.session_state.get("current_user") or {}
+    role = str(current_user.get("role", "") or "").lower()
+    is_superadmin = bool(getattr(st.session_state, "is_superadmin", False)) or role == "superadmin"
+
+    core_items = [
         ("🤖 AI Recipes", "pages/ai_recipes.py"),
         ("📖 Recipes", "pages/recipes.py"),
         ("📦 Inventory Items", "pages/inventory_items.py"),
         ("🗄️ Storage Locations", "pages/storage_locations.py"),
-        ("🥬 Food Items", "pages/food_items.py"),
         ("🍽️ Kitchens", "pages/kitchens.py"),
-        ("⚙️ Units", "pages/units.py"),
-        ("👤 Users", "pages/users.py"),
-        ("🔐 User Credentials", "pages/user_credentials.py"),
-        ("🏥 User Health", "pages/user_health.py"),
     ]
-
-    for label, target in items:
+    for label, target in core_items:
         st.sidebar.page_link(target, label=label)
+
+    with st.sidebar.expander("More", expanded=False):
+        st.page_link("pages/food_items.py", label="🥬 Food Items")
+        st.page_link("pages/units.py", label="⚙️ Units")
+
+    if is_superadmin:
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("Admin")
+        st.sidebar.page_link("pages/users.py", label="👤 Users")
+        st.sidebar.page_link("pages/user_credentials.py", label="🔐 User Credentials")
+        st.sidebar.page_link("pages/user_health.py", label="🏥 User Health")
 
     st.sidebar.markdown("---")
