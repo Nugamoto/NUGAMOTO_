@@ -57,7 +57,7 @@ def hide_native_pages_nav() -> None:
         .kitchen-select {
             display: inline-block;
             width: 100%;
-            max-width: 260px; /* <- adjust here if you want narrower/wider */
+            max-width: 100px; /* <- adjust here if you want narrower/wider */
             vertical-align: middle;
         }
         /* Ensure Streamlit selectbox respects the cap */
