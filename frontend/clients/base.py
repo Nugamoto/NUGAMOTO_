@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 import requests
@@ -14,7 +15,6 @@ class APIException(Exception):
         self.message = message
         self.status_code = status_code
         self.response_text = response_text
-
 
     def __str__(self) -> str:
         return self.message
@@ -28,8 +28,26 @@ class BaseClient:
         client.clear_tokens()
     """
 
-    def __init__(self, base_url: str = "http://localhost:8000") -> None:
-        self.base_url = base_url.rstrip("/")
+
+    def __init__(self, base_url: str | None = None) -> None:
+        # Resolve API base URL with priority:
+        # 1) explicit constructor arg
+        # 2) Streamlit secrets: st.secrets["API_URL"]
+        # 3) Environment variable: API_URL
+        # 4) fallback: http://localhost:8000
+        if not base_url:
+            api_url = None
+            try:
+                # Import inside to avoid hard dependency when running outside Streamlit
+                import streamlit as st  # type: ignore
+                api_url = st.secrets.get("API_URL", None)
+            except Exception:
+                api_url = None
+            if not api_url:
+                api_url = os.getenv("API_URL")
+            base_url = api_url or "http://localhost:8000"
+
+        self.base_url = str(base_url).rstrip("/")
         self._access_token: str | None = None
         self._refresh_token: str | None = None
         # Lazy import to avoid hard dependency loop
@@ -56,15 +74,12 @@ class BaseClient:
             headers.update(extra)
         return headers
 
-
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         return self._request("GET", path, params=params)
-
 
     def post(self, path: str, json_data: dict[str, Any] | None = None, data: Any = None,
              params: dict[str, Any] | None = None) -> Any:
         return self._request("POST", path, json_data=json_data, data=data, params=params)
-
 
     def patch(self, path: str, json_data: dict[str, Any] | None = None, params: dict[str, Any] | None = None) -> Any:
         return self._request("PATCH", path, json_data=json_data, params=params)
