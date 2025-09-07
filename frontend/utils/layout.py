@@ -9,7 +9,7 @@ from frontend.clients.kitchens_client import KitchensClient
 
 
 def hide_native_pages_nav() -> None:
-    """Inject CSS to hide native nav and style the top bar."""
+    """Inject CSS to hide native nav and style the responsive top bar."""
     st.markdown(
         """
         <style>
@@ -57,6 +57,7 @@ def hide_native_pages_nav() -> None:
           line-height: 1.1;
           font-size: 0.9rem;
         }
+
         .pill {
             padding: 4px 8px;
             border-radius: 999px;
@@ -67,6 +68,21 @@ def hide_native_pages_nav() -> None:
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 40vw;
+        }
+
+        /* Narrow layout:
+           - hide the first inner column (the label) inside the LEFT topbar column
+           - let the select column expand to 100% width
+        */
+        @media (max-width: 1200px) {
+          /* LEFT outer column is the first child of .topbar */
+          .topbar > div[data-testid="column"]:first-child div[data-testid="column"]:first-child {
+            display: none !important;
+          }
+          .topbar > div[data-testid="column"]:first-child div[data-testid="column"]:nth-child(2) {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+          }
         }
         </style>
         """,
@@ -147,13 +163,10 @@ def _render_topbar() -> None:
     with st.container():
         st.markdown('<div class="topbar">', unsafe_allow_html=True)
 
-        # Rechts etwas breiter, damit Pill + Buttons nebeneinander passen
         left, right = st.columns([7, 5], vertical_alignment="center")
 
-        # LEFT: Label + Select fest über Streamlit-Spalten (kein HTML-Wrapper)
         with left:
             if email:
-                # c1 sehr schmal für das Label, c2 begrenzt die Select-Breite
                 c1, c2 = st.columns([1, 3], vertical_alignment="center")
                 with c1:
                     st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
@@ -180,7 +193,6 @@ def _render_topbar() -> None:
                         st.session_state.selected_kitchen_name = chosen["name"]
                         st.session_state.selected_kitchen_role = chosen["role"]
 
-        # RIGHT: Eine Zeile mit 3 Spalten – wie bei Quick Actions
         with right:
             r1, r2, r3 = st.columns([6, 2, 2], vertical_alignment="center")
             with r1:
