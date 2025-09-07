@@ -44,10 +44,15 @@ class StorageLocationsController:
             st.session_state.storage_locations_data = sorted(locations, key=lambda x: x.get("id", 0))
             return st.session_state.storage_locations_data
         except APIException as e:
+            if getattr(e, "status_code", None) == 403:
+                st.warning(
+                    "You don't have access to this kitchen's storage locations. "
+                    "Open Kitchens to create your own kitchen or request access from an owner."
+                )
+                if st.button("Go to Kitchens", key="sl_go_kitchens"):
+                    st.switch_page("pages/kitchens.py")
+                return []
             st.error(f"Failed to load locations for Kitchen {kitchen_id}: {e.message}")
-            return []
-        except Exception as e:
-            st.error(f"An unexpected error occurred: {str(e)}")
             return []
 
     def create_location(self, name: str, kitchen_id: int) -> bool:

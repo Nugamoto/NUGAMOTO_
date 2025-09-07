@@ -60,7 +60,16 @@ class InventoryController:
             st.session_state.food_master = self.food_client.list_food_items(limit=1000)
             st.session_state.loc_master = self.loc_client.list_storage_locations(kitchen_id)
         except APIException as exc:
-            st.error(f"Failed to load master data: {exc.message}")
+            if getattr(exc, "status_code", None) == 403:
+                st.warning(
+                    "You don't have access to this kitchen yet. "
+                    "Please open Kitchens and either create your own kitchen "
+                    "or ask an owner to add you."
+                )
+                if st.button("Go to Kitchens"):
+                    st.switch_page("pages/kitchens.py")
+            else:
+                st.error(f"Failed to load master data: {exc.message}")
 
     def _load_inventory(self, kitchen_id: int) -> list[dict[str, Any]]:
         try:
@@ -68,6 +77,14 @@ class InventoryController:
             st.session_state.inv_rows = sorted(rows, key=lambda x: x["id"])
             return st.session_state.inv_rows
         except APIException as exc:
+            if getattr(exc, "status_code", None) == 403:
+                st.warning(
+                    "You don't have permission to view inventory for this kitchen. "
+                    "Go to Kitchens to create/select a kitchen you belong to."
+                )
+                if st.button("Go to Kitchens", key="inv_go_kitchens"):
+                    st.switch_page("pages/kitchens.py")
+                return []
             st.error(f"Failed to load inventory: {exc.message}")
             return []
 

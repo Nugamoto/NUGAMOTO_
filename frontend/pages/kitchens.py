@@ -63,8 +63,46 @@ class KitchensController:
             st.session_state.kitchens_rows = sorted(rows, key=lambda x: x["id"])
             return st.session_state.kitchens_rows
         except APIException as exc:
+            if getattr(exc, "status_code", None) == 403:
+                # Friendly empty state for users without memberships
+                st.session_state.kitchens_rows = []
+                return []
             st.error(f"Load error: {exc.message}")
             return []
+
+
+    def _empty_state_for_new_users(self) -> None:
+        """Show friendly onboarding when user has no kitchen memberships."""
+        st.info(
+            "It looks like you are not a member of any kitchen yet."
+        )
+        col_left, col_right = st.columns([1, 1])
+
+        # Create kitchen (become Owner)
+        with col_left:
+            st.subheader("Create your own kitchen")
+            st.caption("You'll become the Owner and can invite others.")
+            if st.button("➕ Create Kitchen", key="btn_create_first_kitchen"):
+                st.session_state.show_add_kitchen = True
+                st.experimental_rerun()
+
+        # Request access to an existing kitchen (owner-managed)
+        with col_right:
+            st.subheader("Join an existing kitchen")
+            st.caption(
+                "If you know a kitchen and its owner, you can ask them to add your email to the members."
+            )
+            with st.expander("I know the Kitchen ID (optional)", expanded=False):
+                kid = st.text_input("Kitchen ID (ask the owner)", value="", key="join_req_kid")
+                owner_email = st.text_input("Owner email (optional, for your records)", value="", key="join_req_owner")
+                # TODO: If you add a backend endpoint for join-requests, call it here.
+                sent = st.button("I have contacted the owner", key="btn_mark_contacted")
+                if sent:
+                    st.success(
+                        "Great! The owner can add you on the Kitchens page. You'll see the kitchen here once added.")
+            st.caption(
+                "Tip: Share your account email with the kitchen owner so they can add you."
+            )
 
     @staticmethod
     def _resolve_role_for_current_user(details: dict[str, Any]) -> str | None:
@@ -148,7 +186,7 @@ class KitchensController:
     def _render_table(self, rows: list[dict[str, Any]]) -> None:
         """Landing table with selection and action buttons."""
         if not rows:
-            st.info("No kitchens stored yet.")
+            self._empty_state_for_new_users()
             return
 
         df = pd.DataFrame(
@@ -435,8 +473,12 @@ class KitchensController:
             if st.button(f"Open {topbar_name}", key="btn_open_from_topbar"):
                 self._open_kitchen(int(topbar_kid), name_hint=topbar_name)
 
-        if st.button("Add Kitchen", key="btn_add_kitchen"):
+        # Primary CTA for new users always visible
+        c_add, c_refresh, _ = st.columns([1, 1, 6])
+        if c_add.button("➕ Add Kitchen", key="btn_add_kitchen"):
             st.session_state.show_add_kitchen = True
+        if c_refresh.button("🔄 Refresh", key="btn_refresh_kitchens"):
+            self.load_kitchens()
 
         st.divider()
 
