@@ -9,7 +9,7 @@ from frontend.clients.kitchens_client import KitchensClient
 
 
 def hide_native_pages_nav() -> None:
-    """Inject CSS rules to hide native sidebar nav and style the top bar."""
+    """Inject CSS to hide native nav and style the responsive top bar."""
     st.markdown(
         """
         <style>
@@ -34,48 +34,43 @@ def hide_native_pages_nav() -> None:
 
         /* Streamlit column wrappers inside topbar (left/right) */
         .topbar > div[data-testid="column"] {
-            flex: 1 1 420px !important;   /* earlier wrap but not too early */
-            min-width: 300px;             /* avoid over-shrinking */
+            /* Keep both columns on one row until ~1200px, then wrap */
+            flex: 1 1 600px !important;
+            min-width: 320px;
         }
-        @media (max-width: 1100px) {
+        @media (max-width: 1200px) {
           .topbar > div[data-testid="column"] {
             flex: 1 1 100% !important;
             width: 100% !important;
           }
         }
 
-        /* Left area row: keep label + select inline */
-        .left-wrap {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: nowrap;
-        }
-
+        /* Label next to select */
         .label {
             opacity: 0.85;
             font-size: 0.9rem;
             white-space: nowrap;
+            margin-right: 8px;
         }
 
-        /* Kitchen select: hard max width; prevent stretching */
+        /* Kitchen select: hard max-width, never stretch beyond */
         .kitchen-select {
             display: inline-block;
             width: 100%;
-            max-width: 280px;
+            max-width: 260px; /* <- adjust here if you want narrower/wider */
+            vertical-align: middle;
         }
-        /* Target Streamlit selectbox internals so it respects max-width */
+        /* Ensure Streamlit selectbox respects the cap */
         .kitchen-select [data-testid="stSelectbox"],
         .kitchen-select [data-testid="stSelectbox"] > div,
         .kitchen-select [data-baseweb="select"],
         .kitchen-select [role="combobox"] {
             width: 100% !important;
-            max-width: 280px !important;
+            max-width: 260px !important;
         }
 
-        /* Right area: pill + buttons with early, clean wrapping */
+        /* Right zone: keep inline on wide screens, wrap only when narrow */
         .topbar-right {
-          width: 100%;
           display: flex;
           align-items: center;
           justify-content: flex-end;
@@ -97,15 +92,15 @@ def hide_native_pages_nav() -> None:
             border: 1px solid rgba(255,255,255,0.15);
             opacity: 0.95;
             white-space: nowrap;
-            max-width: 100%;
             overflow: hidden;
             text-overflow: ellipsis;
+            max-width: 40vw; /* prevent pill from pushing buttons away on wide screens */
         }
         @media (max-width: 1100px) {
-          .topbar-right .pill { flex: 1 1 100%; max-width: 100%; }
+          .pill { flex: 1 1 100%; max-width: 100%; }
         }
         @media (max-width: 520px) {
-          .topbar-right .pill { display: none; }
+          .pill { display: none; }
         }
         </style>
         """,
@@ -176,7 +171,7 @@ def _load_kitchens_for_user() -> list[dict]:
 
 
 def _render_topbar() -> None:
-    """Render the responsive top bar with kitchen selector and auth actions."""
+    """Render the top bar with compact kitchen selector and auth actions."""
     hide_native_pages_nav()
 
     email = st.session_state.get("auth_email")
@@ -188,47 +183,44 @@ def _render_topbar() -> None:
 
         with left:
             if email:
-                # Inline row: label + capped-width select (no Streamlit columns to avoid stacking)
-                st.markdown('<div class="left-wrap">', unsafe_allow_html=True)
-                st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
+                # Use Streamlit columns to keep label and select strictly side-by-side
+                c1, c2 = st.columns([1, 4], vertical_alignment="center")
+                with c1:
+                    st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
+                with c2:
+                    kitchens = _load_kitchens_for_user()
+                    if kitchens:
+                        labels = [f"{k['name']} ({k['role']})" for k in kitchens]
+                        default_idx = 0
+                        if st.session_state.get("selected_kitchen_id"):
+                            for i, k in enumerate(kitchens):
+                                if k["id"] == st.session_state["selected_kitchen_id"]:
+                                    default_idx = i
+                                    break
 
-                kitchens = _load_kitchens_for_user()
-                if kitchens:
-                    labels = [f"{k['name']} ({k['role']})" for k in kitchens]
-                    default_idx = 0
-                    if st.session_state.get("selected_kitchen_id"):
-                        for i, k in enumerate(kitchens):
-                            if k["id"] == st.session_state["selected_kitchen_id"]:
-                                default_idx = i
-                                break
+                        # Wrap the select in a width-capped container
+                        st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
+                        sel = st.selectbox(
+                            "Kitchen",
+                            options=range(len(labels)),
+                            index=default_idx,
+                            format_func=lambda i: labels[i],
+                            label_visibility="collapsed",
+                            key="__topbar_kitchen_select__",
+                        )
+                        st.markdown("</div>", unsafe_allow_html=True)
 
-                    st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
-                    sel = st.selectbox(
-                        "Kitchen",
-                        options=range(len(labels)),
-                        index=default_idx,
-                        format_func=lambda i: labels[i],
-                        label_visibility="collapsed",
-                        key="__topbar_kitchen_select__",
-                    )
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-                    chosen = kitchens[sel]
-                    st.session_state.selected_kitchen_id = chosen["id"]
-                    st.session_state.selected_kitchen_name = chosen["name"]
-                    st.session_state.selected_kitchen_role = chosen["role"]
-
-                st.markdown("</div>", unsafe_allow_html=True)
+                        chosen = kitchens[sel]
+                        st.session_state.selected_kitchen_id = chosen["id"]
+                        st.session_state.selected_kitchen_name = chosen["name"]
+                        st.session_state.selected_kitchen_role = chosen["role"]
 
         with right:
-            # Right side: pill + buttons in a flex row that wraps cleanly
+            # Keep on one line when space allows; wrap cleanly when narrow
             st.markdown('<div class="topbar-right">', unsafe_allow_html=True)
             if email:
                 role_txt = "Admin" if is_admin else "User"
-                st.markdown(
-                    f'<span class="pill">👤 {email} · {role_txt}</span>',
-                    unsafe_allow_html=True,
-                )
+                st.markdown(f'<span class="pill">👤 {email} · {role_txt}</span>', unsafe_allow_html=True)
             else:
                 st.markdown('<span class="pill">Not signed in</span>', unsafe_allow_html=True)
 
