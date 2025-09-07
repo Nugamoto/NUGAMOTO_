@@ -19,14 +19,31 @@ def hide_native_pages_nav() -> None:
             display: flex; align-items: center; justify-content: space-between;
             padding: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1);
             margin: -1rem -1rem 0.25rem -1rem; box-sizing: border-box;
+            flex-wrap: wrap; row-gap: 6px;
         }
         .pill {
             padding: 4px 8px; border-radius: 999px; font-size: 0.85rem;
             border: 1px solid rgba(255,255,255,0.15); opacity: 0.95;
             white-space: nowrap;
+            max-width: 100%; overflow: hidden; text-overflow: ellipsis;
         }
         .label {
             opacity: 0.85; font-size: 0.9rem; margin-right: 4px;
+            white-space: nowrap;
+        }
+        /* Make Streamlit buttons more compact and prevent wrapping */
+        .stButton > button {
+            white-space: nowrap;
+            padding: 4px 10px;
+            line-height: 1.1;
+            font-size: 0.9rem;
+        }
+        /* Give the buttons some breathing room on narrow screens */
+        @media (max-width: 820px) {
+          .pill { max-width: 60vw; }
+        }
+        @media (max-width: 520px) {
+          .pill { display: none; }
         }
         </style>
         """,
@@ -104,11 +121,11 @@ def _render_topbar() -> None:
 
     with st.container():
         st.markdown('<div class="topbar">', unsafe_allow_html=True)
-        left, right = st.columns([7, 5], vertical_alignment="center")
+        left, right = st.columns([8, 4], vertical_alignment="center")
 
         with left:
             if email:
-                c1, c2 = st.columns([1, 11], vertical_alignment="center")
+                c1, c2 = st.columns([2, 10], vertical_alignment="center")
                 with c1:
                     st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
                 with c2:
@@ -135,7 +152,7 @@ def _render_topbar() -> None:
                         st.session_state.selected_kitchen_role = chosen["role"]
 
         with right:
-            r1, r2, r3 = st.columns([7, 1.5, 1.5], vertical_alignment="center")
+            r1, r2, r3 = st.columns([5, 2, 2], vertical_alignment="center")
             with r1:
                 if email:
                     role_txt = "Admin" if is_admin else "User"
@@ -147,26 +164,21 @@ def _render_topbar() -> None:
                     "Profile",
                     key="tb_profile_btn",
                     on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
+                    use_container_width=True,
                 )
             with r3:
                 if email:
-                    if st.button("Logout", key="tb_logout_btn"):
+                    if st.button("Logout", key="tb_logout_btn", use_container_width=True):
                         _perform_logout()
                 else:
                     st.button(
                         "Login",
                         key="tb_login_btn",
                         on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
+                        use_container_width=True,
                     )
 
         st.markdown("</div>", unsafe_allow_html=True)
-
-    if st.session_state.pop("_layout_needs_rerun", False):
-        st.rerun()
-
-    nav_target = st.session_state.pop("_nav_target", None)
-    if nav_target:
-        st.switch_page(nav_target)
 
 
 def render_sidebar() -> None:
