@@ -28,7 +28,6 @@ class RecipesPageController:
         render_sidebar()
         self.client = self._ensure_client()
 
-
     @staticmethod
     def _ensure_client() -> RecipesClient:
         if "recipes_client" not in st.session_state:
@@ -39,7 +38,6 @@ class RecipesPageController:
                 getattr(st.session_state, "auth_refresh_token", None),
             )
         return st.session_state.recipes_client
-
 
     @staticmethod
     def _compute_rating_summary_from_reviews(reviews: list[dict]) -> dict[str, Any]:
@@ -58,20 +56,29 @@ class RecipesPageController:
             dist[str(r)] += 1
         return {"recipe_id": None, "total_reviews": total, "average_rating": float(avg), "rating_distribution": dist}
 
-
     def _show_recipe_list(self) -> None:
         st.title("📖 Recipes")
         st.markdown("Discover delicious recipes or create your own!")
+
+        # Build filters and enforce user-scope for non-admins to avoid 403
         filters = display_recipe_filter_sidebar()
+        current_user = st.session_state.get("current_user") or {}
+        current_user_id = int(current_user.get("id")) if current_user.get("id") is not None else None
+        is_admin = bool(st.session_state.get("is_admin", False))
+        if not is_admin and current_user_id:
+            # Enforce that normal users only fetch their own recipes
+            # without overriding an explicit filter the user may have set
+            if "created_by_user_id" not in filters or not filters.get("created_by_user_id"):
+                filters = {**filters, "created_by_user_id": current_user_id}
+
         try:
             with st.spinner("Loading recipes..."):
                 recipes = self.client.get_all_recipes(**filters)
             if not recipes:
                 st.info("No recipes found. Try different filter criteria or create a new recipe!")
                 return
+
             st.success(f"📚 {len(recipes)} recipe(s) found")
-            current_user = st.session_state.get("current_user") or {}
-            current_user_id = int(current_user.get("id")) if current_user.get("id") is not None else None
 
             for recipe in recipes:
                 rid = int(recipe.get("id"))
@@ -135,9 +142,29 @@ class RecipesPageController:
 
                 st.divider()
         except APIException as e:
-            st.error(f"API error while loading recipes: {e.message}")
+            if getattr(e, "status_code", None) == 403:
+                st.error("You don't have permission to list all recipes. Showing your own recipes instead.")
+                if current_user_id:
+                    try:
+                        recipes = self.client.get_all_recipes(created_by_user_id=current_user_id)
+                        if not recipes:
+                            st.info("No recipes found for your account.")
+                            return
+                        st.success(f"📚 {len(recipes)} recipe(s) found for your account")
+                        for r in recipes:
+                            st.subheader(r.get("title", "Untitled"))
+                            st.write(r.get("description") or "")
+                            st.divider()
+                    except Exception as e2:
+                        st.error(f"Secondary attempt failed: {e2}")
+                else:
+                    st.info("Please log in to view your recipes.")
+            else:
+                st.error(f"API error while loading recipes: {e.message}")
         except Exception as e:
             st.error(f"Error loading recipes: {str(e)}")
+
+
     def _show_recipe_details(self, recipe_id: int) -> None:
         try:
             with st.spinner("Loading recipe..."):
@@ -236,7 +263,6 @@ class RecipesPageController:
                 if "selected_recipe_id" in st.session_state:
                     del st.session_state.selected_recipe_id
                 st.rerun()
-
 
     def render(self) -> None:
         if hasattr(st.session_state, "selected_recipe_id"):
