@@ -19,8 +19,20 @@ def hide_native_pages_nav() -> None:
             display: flex; align-items: center; justify-content: space-between;
             padding: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1);
             margin: -1rem -1rem 0.25rem -1rem; box-sizing: border-box;
-            flex-wrap: wrap; row-gap: 6px;
+            flex-wrap: wrap; row-gap: 6px; column-gap: 12px;
         }
+        /* Erzwinge früheres Umbrechen der beiden Hauptspalten in der Topbar */
+        .topbar > div[data-testid="column"] {
+            flex: 1 1 520px !important; /* frühere Breakpoint-Basis */
+            min-width: 280px; /* verhindert zu starkes Schrumpfen */
+        }
+        @media (max-width: 1120px) {
+          .topbar > div[data-testid="column"] {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+          }
+        }
+
         .pill {
             padding: 4px 8px; border-radius: 999px; font-size: 0.85rem;
             border: 1px solid rgba(255,255,255,0.15); opacity: 0.95;
@@ -31,14 +43,21 @@ def hide_native_pages_nav() -> None:
             opacity: 0.85; font-size: 0.9rem; margin-right: 4px;
             white-space: nowrap;
         }
-        /* Make Streamlit buttons more compact and prevent wrapping */
+        /* Kitchen-Select auf eine sinnvolle Maximalbreite deckeln */
+        .kitchen-select {
+            max-width: 360px;
+            width: 100%;
+        }
+
+        /* Kompaktere Buttons, kein Textumbruch */
         .stButton > button {
             white-space: nowrap;
             padding: 4px 10px;
             line-height: 1.1;
             font-size: 0.9rem;
         }
-        /* Give the buttons some breathing room on narrow screens */
+
+        /* E-Mail-Pill bei wenig Platz begrenzen/ausblenden */
         @media (max-width: 820px) {
           .pill { max-width: 60vw; }
         }
@@ -138,6 +157,8 @@ def _render_topbar() -> None:
                                 if k["id"] == st.session_state["selected_kitchen_id"]:
                                     default_idx = i
                                     break
+                        # Wrap die Selectbox, damit max-width greift
+                        st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
                         sel = st.selectbox(
                             "Kitchen",
                             options=range(len(labels)),
@@ -146,6 +167,7 @@ def _render_topbar() -> None:
                             label_visibility="collapsed",
                             key="__topbar_kitchen_select__",
                         )
+                        st.markdown('</div>', unsafe_allow_html=True)
                         chosen = kitchens[sel]
                         st.session_state.selected_kitchen_id = chosen["id"]
                         st.session_state.selected_kitchen_name = chosen["name"]
