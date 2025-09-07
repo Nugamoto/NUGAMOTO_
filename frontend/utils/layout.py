@@ -9,21 +9,33 @@ from frontend.clients.kitchens_client import KitchensClient
 
 
 def hide_native_pages_nav() -> None:
+    """Inject CSS rules to hide native sidebar nav and style the top bar."""
     st.markdown(
         """
         <style>
+        /* Hide Streamlit's default sidebar page list */
         [data-testid="stSidebarNav"] { display: none !important; }
         section[data-testid="stSidebar"] > div:first-child { padding-top: 0.5rem; }
+
+        /* Topbar container */
         .topbar {
             width: 100%;
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1);
-            margin: -1rem -1rem 0.25rem -1rem; box-sizing: border-box;
-            flex-wrap: wrap; row-gap: 8px; column-gap: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin: -1rem -1rem 0.25rem -1rem;
+            box-sizing: border-box;
+            flex-wrap: wrap;
+            row-gap: 8px;
+            column-gap: 12px;
         }
+
+        /* Streamlit column wrappers inside topbar (left/right) */
         .topbar > div[data-testid="column"] {
-            flex: 1 1 520px !important;
-            min-width: 320px;
+            flex: 1 1 420px !important;   /* earlier wrap but not too early */
+            min-width: 300px;             /* avoid over-shrinking */
         }
         @media (max-width: 1100px) {
           .topbar > div[data-testid="column"] {
@@ -32,31 +44,66 @@ def hide_native_pages_nav() -> None:
           }
         }
 
+        /* Left area row: keep label + select inline */
+        .left-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: nowrap;
+        }
+
+        .label {
+            opacity: 0.85;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        /* Kitchen select: hard max width; prevent stretching */
+        .kitchen-select {
+            display: inline-block;
+            width: 100%;
+            max-width: 280px;
+        }
+        /* Target Streamlit selectbox internals so it respects max-width */
+        .kitchen-select [data-testid="stSelectbox"],
+        .kitchen-select [data-testid="stSelectbox"] > div,
+        .kitchen-select [data-baseweb="select"],
+        .kitchen-select [role="combobox"] {
+            width: 100% !important;
+            max-width: 280px !important;
+        }
+
+        /* Right area: pill + buttons with early, clean wrapping */
         .topbar-right {
           width: 100%;
-          display: flex; align-items: center; justify-content: flex-end;
-          gap: 8px; flex-wrap: wrap;
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
         }
         .topbar-right .stButton { display: inline-flex; }
         .topbar-right .stButton > button {
-          white-space: nowrap; padding: 4px 10px; line-height: 1.1; font-size: 0.9rem;
+          white-space: nowrap;
+          padding: 4px 10px;
+          line-height: 1.1;
+          font-size: 0.9rem;
         }
+
         .pill {
-            padding: 4px 8px; border-radius: 999px; font-size: 0.85rem;
-            border: 1px solid rgba(255,255,255,0.15); opacity: 0.95;
-            white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(255,255,255,0.15);
+            opacity: 0.95;
+            white-space: nowrap;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         @media (max-width: 1100px) {
           .topbar-right .pill { flex: 1 1 100%; max-width: 100%; }
         }
-
-        .label {
-            opacity: 0.85; font-size: 0.9rem; margin-right: 4px;
-            white-space: nowrap;
-        }
-
-        .kitchen-select { max-width: 320px; width: 100%; }
-
         @media (max-width: 520px) {
           .topbar-right .pill { display: none; }
         }
@@ -129,6 +176,7 @@ def _load_kitchens_for_user() -> list[dict]:
 
 
 def _render_topbar() -> None:
+    """Render the responsive top bar with kitchen selector and auth actions."""
     hide_native_pages_nav()
 
     email = st.session_state.get("auth_email")
@@ -140,39 +188,47 @@ def _render_topbar() -> None:
 
         with left:
             if email:
-                c1, c2 = st.columns([2, 10], vertical_alignment="center")
-                with c1:
-                    st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
-                with c2:
-                    kitchens = _load_kitchens_for_user()
-                    if kitchens:
-                        labels = [f"{k['name']} ({k['role']})" for k in kitchens]
-                        default_idx = 0
-                        if st.session_state.get("selected_kitchen_id"):
-                            for i, k in enumerate(kitchens):
-                                if k["id"] == st.session_state["selected_kitchen_id"]:
-                                    default_idx = i
-                                    break
-                        st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
-                        sel = st.selectbox(
-                            "Kitchen",
-                            options=range(len(labels)),
-                            index=default_idx,
-                            format_func=lambda i: labels[i],
-                            label_visibility="collapsed",
-                            key="__topbar_kitchen_select__",
-                        )
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        chosen = kitchens[sel]
-                        st.session_state.selected_kitchen_id = chosen["id"]
-                        st.session_state.selected_kitchen_name = chosen["name"]
-                        st.session_state.selected_kitchen_role = chosen["role"]
+                # Inline row: label + capped-width select (no Streamlit columns to avoid stacking)
+                st.markdown('<div class="left-wrap">', unsafe_allow_html=True)
+                st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
+
+                kitchens = _load_kitchens_for_user()
+                if kitchens:
+                    labels = [f"{k['name']} ({k['role'.capitalize()]})" for k in kitchens]
+                    default_idx = 0
+                    if st.session_state.get("selected_kitchen_id"):
+                        for i, k in enumerate(kitchens):
+                            if k["id"] == st.session_state["selected_kitchen_id"]:
+                                default_idx = i
+                                break
+
+                    st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
+                    sel = st.selectbox(
+                        "Kitchen",
+                        options=range(len(labels)),
+                        index=default_idx,
+                        format_func=lambda i: labels[i],
+                        label_visibility="collapsed",
+                        key="__topbar_kitchen_select__",
+                    )
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    chosen = kitchens[sel]
+                    st.session_state.selected_kitchen_id = chosen["id"]
+                    st.session_state.selected_kitchen_name = chosen["name"]
+                    st.session_state.selected_kitchen_role = chosen["role"]
+
+                st.markdown("</div>", unsafe_allow_html=True)
 
         with right:
+            # Right side: pill + buttons in a flex row that wraps cleanly
             st.markdown('<div class="topbar-right">', unsafe_allow_html=True)
             if email:
                 role_txt = "Admin" if is_admin else "User"
-                st.markdown(f'<span class="pill">👤 {email} · {role_txt}</span>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<span class="pill">👤 {email} · {role_txt}</span>',
+                    unsafe_allow_html=True,
+                )
             else:
                 st.markdown('<span class="pill">Not signed in</span>', unsafe_allow_html=True)
 
@@ -193,6 +249,13 @@ def _render_topbar() -> None:
             st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
+
+    if st.session_state.pop("_layout_needs_rerun", False):
+        st.rerun()
+
+    nav_target = st.session_state.pop("_nav_target", None)
+    if nav_target:
+        st.switch_page(nav_target)
 
 
 def render_sidebar() -> None:
