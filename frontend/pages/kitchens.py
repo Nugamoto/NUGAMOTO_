@@ -88,11 +88,9 @@ class KitchensController:
                 break
         return role
 
-
     @staticmethod
     def _is_owner_or_admin(role: str | None) -> bool:
         return str(role or "").lower() in {"owner", "admin"}
-
 
     @staticmethod
     def _is_member_or_higher(role: str | None) -> bool:
@@ -118,7 +116,6 @@ class KitchensController:
             st.rerun()
         except APIException as exc:
             st.error(f"Failed to open kitchen: {exc.message}")
-
 
     def _form(self, *, is_new: bool, defaults: dict[str, Any] | None = None) -> None:
         """Add/Edit Kitchen form (used on landing and in header inline)."""
@@ -289,7 +286,6 @@ class KitchensController:
         with tabs[1]:
             st.subheader("Storage")
 
-
             def _load_storage() -> list[dict[str, Any]]:
                 try:
                     return self.sl_client.list_storage_locations(kitchen_id) or []
@@ -297,13 +293,11 @@ class KitchensController:
                     st.error(f"Failed to load storage locations: {exc.message}")
                     return []
 
-
             def _load_inventory() -> list[dict[str, Any]]:
                 try:
                     return self.inv_client.list_inventory_items(kitchen_id) or []
                 except APIException:
                     return []
-
 
             if st.button("Manage Storage Locations", key="btn_go_manage_storage"):
                 st.switch_page("pages/storage_locations.py")
@@ -344,12 +338,11 @@ class KitchensController:
                                     ],
                                 }
                             )
-                            st.dataframe(df_items, use_container_width=True, hide_index=True)
+                            st.dataframe(df_items, width="stretch", hide_index=True)
 
         # Inventory (filter + table)
         with tabs[2]:
             st.subheader("Inventory")
-
 
             def _load_storage_i() -> list[dict[str, Any]]:
                 try:
@@ -357,13 +350,11 @@ class KitchensController:
                 except APIException:
                     return []
 
-
             def _load_inventory_i() -> list[dict[str, Any]]:
                 try:
                     return self.inv_client.list_inventory_items(kitchen_id) or []
                 except APIException:
                     return []
-
 
             locs = _load_storage_i()
             options = [("all", "All Locations")] + [(str(l["id"]), l.get("name", f"Location {l['id']}")) for l in locs]
@@ -389,7 +380,6 @@ class KitchensController:
                             return l.get("name", f"Location {lid}")
                     return f"Location {lid}"
 
-
                 def _status(it: dict) -> str:
                     q = it.get("quantity")
                     mn = it.get("min_quantity")
@@ -400,7 +390,6 @@ class KitchensController:
                     if exp:
                         s.append("EXP")
                     return ", ".join(s)
-
 
                 df_inv = pd.DataFrame(
                     {
@@ -419,7 +408,7 @@ class KitchensController:
                         "Status": [_status(it) for it in filtered],
                     }
                 ).sort_values(["Location", "Food"])
-                st.dataframe(df_inv, use_container_width=True, hide_index=True)
+                st.dataframe(df_inv, width="stretch", hide_index=True)
 
     def render(self) -> None:
         """Top-level router: list vs detail."""
