@@ -55,6 +55,7 @@ class InventoryController:
             st.session_state.setdefault(key, val)
 
     def _load_master_data(self, kitchen_id: int) -> None:
+        """Load master data for the given kitchen, with friendly 403 handling."""
         self.current_kitchen_id = int(kitchen_id)
         try:
             st.session_state.food_master = self.food_client.list_food_items(limit=1000)
@@ -63,15 +64,16 @@ class InventoryController:
             if getattr(exc, "status_code", None) == 403:
                 st.warning(
                     "You don't have access to this kitchen yet. "
-                    "Please open Kitchens and either create your own kitchen "
-                    "or ask an owner to add you."
+                    "Open Kitchens to create your own kitchen or request to join one."
                 )
-                if st.button("Go to Kitchens"):
+                go = st.button("Go to Kitchens", key="inv_go_kitchens")
+                if go:
                     st.switch_page("pages/kitchens.py")
             else:
                 st.error(f"Failed to load master data: {exc.message}")
 
     def _load_inventory(self, kitchen_id: int) -> list[dict[str, Any]]:
+        """Load inventory rows for a kitchen, returning [] on 403 with guidance."""
         try:
             rows = self.inv_client.list_inventory_items(kitchen_id)
             st.session_state.inv_rows = sorted(rows, key=lambda x: x["id"])
@@ -82,7 +84,8 @@ class InventoryController:
                     "You don't have permission to view inventory for this kitchen. "
                     "Go to Kitchens to create/select a kitchen you belong to."
                 )
-                if st.button("Go to Kitchens", key="inv_go_kitchens"):
+                go = st.button("Go to Kitchens", key="inv_go_kitchens2")
+                if go:
                     st.switch_page("pages/kitchens.py")
                 return []
             st.error(f"Failed to load inventory: {exc.message}")

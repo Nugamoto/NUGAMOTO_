@@ -39,6 +39,7 @@ class StorageLocationsController:
             st.session_state.selected_location_for_update = None
 
     def load_locations(self, kitchen_id: int) -> list[dict[str, Any]]:
+        """Load storage locations with friendly 403 handling."""
         try:
             locations = self.client.list_storage_locations(kitchen_id=kitchen_id)
             st.session_state.storage_locations_data = sorted(locations, key=lambda x: x.get("id", 0))
@@ -49,7 +50,8 @@ class StorageLocationsController:
                     "You don't have access to this kitchen's storage locations. "
                     "Open Kitchens to create your own kitchen or request access from an owner."
                 )
-                if st.button("Go to Kitchens", key="sl_go_kitchens"):
+                go = st.button("Go to Kitchens", key="sl_go_kitchens")
+                if go:
                     st.switch_page("pages/kitchens.py")
                 return []
             st.error(f"Failed to load locations for Kitchen {kitchen_id}: {e.message}")

@@ -58,13 +58,14 @@ class KitchensController:
         st.session_state.setdefault("storage_show_add", False)
 
     def load_kitchens(self) -> list[dict[str, Any]]:
+        """Load kitchens the current user belongs to. Return [] on 403 to trigger empty-state."""
         try:
             rows = self.client.list_kitchens(limit=1000)
             st.session_state.kitchens_rows = sorted(rows, key=lambda x: x["id"])
             return st.session_state.kitchens_rows
         except APIException as exc:
             if getattr(exc, "status_code", None) == 403:
-                # Friendly empty state for users without memberships
+                # No memberships yet (typical for new users)
                 st.session_state.kitchens_rows = []
                 return []
             st.error(f"Load error: {exc.message}")
@@ -73,9 +74,7 @@ class KitchensController:
 
     def _empty_state_for_new_users(self) -> None:
         """Show friendly onboarding when user has no kitchen memberships."""
-        st.info(
-            "It looks like you are not a member of any kitchen yet."
-        )
+        st.info("It looks like you are not a member of any kitchen yet.")
         col_left, col_right = st.columns([1, 1])
 
         # Create kitchen (become Owner)
@@ -86,23 +85,22 @@ class KitchensController:
                 st.session_state.show_add_kitchen = True
                 st.experimental_rerun()
 
-        # Request access to an existing kitchen (owner-managed)
+        # Request access to an existing kitchen (manual contact for now)
         with col_right:
             st.subheader("Join an existing kitchen")
             st.caption(
-                "If you know a kitchen and its owner, you can ask them to add your email to the members."
+                "Ask the kitchen owner to add your account email to the members. "
+                "Once added, the kitchen will appear here."
             )
             with st.expander("I know the Kitchen ID (optional)", expanded=False):
-                kid = st.text_input("Kitchen ID (ask the owner)", value="", key="join_req_kid")
-                owner_email = st.text_input("Owner email (optional, for your records)", value="", key="join_req_owner")
-                # TODO: If you add a backend endpoint for join-requests, call it here.
-                sent = st.button("I have contacted the owner", key="btn_mark_contacted")
-                if sent:
+                _ = st.text_input("Kitchen ID (ask the owner)", value="", key="join_req_kid")
+                _ = st.text_input("Owner email (optional)", value="", key="join_req_owner")
+                if st.button("I have contacted the owner", key="btn_mark_contacted"):
                     st.success(
-                        "Great! The owner can add you on the Kitchens page. You'll see the kitchen here once added.")
-            st.caption(
-                "Tip: Share your account email with the kitchen owner so they can add you."
-            )
+                        "Great! The owner can add you on the Kitchens page. "
+                        "You'll see the kitchen here once added."
+                    )
+
 
     @staticmethod
     def _resolve_role_for_current_user(details: dict[str, Any]) -> str | None:
@@ -153,7 +151,13 @@ class KitchensController:
 
             st.rerun()
         except APIException as exc:
-            st.error(f"Failed to open kitchen: {exc.message}")
+            if getattr(exc, "status_code", None) == 403:
+                st.warning(
+                    "You don't have access to this kitchen. "
+                    "Please select a kitchen you belong to or create your own."
+                )
+            else:
+                st.error(f"Failed to open kitchen: {exc.message}")
 
     def _form(self, *, is_new: bool, defaults: dict[str, Any] | None = None) -> None:
         """Add/Edit Kitchen form (used on landing and in header inline)."""
@@ -212,7 +216,6 @@ class KitchensController:
             sel = [rows[df.index[i]] for i in event.selection.rows]
             st.write(f"**{len(sel)} kitchen(s) selected**")
 
-        # Show actions only when they apply (no disabled buttons)
         if len(sel) > 0:
             if st.button("Delete Selected", key="btn_delete_selected", type="secondary"):
                 for r in sel:
@@ -449,7 +452,7 @@ class KitchensController:
                 st.dataframe(df_inv, width="stretch", hide_index=True)
 
     def render(self) -> None:
-        """Top-level router: list vs detail."""
+        """Top-level router: list vs detail, with new-user onboarding."""
         st.title("Kitchens")
 
         # Sync from topbar to detail
@@ -466,14 +469,13 @@ class KitchensController:
             self._render_detail_tabs(kid)
             return
 
-        # Landing (list)
+        # Landing (list) with primary CTAs
         topbar_kid = st.session_state.get("selected_kitchen_id")
         topbar_name = st.session_state.get("selected_kitchen_name") or "Kitchen"
         if topbar_kid:
             if st.button(f"Open {topbar_name}", key="btn_open_from_topbar"):
                 self._open_kitchen(int(topbar_kid), name_hint=topbar_name)
 
-        # Primary CTA for new users always visible
         c_add, c_refresh, _ = st.columns([1, 1, 6])
         if c_add.button("➕ Add Kitchen", key="btn_add_kitchen"):
             st.session_state.show_add_kitchen = True
