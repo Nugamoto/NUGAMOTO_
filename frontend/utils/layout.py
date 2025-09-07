@@ -9,7 +9,7 @@ from frontend.clients.kitchens_client import KitchensClient
 
 
 def hide_native_pages_nav() -> None:
-    """Inject CSS to hide native nav and style the responsive top bar."""
+    """Inject CSS rules to hide native nav and to style the top bar."""
     st.markdown(
         """
         <style>
@@ -32,11 +32,11 @@ def hide_native_pages_nav() -> None:
             column-gap: 12px;
         }
 
-        /* Streamlit column wrappers inside topbar (left/right) */
+        /* Topbar left/right columns (Streamlit columns) */
         .topbar > div[data-testid="column"] {
-            /* Keep both columns on one row until ~1200px, then wrap */
-            flex: 1 1 600px !important;
-            min-width: 320px;
+            /* Halten bis ~1200px nebeneinander, dann umbrechen */
+            flex: 1 1 580px !important;
+            min-width: 340px;
         }
         @media (max-width: 1200px) {
           .topbar > div[data-testid="column"] {
@@ -45,7 +45,7 @@ def hide_native_pages_nav() -> None:
           }
         }
 
-        /* Label next to select */
+        /* Label direkt neben Select */
         .label {
             opacity: 0.85;
             font-size: 0.9rem;
@@ -53,38 +53,31 @@ def hide_native_pages_nav() -> None:
             margin-right: 8px;
         }
 
-        /* Kitchen select: hard max-width, never stretch beyond */
+        /* Kitchen-Select strikt deckeln */
         .kitchen-select {
             display: inline-block;
             width: 100%;
-            max-width: 100px; /* <- adjust here if you want narrower/wider */
+            max-width: 220px; /* <- passe hier an, falls gewünscht */
             vertical-align: middle;
         }
-        /* Ensure Streamlit selectbox respects the cap */
         .kitchen-select [data-testid="stSelectbox"],
         .kitchen-select [data-testid="stSelectbox"] > div,
         .kitchen-select [data-baseweb="select"],
         .kitchen-select [role="combobox"] {
             width: 100% !important;
-            max-width: 260px !important;
+            max-width: 220px !important;
         }
 
-        /* Right zone: keep inline on wide screens, wrap only when narrow */
-        .topbar-right {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-        .topbar-right .stButton { display: inline-flex; }
-        .topbar-right .stButton > button {
-          white-space: nowrap;
-          padding: 4px 10px;
-          line-height: 1.1;
-          font-size: 0.9rem;
+        /* Right area: 2 Varianten, per Breakpoint geschaltet */
+        .topbar-right-desktop { display: block; }
+        .topbar-right-mobile { display: none; }
+
+        @media (max-width: 1100px) {
+          .topbar-right-desktop { display: none; }
+          .topbar-right-mobile { display: block; }
         }
 
+        /* Pill Styling */
         .pill {
             padding: 4px 8px;
             border-radius: 999px;
@@ -94,13 +87,15 @@ def hide_native_pages_nav() -> None:
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 40vw; /* prevent pill from pushing buttons away on wide screens */
+            max-width: 40vw; /* verhindert, dass die Pill die Buttons verdrängt */
         }
-        @media (max-width: 1100px) {
-          .pill { flex: 1 1 100%; max-width: 100%; }
-        }
-        @media (max-width: 520px) {
-          .pill { display: none; }
+
+        /* Buttons kompakt halten */
+        .stButton > button {
+          white-space: nowrap;
+          padding: 4px 10px;
+          line-height: 1.1;
+          font-size: 0.9rem;
         }
         </style>
         """,
@@ -170,6 +165,7 @@ def _load_kitchens_for_user() -> list[dict]:
         return []
 
 
+
 def _render_topbar() -> None:
     """Render the top bar with compact kitchen selector and auth actions."""
     hide_native_pages_nav()
@@ -181,10 +177,10 @@ def _render_topbar() -> None:
         st.markdown('<div class="topbar">', unsafe_allow_html=True)
         left, right = st.columns([8, 4], vertical_alignment="center")
 
+        # LEFT: Label + capped select (immer nebeneinander)
         with left:
             if email:
-                # Use Streamlit columns to keep label and select strictly side-by-side
-                c1, c2 = st.columns([1, 4], vertical_alignment="center")
+                c1, c2 = st.columns([1, 5], vertical_alignment="center")
                 with c1:
                     st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
                 with c2:
@@ -197,8 +193,6 @@ def _render_topbar() -> None:
                                 if k["id"] == st.session_state["selected_kitchen_id"]:
                                     default_idx = i
                                     break
-
-                        # Wrap the select in a width-capped container
                         st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
                         sel = st.selectbox(
                             "Kitchen",
@@ -209,35 +203,68 @@ def _render_topbar() -> None:
                             key="__topbar_kitchen_select__",
                         )
                         st.markdown("</div>", unsafe_allow_html=True)
-
                         chosen = kitchens[sel]
                         st.session_state.selected_kitchen_id = chosen["id"]
                         st.session_state.selected_kitchen_name = chosen["name"]
                         st.session_state.selected_kitchen_role = chosen["role"]
 
+        # RIGHT: Desktop – eine Zeile wie Quick Actions (3 Spalten)
         with right:
-            # Keep on one line when space allows; wrap cleanly when narrow
-            st.markdown('<div class="topbar-right">', unsafe_allow_html=True)
+            st.markdown('<div class="topbar-right-desktop">', unsafe_allow_html=True)
+            r1, r2, r3 = st.columns([6, 1, 1], vertical_alignment="center")
+            with r1:
+                if email:
+                    role_txt = "Admin" if is_admin else "User"
+                    st.markdown(f'<span class="pill">👤 {email} · {role_txt}</span>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<span class="pill">Not signed in</span>', unsafe_allow_html=True)
+            with r2:
+                st.button(
+                    "Profile",
+                    key="tb_profile_btn_desktop",
+                    on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
+                    use_container_width=True,
+                )
+            with r3:
+                if email:
+                    if st.button("Logout", key="tb_logout_btn_desktop", use_container_width=True):
+                        _perform_logout()
+                else:
+                    st.button(
+                        "Login",
+                        key="tb_login_btn_desktop",
+                        on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
+                        use_container_width=True,
+                    )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # RIGHT: Mobile/eng – Pill in Zeile 1, Buttons darunter
+            st.markdown('<div class="topbar-right-mobile">', unsafe_allow_html=True)
             if email:
                 role_txt = "Admin" if is_admin else "User"
                 st.markdown(f'<span class="pill">👤 {email} · {role_txt}</span>', unsafe_allow_html=True)
             else:
                 st.markdown('<span class="pill">Not signed in</span>', unsafe_allow_html=True)
 
-            st.button(
-                "Profile",
-                key="tb_profile_btn",
-                on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
-            )
-            if email:
-                if st.button("Logout", key="tb_logout_btn"):
-                    _perform_logout()
-            else:
+            b1, b2 = st.columns([1, 1], vertical_alignment="center")
+            with b1:
                 st.button(
-                    "Login",
-                    key="tb_login_btn",
-                    on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
+                    "Profile",
+                    key="tb_profile_btn_mobile",
+                    on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
+                    use_container_width=True,
                 )
+            with b2:
+                if email:
+                    if st.button("Logout", key="tb_logout_btn_mobile", use_container_width=True):
+                        _perform_logout()
+                else:
+                    st.button(
+                        "Login",
+                        key="tb_login_btn_mobile",
+                        on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
+                        use_container_width=True,
+                    )
             st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
