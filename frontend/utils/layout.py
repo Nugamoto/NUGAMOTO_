@@ -194,7 +194,7 @@ def _render_topbar() -> None:
 
                 kitchens = _load_kitchens_for_user()
                 if kitchens:
-                    labels = [f"{k['name']} ({k['role'.capitalize()]})" for k in kitchens]
+                    labels = [f"{k['name']} ({k['role']})" for k in kitchens]
                     default_idx = 0
                     if st.session_state.get("selected_kitchen_id"):
                         for i, k in enumerate(kitchens):
