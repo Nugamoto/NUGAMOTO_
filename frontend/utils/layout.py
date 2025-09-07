@@ -19,50 +19,46 @@ def hide_native_pages_nav() -> None:
             display: flex; align-items: center; justify-content: space-between;
             padding: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1);
             margin: -1rem -1rem 0.25rem -1rem; box-sizing: border-box;
-            flex-wrap: wrap; row-gap: 6px; column-gap: 12px;
+            flex-wrap: wrap; row-gap: 8px; column-gap: 12px;
         }
-        /* Erzwinge früheres Umbrechen der beiden Hauptspalten in der Topbar */
         .topbar > div[data-testid="column"] {
-            flex: 1 1 520px !important; /* frühere Breakpoint-Basis */
-            min-width: 280px; /* verhindert zu starkes Schrumpfen */
+            flex: 1 1 520px !important;
+            min-width: 320px;
         }
-        @media (max-width: 1120px) {
+        @media (max-width: 1100px) {
           .topbar > div[data-testid="column"] {
             flex: 1 1 100% !important;
             width: 100% !important;
           }
         }
 
+        .topbar-right {
+          width: 100%;
+          display: flex; align-items: center; justify-content: flex-end;
+          gap: 8px; flex-wrap: wrap;
+        }
+        .topbar-right .stButton { display: inline-flex; }
+        .topbar-right .stButton > button {
+          white-space: nowrap; padding: 4px 10px; line-height: 1.1; font-size: 0.9rem;
+        }
         .pill {
             padding: 4px 8px; border-radius: 999px; font-size: 0.85rem;
             border: 1px solid rgba(255,255,255,0.15); opacity: 0.95;
-            white-space: nowrap;
-            max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
         }
+        @media (max-width: 1100px) {
+          .topbar-right .pill { flex: 1 1 100%; max-width: 100%; }
+        }
+
         .label {
             opacity: 0.85; font-size: 0.9rem; margin-right: 4px;
             white-space: nowrap;
         }
-        /* Kitchen-Select auf eine sinnvolle Maximalbreite deckeln */
-        .kitchen-select {
-            max-width: 360px;
-            width: 100%;
-        }
 
-        /* Kompaktere Buttons, kein Textumbruch */
-        .stButton > button {
-            white-space: nowrap;
-            padding: 4px 10px;
-            line-height: 1.1;
-            font-size: 0.9rem;
-        }
+        .kitchen-select { max-width: 320px; width: 100%; }
 
-        /* E-Mail-Pill bei wenig Platz begrenzen/ausblenden */
-        @media (max-width: 820px) {
-          .pill { max-width: 60vw; }
-        }
         @media (max-width: 520px) {
-          .pill { display: none; }
+          .topbar-right .pill { display: none; }
         }
         </style>
         """,
@@ -157,7 +153,6 @@ def _render_topbar() -> None:
                                 if k["id"] == st.session_state["selected_kitchen_id"]:
                                     default_idx = i
                                     break
-                        # Wrap die Selectbox, damit max-width greift
                         st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
                         sel = st.selectbox(
                             "Kitchen",
@@ -174,40 +169,52 @@ def _render_topbar() -> None:
                         st.session_state.selected_kitchen_role = chosen["role"]
 
         with right:
-            r1, r2, r3 = st.columns([5, 2, 2], vertical_alignment="center")
-            with r1:
-                if email:
-                    role_txt = "Admin" if is_admin else "User"
-                    st.markdown(f'<span class="pill">👤 {email} · {role_txt}</span>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<span class="pill">Not signed in</span>', unsafe_allow_html=True)
-            with r2:
+            st.markdown('<div class="topbar-right">', unsafe_allow_html=True)
+            if email:
+                role_txt = "Admin" if is_admin else "User"
+                st.markdown(f'<span class="pill">👤 {email} · {role_txt}</span>', unsafe_allow_html=True)
+            else:
+                st.markdown('<span class="pill">Not signed in</span>', unsafe_allow_html=True)
+
+            st.button(
+                "Profile",
+                key="tb_profile_btn",
+                on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
+            )
+            if email:
+                if st.button("Logout", key="tb_logout_btn"):
+                    _perform_logout()
+            else:
                 st.button(
-                    "Profile",
-                    key="tb_profile_btn",
-                    on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
-                    use_container_width=True,
+                    "Login",
+                    key="tb_login_btn",
+                    on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
                 )
-            with r3:
-                if email:
-                    if st.button("Logout", key="tb_logout_btn", use_container_width=True):
-                        _perform_logout()
-                else:
-                    st.button(
-                        "Login",
-                        key="tb_login_btn",
-                        on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
-                        use_container_width=True,
-                    )
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_sidebar() -> None:
+    """Render the left sidebar including navigation and dynamic 'More' section.
+
+    Behavior:
+        - Always shows Dashboard and core navigation items.
+        - For admins, the 'More' expander lists all remaining *.py pages
+          from the pages/ folder, excluding login/profile pages and
+          anything already shown in core or admin sections.
+        - For non-admins, 'More' keeps the original static entries.
+    """
     _render_topbar()
 
-    st.sidebar.image(_logo_path(), use_container_width=True, output_format="PNG", clamp=True, caption=None,
-                     channels="RGB")
+    st.sidebar.image(
+        _logo_path(),
+        use_container_width=True,
+        output_format="PNG",
+        clamp=True,
+        caption=None,
+        channels="RGB",
+    )
     st.sidebar.page_link("app.py", label="🏠 Dashboard", icon=None)
     st.sidebar.markdown("---")
     st.sidebar.subheader("Navigation")
@@ -215,8 +222,9 @@ def render_sidebar() -> None:
     current_user = st.session_state.get("current_user") or {}
     role = str(current_user.get("role", "") or "").lower()
     is_superadmin = bool(getattr(st.session_state, "is_superadmin", False)) or role == "superadmin"
+    is_admin = bool(getattr(st.session_state, "is_admin", False))
 
-    core_items = [
+    core_items: list[tuple[str, str]] = [
         ("🤖 AI Recipes", "pages/ai_recipes.py"),
         ("📖 Recipes", "pages/recipes.py"),
         ("📦 Inventory Items", "pages/inventory_items.py"),
@@ -226,9 +234,56 @@ def render_sidebar() -> None:
     for label, target in core_items:
         st.sidebar.page_link(target, label=label)
 
+    shown_targets: set[str] = {"app.py"} | {t for _, t in core_items}
+    if is_superadmin:
+        # Reserve admin pages to avoid duplicates in "More"
+        shown_targets |= {
+            "pages/users.py",
+            "pages/user_credentials.py",
+            "pages/user_health.py",
+        }
+
     with st.sidebar.expander("More", expanded=False):
-        st.page_link("pages/food_items.py", label="🥬 Food Items")
-        st.page_link("pages/units.py", label="⚙️ Units")
+        if is_admin or is_superadmin:
+            # Discover additional pages from the pages/ directory
+            pages_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "pages")
+            )
+            try:
+                file_names = [f for f in os.listdir(pages_dir) if f.endswith(".py")]
+            except Exception:
+                file_names = []
+
+            # Exclude login and any profile-related pages and __init__.py
+            excluded = {"login.py", "__init__.py"}
+            file_names = [
+                fname
+                for fname in file_names
+                if fname not in excluded and not fname.startswith("profile")
+            ]
+
+            # Build leftover list excluding already shown targets
+            leftovers: list[tuple[str, str]] = []
+            for fname in file_names:
+                target = f"pages/{fname}"
+                if target in shown_targets:
+                    continue
+                base = fname[:-3]  # strip .py
+                # Derive a readable label from snake_case
+                label = " ".join(part.capitalize() for part in base.split("_"))
+                leftovers.append((label, target))
+
+            leftovers.sort(key=lambda x: x[0].lower())
+
+            if leftovers:
+                for label, target in leftovers:
+                    st.page_link(target, label=label)
+            else:
+                st.caption("No additional pages")
+        else:
+            # Non-admin fallback (original static entries)
+            st.page_link("pages/food_items.py", label="🥬 Food Items")
+            st.page_link("pages/units.py", label="⚙️ Units")
 
     if is_superadmin:
         st.sidebar.markdown("---")
