@@ -72,7 +72,7 @@ class RecipesClient(BaseClient):
             if normalized:
                 params["tags_contains"] = normalized
 
-        return self.get(self.BASE_PATH, params=params)
+        return self.get(self.BASE_PATH + "/", params=params)
 
 
     def get_recipe_by_id(self, recipe_id: int) -> dict[str, Any]:
@@ -87,7 +87,7 @@ class RecipesClient(BaseClient):
 
     def create_recipe(self, recipe_data: dict[str, Any]) -> dict[str, Any]:
         """Create a new recipe."""
-        return self.post(self.BASE_PATH, json_data=recipe_data)
+        return self.post(self.BASE_PATH + "/", json_data=recipe_data)
 
 
     def update_recipe(self, recipe_id: int, recipe_data: dict[str, Any]) -> dict[str, Any]:
