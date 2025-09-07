@@ -14,12 +14,12 @@ def delete_database():
 
 def run_initialization():
     print("Running database initialization...")
-    subprocess.run(["python", "-m", "app.db.init_db", "--reset"], check=True)
+    subprocess.run(["python", "-m", "backend.db.init_db", "--reset"], check=True)
 
 
 def run_seeding():
     print("Running seed script...")
-    subprocess.run(["python", "-m", "app.db.seed_db"], check=True)
+    subprocess.run(["python", "-m", "backend.db.seed_db"], check=True)
 
 
 if __name__ == "__main__":

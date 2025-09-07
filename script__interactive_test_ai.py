@@ -14,15 +14,15 @@ sys.path.insert(0, str(project_root))
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.db.session import SessionLocal
-from app.schemas.ai_service import RecipeGenerationRequest
-from app.services.ai.openai_service import OpenAIService, OpenAIServiceError
-from app.core.enums import DifficultyLevel
-from app.crud import user as crud_user
-from app.crud import kitchen as crud_kitchen
-from app.crud import food as crud_food
-from app.crud import core as crud_core
+from backend.core.config import settings
+from backend.db.session import SessionLocal
+from backend.schemas.ai_service import RecipeGenerationRequest
+from backend.services.ai.openai_service import OpenAIService, OpenAIServiceError
+from backend.core.enums import DifficultyLevel
+from backend.crud import user as crud_user
+from backend.crud import kitchen as crud_kitchen
+from backend.crud import food as crud_food
+from backend.crud import core as crud_core
 
 # Configure logging with separate levels for file and console
 log_dir = Path("logs")
