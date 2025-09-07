@@ -44,36 +44,13 @@ def hide_native_pages_nav() -> None:
           }
         }
 
-        /* Label + Select in EINER Zeile (keine Streamlit-Columns, kein Gap) */
-        .left-inline {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: nowrap;
-        }
         .label {
             opacity: 0.85;
             font-size: 0.9rem;
             white-space: nowrap;
         }
 
-        /* Kitchen-Select strikt deckeln und NICHT auf 100% ziehen */
-        .kitchen-select {
-            display: inline-block;
-            width: auto;            /* wichtig: kein 100% */
-            max-width: 220px;       /* hier anpassen, falls gewünscht */
-            vertical-align: middle;
-        }
-        /* Stelle sicher, dass interne Container nicht expandieren */
-        .kitchen-select [data-testid="stSelectbox"],
-        .kitchen-select [data-testid="stSelectbox"] > div,
-        .kitchen-select [data-baseweb="select"],
-        .kitchen-select [role="combobox"] {
-            width: auto !important;
-            max-width: 220px !important;
-        }
-
-        /* Rechte Seite: Buttons kompakt wie Quick Actions */
+        /* Buttons kompakt */
         .stButton > button {
           white-space: nowrap;
           padding: 4px 10px;
@@ -169,41 +146,41 @@ def _render_topbar() -> None:
 
     with st.container():
         st.markdown('<div class="topbar">', unsafe_allow_html=True)
+
+        # Rechts etwas breiter, damit Pill + Buttons nebeneinander passen
         left, right = st.columns([7, 5], vertical_alignment="center")
 
+        # LEFT: Label + Select fest über Streamlit-Spalten (kein HTML-Wrapper)
         with left:
             if email:
-                st.markdown('<div class="left-inline">', unsafe_allow_html=True)
-                st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
+                # c1 sehr schmal für das Label, c2 begrenzt die Select-Breite
+                c1, c2 = st.columns([1, 3], vertical_alignment="center")
+                with c1:
+                    st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
+                with c2:
+                    kitchens = _load_kitchens_for_user()
+                    if kitchens:
+                        labels = [f"{k['name']} ({k['role']})" for k in kitchens]
+                        default_idx = 0
+                        if st.session_state.get("selected_kitchen_id"):
+                            for i, k in enumerate(kitchens):
+                                if k["id"] == st.session_state["selected_kitchen_id"]:
+                                    default_idx = i
+                                    break
+                        sel = st.selectbox(
+                            "Kitchen",
+                            options=range(len(labels)),
+                            index=default_idx,
+                            format_func=lambda i: labels[i],
+                            label_visibility="collapsed",
+                            key="__topbar_kitchen_select__",
+                        )
+                        chosen = kitchens[sel]
+                        st.session_state.selected_kitchen_id = chosen["id"]
+                        st.session_state.selected_kitchen_name = chosen["name"]
+                        st.session_state.selected_kitchen_role = chosen["role"]
 
-                kitchens = _load_kitchens_for_user()
-                if kitchens:
-                    labels = [f"{k['name']} ({k['role']})" for k in kitchens]
-                    default_idx = 0
-                    if st.session_state.get("selected_kitchen_id"):
-                        for i, k in enumerate(kitchens):
-                            if k["id"] == st.session_state["selected_kitchen_id"]:
-                                default_idx = i
-                                break
-
-                    st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
-                    sel = st.selectbox(
-                        "Kitchen",
-                        options=range(len(labels)),
-                        index=default_idx,
-                        format_func=lambda i: labels[i],
-                        label_visibility="collapsed",
-                        key="__topbar_kitchen_select__",
-                    )
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-                    chosen = kitchens[sel]
-                    st.session_state.selected_kitchen_id = chosen["id"]
-                    st.session_state.selected_kitchen_name = chosen["name"]
-                    st.session_state.selected_kitchen_role = chosen["role"]
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
+        # RIGHT: Eine Zeile mit 3 Spalten – wie bei Quick Actions
         with right:
             r1, r2, r3 = st.columns([6, 2, 2], vertical_alignment="center")
             with r1:
