@@ -1,4 +1,4 @@
-"""Login page for NUGAMOTO frontend."""
+"""Registration page for NUGAMOTO frontend."""
 
 from __future__ import annotations
 
@@ -17,12 +17,13 @@ from frontend.clients.auth_client import AuthClient
 from frontend.clients.base import APIException
 
 
-class LoginController:
+class RegisterController:
+    """Encapsulates UI and API logic for user registration."""
+
     def __init__(self) -> None:
         render_sidebar()
         self.client = AuthClient()
         self._init_auth_state()
-
 
     @staticmethod
     def _init_auth_state() -> None:
@@ -31,26 +32,19 @@ class LoginController:
             "auth_refresh_token": None,
             "auth_email": None,
             "auth_inflight": False,
-            "auth_next_page": None,
             "current_user": None,
+            "is_admin": False,
             "selected_kitchen_id": None,
             "selected_kitchen_name": None,
-            "is_admin": False,
         }
         for k, v in defaults.items():
             st.session_state.setdefault(k, v)
 
-
-    @staticmethod
-    def _is_authenticated() -> bool:
-        return bool(st.session_state.get("auth_access_token"))
-
-
+    # ----- helpers copied to keep page self-contained -----
     @staticmethod
     def _base64url_decode(data: str) -> bytes:
         padding = "=" * (-len(data) % 4)
         return base64.urlsafe_b64decode(data + padding)
-
 
     def _extract_user_id_from_jwt(self, access_token: str) -> int | None:
         try:
@@ -60,12 +54,9 @@ class LoginController:
             payload_raw = self._base64url_decode(parts[1])
             payload = json.loads(payload_raw.decode("utf-8"))
             raw = payload.get("sub") or payload.get("user_id")
-            if raw is None:
-                return None
-            return int(raw)
+            return int(raw) if raw is not None else None
         except Exception:
             return None
-
 
     def _is_admin_from_jwt(self, access_token: str) -> bool:
         try:
@@ -86,99 +77,78 @@ class LoginController:
         except Exception:
             return False
 
-
     def _store_tokens_and_context(self, access: str, refresh: str | None, email: str) -> None:
         st.session_state.auth_access_token = access
         st.session_state.auth_refresh_token = refresh
         st.session_state.auth_email = email
-        user_id = self._extract_user_id_from_jwt(access) or st.session_state.get("current_user", {}).get("id")
         if not isinstance(st.session_state.current_user, dict):
             st.session_state.current_user = {}
         st.session_state.current_user["email"] = email
+        user_id = self._extract_user_id_from_jwt(access)
         if user_id is not None:
             st.session_state.current_user["id"] = int(user_id)
         st.session_state.is_admin = self._is_admin_from_jwt(access)
 
+    # ----- UI -----
+    def _render_form(self) -> None:
+        st.set_page_config(page_title="Register - NUGAMOTO", page_icon="🆕")
+        st.title("🆕 Sign Up")
 
-    @staticmethod
-    def _clear_tokens() -> None:
-        st.session_state.auth_access_token = None
-        st.session_state.auth_refresh_token = None
-        st.session_state.auth_email = None
-        st.session_state.current_user = None
+        with st.form("register_form", clear_on_submit=False):
+            col_name, col_email = st.columns([1, 1])
+            with col_name:
+                name = st.text_input("Name", value="", placeholder="Your display name")
+            with col_email:
+                email = st.text_input("Email", value="", autocomplete="email", placeholder="you@example.com")
 
+            col_pw1, col_pw2 = st.columns([1, 1])
+            with col_pw1:
+                password = st.text_input("Password", type="password", autocomplete="new-password")
+            with col_pw2:
+                confirm = st.text_input("Confirm Password", type="password", autocomplete="new-password")
 
-    def _render_logged_in(self) -> None:
-        st.success(f"Signed in as {st.session_state.auth_email}")
-        uid = st.session_state.current_user.get("id") if isinstance(st.session_state.current_user, dict) else None
-        kitchen_info = st.session_state.get("selected_kitchen_name") or st.session_state.get("selected_kitchen_id")
-        st.caption(f"User ID: {uid or 'unknown'} | Kitchen: {kitchen_info or 'not selected'}")
-        c1, c2, c3 = st.columns(3)
-        if c1.button("Go to Dashboard"):
-            st.switch_page("app.py")
-        if c2.button("Open Kitchens"):
-            st.switch_page("pages/kitchens.py")
-        if c3.button("Logout", disabled=st.session_state.auth_inflight):
-            try:
-                st.session_state.auth_inflight = True
-                self.client.set_tokens(st.session_state.auth_access_token, st.session_state.auth_refresh_token)
-                with st.spinner("Signing out..."):
-                    try:
-                        self.client.logout()
-                    except APIException:
-                        pass
-                self._clear_tokens()
-                st.success("Signed out.")
-                st.rerun()
-            finally:
-                st.session_state.auth_inflight = False
+            col_submit, col_cancel = st.columns([1, 1])
+            submitted = col_submit.form_submit_button("Create Account", type="primary", disabled=st.session_state.auth_inflight)
+            cancelled = col_cancel.form_submit_button("Back to Login")
 
-
-    def _render_login_form(self) -> None:
-        with st.form("login_form", clear_on_submit=False):
-            email = st.text_input("Email", value="", autocomplete="email")
-            password = st.text_input("Password", type="password", value="", autocomplete="current-password")
-            submit = st.form_submit_button("Login", disabled=st.session_state.auth_inflight, type="primary")
-            if submit:
-                if not email or not password:
-                    st.error("Please enter both email and password.")
+            if submitted:
+                if not email or not password or not name:
+                    st.error("Please fill in name, email and password.")
+                    return
+                if password != confirm:
+                    st.error("Passwords do not match.")
                     return
                 try:
                     st.session_state.auth_inflight = True
-                    with st.spinner("Signing in..."):
-                        tokens = self.client.login(email=email.strip(), password=password)
+                    with st.spinner("Creating your account..."):
+                        # Backend issues tokens on /auth/register
+                        tokens = self.client.register(name=name.strip(), email=email.strip(), password=password)
                     access = tokens.get("access_token")
                     refresh = tokens.get("refresh_token")
                     if not access:
-                        st.error("No access token received.")
+                        st.error("Registration succeeded but no access token received.")
                         return
                     self._store_tokens_and_context(access, refresh, email.strip())
-                    st.success("Login successful.")
+                    st.success("Welcome! Your account has been created.")
                     st.switch_page("app.py")
                 except APIException as exc:
-                    st.error(f"Login failed: {exc.message}")
+                    st.error(f"Registration failed: {exc.message}")
                 except Exception as exc:
                     st.error(f"Unexpected error: {exc}")
                 finally:
                     st.session_state.auth_inflight = False
 
-        c_signup, _ = st.columns([1, 5])
-        with c_signup:
-            if st.button("Sign Up", help="Create a new account"):
-                st.switch_page("pages/register.py")
+            if cancelled:
+                st.switch_page("pages/login.py")
 
+        st.caption("By signing up you agree to our terms and privacy policy.")
 
     def render(self) -> None:
-        st.set_page_config(page_title="Login - NUGAMOTO", page_icon="🔐")
-        st.title("🔐 Login")
-        if self._is_authenticated():
-            self._render_logged_in()
-        else:
-            self._render_login_form()
+        self._render_form()
 
 
 def main() -> None:
-    LoginController().render()
+    RegisterController().render()
 
 
 if __name__ == "__main__":
