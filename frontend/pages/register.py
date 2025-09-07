@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import Any
 
 import streamlit as st
 
-from frontend.utils.path import ensure_frontend_on_sys_path
 from frontend.utils.layout import render_sidebar
+from frontend.utils.path import ensure_frontend_on_sys_path
 
 ensure_frontend_on_sys_path(__file__)
 
 from frontend.clients.auth_client import AuthClient
 from frontend.clients.base import APIException
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class RegisterController:
@@ -40,7 +43,8 @@ class RegisterController:
         for k, v in defaults.items():
             st.session_state.setdefault(k, v)
 
-    # ----- helpers copied to keep page self-contained -----
+
+    # ----- token helpers -----
     @staticmethod
     def _base64url_decode(data: str) -> bytes:
         padding = "=" * (-len(data) % 4)
@@ -89,6 +93,57 @@ class RegisterController:
             st.session_state.current_user["id"] = int(user_id)
         st.session_state.is_admin = self._is_admin_from_jwt(access)
 
+
+    # ----- validation helpers -----
+    @staticmethod
+    def _password_checks(password: str, confirm: str) -> dict[str, bool]:
+        """Return rule evaluation for password UI and validation."""
+        return {
+            "len": bool(password) and len(password) >= 8,
+            "match": bool(password) and (password == confirm),
+        }
+
+
+    @staticmethod
+    def _password_help_ui(checks: dict[str, bool]) -> None:
+        """Render a compact checklist for password requirements."""
+        ok = "✅"
+        bad = "❌"
+        st.caption(
+            f"{ok if checks['len'] else bad} At least 8 characters"
+            "   •   "
+            f"{ok if checks['match'] else bad} Passwords match"
+        )
+
+
+    @staticmethod
+    def _validate_inputs(name: str, email: str, password: str, confirm: str) -> tuple[bool, str | None]:
+        """Validate form inputs; return (is_valid, user_message)."""
+        if not name or not name.strip():
+            return False, "Please enter your name."
+        if not email or not EMAIL_RE.match(email.strip()):
+            return False, "Please enter a valid email address."
+        if not password or len(password) < 8:
+            return False, "Password must be at least 8 characters long."
+        if password != confirm:
+            return False, "Passwords do not match."
+        return True, None
+
+
+    @staticmethod
+    def _friendly_api_error(status: int | None, message: str | None, raw: Any = None) -> str:
+        """Map backend errors to user-friendly messages."""
+        msg = (message or "").lower()
+        if status in (400, 409) and "already" in msg and "email" in msg:
+            return "This email is already registered. Try logging in instead."
+        if status in (400, 422):
+            if "password" in msg and ("short" in msg or "length" in msg or "8" in msg):
+                return "Your password is too short. It must have at least 8 characters."
+            if "email" in msg and ("invalid" in msg or "value is not a valid" in msg):
+                return "The email address appears to be invalid."
+        # Fallback
+        return "Registration failed. Please check your inputs and try again."
+
     # ----- UI -----
     def _render_form(self) -> None:
         st.set_page_config(page_title="Register - NUGAMOTO", page_icon="🆕")
@@ -107,22 +162,30 @@ class RegisterController:
             with col_pw2:
                 confirm = st.text_input("Confirm Password", type="password", autocomplete="new-password")
 
+            # Live-Feedback unter den Feldern
+            self._password_help_ui(self._password_checks(password, confirm))
+
             col_submit, col_cancel = st.columns([1, 1])
-            submitted = col_submit.form_submit_button("Create Account", type="primary", disabled=st.session_state.auth_inflight)
+            submitted = col_submit.form_submit_button(
+                "Create Account",
+                type="primary",
+                disabled=st.session_state.auth_inflight,
+            )
             cancelled = col_cancel.form_submit_button("Back to Login")
 
             if submitted:
-                if not email or not password or not name:
-                    st.error("Please fill in name, email and password.")
-                    return
-                if password != confirm:
-                    st.error("Passwords do not match.")
+                valid, user_msg = self._validate_inputs(name, email, password, confirm)
+                if not valid:
+                    st.error(user_msg)
                     return
                 try:
                     st.session_state.auth_inflight = True
                     with st.spinner("Creating your account..."):
-                        # Backend issues tokens on /auth/register
-                        tokens = self.client.register(name=name.strip(), email=email.strip(), password=password)
+                        tokens = self.client.register(
+                            name=name.strip(),
+                            email=email.strip(),
+                            password=password,
+                        )
                     access = tokens.get("access_token")
                     refresh = tokens.get("refresh_token")
                     if not access:
@@ -132,7 +195,14 @@ class RegisterController:
                     st.success("Welcome! Your account has been created.")
                     st.switch_page("app.py")
                 except APIException as exc:
-                    st.error(f"Registration failed: {exc.message}")
+                    status = getattr(exc, "status_code", None)
+                    msg = getattr(exc, "message", "") or str(exc)
+                    raw = getattr(exc, "details", None) or getattr(exc, "response_text", None)
+                    st.error(self._friendly_api_error(status, msg, raw))
+                    # Optional: technische Details aufklappbar
+                    if raw:
+                        with st.expander("Technical details", expanded=False):
+                            st.code(str(raw))
                 except Exception as exc:
                     st.error(f"Unexpected error: {exc}")
                 finally:
