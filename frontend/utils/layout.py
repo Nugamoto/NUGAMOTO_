@@ -9,7 +9,7 @@ from frontend.clients.kitchens_client import KitchensClient
 
 
 def hide_native_pages_nav() -> None:
-    """Inject CSS rules to hide native nav and to style the top bar."""
+    """Inject CSS to hide native nav and style the top bar."""
     st.markdown(
         """
         <style>
@@ -32,11 +32,10 @@ def hide_native_pages_nav() -> None:
             column-gap: 12px;
         }
 
-        /* Topbar left/right columns (Streamlit columns) */
+        /* Streamlit column wrappers inside topbar (left/right) */
         .topbar > div[data-testid="column"] {
-            /* Halten bis ~1200px nebeneinander, dann umbrechen */
-            flex: 1 1 580px !important;
-            min-width: 340px;
+            flex: 1 1 520px !important;
+            min-width: 320px;
         }
         @media (max-width: 1200px) {
           .topbar > div[data-testid="column"] {
@@ -45,39 +44,42 @@ def hide_native_pages_nav() -> None:
           }
         }
 
-        /* Label direkt neben Select */
+        /* Label + Select in EINER Zeile (keine Streamlit-Columns, kein Gap) */
+        .left-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: nowrap;
+        }
         .label {
             opacity: 0.85;
             font-size: 0.9rem;
             white-space: nowrap;
-            margin-right: 8px;
         }
 
-        /* Kitchen-Select strikt deckeln */
+        /* Kitchen-Select strikt deckeln und NICHT auf 100% ziehen */
         .kitchen-select {
             display: inline-block;
-            width: 100%;
-            max-width: 220px; /* <- passe hier an, falls gewünscht */
+            width: auto;            /* wichtig: kein 100% */
+            max-width: 220px;       /* hier anpassen, falls gewünscht */
             vertical-align: middle;
         }
+        /* Stelle sicher, dass interne Container nicht expandieren */
         .kitchen-select [data-testid="stSelectbox"],
         .kitchen-select [data-testid="stSelectbox"] > div,
         .kitchen-select [data-baseweb="select"],
         .kitchen-select [role="combobox"] {
-            width: 100% !important;
+            width: auto !important;
             max-width: 220px !important;
         }
 
-        /* Right area: 2 Varianten, per Breakpoint geschaltet */
-        .topbar-right-desktop { display: block; }
-        .topbar-right-mobile { display: none; }
-
-        @media (max-width: 1100px) {
-          .topbar-right-desktop { display: none; }
-          .topbar-right-mobile { display: block; }
+        /* Rechte Seite: Buttons kompakt wie Quick Actions */
+        .stButton > button {
+          white-space: nowrap;
+          padding: 4px 10px;
+          line-height: 1.1;
+          font-size: 0.9rem;
         }
-
-        /* Pill Styling */
         .pill {
             padding: 4px 8px;
             border-radius: 999px;
@@ -87,15 +89,7 @@ def hide_native_pages_nav() -> None:
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 40vw; /* verhindert, dass die Pill die Buttons verdrängt */
-        }
-
-        /* Buttons kompakt halten */
-        .stButton > button {
-          white-space: nowrap;
-          padding: 4px 10px;
-          line-height: 1.1;
-          font-size: 0.9rem;
+            max-width: 40vw;
         }
         </style>
         """,
@@ -175,43 +169,43 @@ def _render_topbar() -> None:
 
     with st.container():
         st.markdown('<div class="topbar">', unsafe_allow_html=True)
-        left, right = st.columns([8, 4], vertical_alignment="center")
+        left, right = st.columns([7, 5], vertical_alignment="center")
 
-        # LEFT: Label + capped select (immer nebeneinander)
         with left:
             if email:
-                c1, c2 = st.columns([1, 5], vertical_alignment="center")
-                with c1:
-                    st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
-                with c2:
-                    kitchens = _load_kitchens_for_user()
-                    if kitchens:
-                        labels = [f"{k['name']} ({k['role']})" for k in kitchens]
-                        default_idx = 0
-                        if st.session_state.get("selected_kitchen_id"):
-                            for i, k in enumerate(kitchens):
-                                if k["id"] == st.session_state["selected_kitchen_id"]:
-                                    default_idx = i
-                                    break
-                        st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
-                        sel = st.selectbox(
-                            "Kitchen",
-                            options=range(len(labels)),
-                            index=default_idx,
-                            format_func=lambda i: labels[i],
-                            label_visibility="collapsed",
-                            key="__topbar_kitchen_select__",
-                        )
-                        st.markdown("</div>", unsafe_allow_html=True)
-                        chosen = kitchens[sel]
-                        st.session_state.selected_kitchen_id = chosen["id"]
-                        st.session_state.selected_kitchen_name = chosen["name"]
-                        st.session_state.selected_kitchen_role = chosen["role"]
+                st.markdown('<div class="left-inline">', unsafe_allow_html=True)
+                st.markdown('<span class="label">Kitchen:</span>', unsafe_allow_html=True)
 
-        # RIGHT: Desktop – eine Zeile wie Quick Actions (3 Spalten)
+                kitchens = _load_kitchens_for_user()
+                if kitchens:
+                    labels = [f"{k['name']} ({k['role']})" for k in kitchens]
+                    default_idx = 0
+                    if st.session_state.get("selected_kitchen_id"):
+                        for i, k in enumerate(kitchens):
+                            if k["id"] == st.session_state["selected_kitchen_id"]:
+                                default_idx = i
+                                break
+
+                    st.markdown('<div class="kitchen-select">', unsafe_allow_html=True)
+                    sel = st.selectbox(
+                        "Kitchen",
+                        options=range(len(labels)),
+                        index=default_idx,
+                        format_func=lambda i: labels[i],
+                        label_visibility="collapsed",
+                        key="__topbar_kitchen_select__",
+                    )
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    chosen = kitchens[sel]
+                    st.session_state.selected_kitchen_id = chosen["id"]
+                    st.session_state.selected_kitchen_name = chosen["name"]
+                    st.session_state.selected_kitchen_role = chosen["role"]
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
         with right:
-            st.markdown('<div class="topbar-right-desktop">', unsafe_allow_html=True)
-            r1, r2, r3 = st.columns([6, 1, 1], vertical_alignment="center")
+            r1, r2, r3 = st.columns([6, 2, 2], vertical_alignment="center")
             with r1:
                 if email:
                     role_txt = "Admin" if is_admin else "User"
@@ -221,51 +215,21 @@ def _render_topbar() -> None:
             with r2:
                 st.button(
                     "Profile",
-                    key="tb_profile_btn_desktop",
+                    key="tb_profile_btn",
                     on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
                     use_container_width=True,
                 )
             with r3:
                 if email:
-                    if st.button("Logout", key="tb_logout_btn_desktop", use_container_width=True):
+                    if st.button("Logout", key="tb_logout_btn", use_container_width=True):
                         _perform_logout()
                 else:
                     st.button(
                         "Login",
-                        key="tb_login_btn_desktop",
+                        key="tb_login_btn",
                         on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
                         use_container_width=True,
                     )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # RIGHT: Mobile/eng – Pill in Zeile 1, Buttons darunter
-            st.markdown('<div class="topbar-right-mobile">', unsafe_allow_html=True)
-            if email:
-                role_txt = "Admin" if is_admin else "User"
-                st.markdown(f'<span class="pill">👤 {email} · {role_txt}</span>', unsafe_allow_html=True)
-            else:
-                st.markdown('<span class="pill">Not signed in</span>', unsafe_allow_html=True)
-
-            b1, b2 = st.columns([1, 1], vertical_alignment="center")
-            with b1:
-                st.button(
-                    "Profile",
-                    key="tb_profile_btn_mobile",
-                    on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
-                    use_container_width=True,
-                )
-            with b2:
-                if email:
-                    if st.button("Logout", key="tb_logout_btn_mobile", use_container_width=True):
-                        _perform_logout()
-                else:
-                    st.button(
-                        "Login",
-                        key="tb_login_btn_mobile",
-                        on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
-                        use_container_width=True,
-                    )
-            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
