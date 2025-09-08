@@ -95,7 +95,7 @@ class OpenAIService(AIService):
                 system_content=system_prompt,
                 user_content=user_prompt,
                 response_model=RecipeGenerationResponse,
-                max_tokens=kwargs.get('max_tokens', 2000),
+                max_tokens=kwargs.get('max_tokens', 5000),
                 temperature=kwargs.get('temperature', 0.7)
             )
 
@@ -133,7 +133,7 @@ class OpenAIService(AIService):
             analysis_data = await self._create_json_completion(
                 system_content=system_prompt,
                 user_content=user_prompt,
-                max_tokens=kwargs.get('max_tokens', 1500),
+                max_tokens=kwargs.get('max_tokens', 3000),
                 temperature=kwargs.get('temperature', 0.5)
             )
 
@@ -199,7 +199,7 @@ class OpenAIService(AIService):
             suggestions_data = await self._create_json_completion(
                 system_content=suggestion_system_prompt,
                 user_content=user_prompt + "\n\nPlease provide quick meal suggestions rather than a single detailed recipe.",
-                max_tokens=kwargs.get('max_tokens', 1500),
+                max_tokens=kwargs.get('max_tokens', 3000),
                 temperature=kwargs.get('temperature', 0.8)
             )
 
