@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict
 import os
+from typing import Any, Dict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,7 +36,7 @@ def create_app() -> FastAPI:
     environment = os.getenv("ENVIRONMENT", "dev").lower()
     trusted_origins = {
         "dev": ["http://localhost", "http://localhost:3000"],
-        "prod": ["https://nugamoto.example.com"],
+        "prod": ["https://nugamoto-wv8kimntqppjp74nygbnrm.streamlit.app/"],
     }
     allow_origins = trusted_origins.get(environment, trusted_origins["dev"])
 
