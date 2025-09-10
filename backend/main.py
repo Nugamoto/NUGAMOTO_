@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +31,15 @@ def create_app() -> FastAPI:
     Returns:
         FastAPI: Configured FastAPI app.
     """
+
+    # Determine environment and allowed CORS origins
+    environment = os.getenv("ENVIRONMENT", "dev").lower()
+    trusted_origins = {
+        "dev": ["http://localhost", "http://localhost:3000"],
+        "prod": ["https://nugamoto.example.com"],
+    }
+    allow_origins = trusted_origins.get(environment, trusted_origins["dev"])
+
     app = FastAPI(
         title="NUGAMOTO API",
         version="1.0.0",
@@ -38,10 +48,10 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    # CORS (development-friendly defaults; tighten for production)
+    # CORS settings based on environment
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # TODO: restrict to trusted origins in production
+        allow_origins=allow_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
