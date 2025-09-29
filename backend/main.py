@@ -36,7 +36,7 @@ def create_app() -> FastAPI:
     environment = os.getenv("ENVIRONMENT", "dev").lower()
     trusted_origins = {
         "dev": ["http://localhost", "http://localhost:3000"],
-        "prod": ["https://nugamoto-wv8kimntqppjp74nygbnrm.streamlit.app/"],
+        "prod": ["https://nugamoto.streamlit.app/"],
     }
     allow_origins = trusted_origins.get(environment, trusted_origins["dev"])
 
