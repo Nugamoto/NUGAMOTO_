@@ -115,23 +115,6 @@ class _InventoryItemBase(BaseModel):
         validate_assignment=True
     )
 
-    @field_validator('expiration_date')
-    def validate_expiration_date(cls, v: datetime.date | None) -> datetime.date | None:
-        """Validate that expiration date is not in the past.
-
-        Args:
-            v: The expiration date to validate.
-
-        Returns:
-            The validated expiration date.
-
-        Raises:
-            ValueError: If the expiration date is in the past.
-        """
-        if v is not None and v < datetime.date.today():
-            raise ValueError("Expiration date cannot be in the past")
-        return v
-
 
 class InventoryItemCreate(_InventoryItemBase):
     """Schema for creating a new inventory item.
