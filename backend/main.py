@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi_mcp import FastAPIMCP
+from fastapi_mcp import FastApiMCP
 
 # v1 routers
 from backend.api.v1 import (
@@ -92,8 +92,9 @@ def create_app() -> FastAPI:
         return {"status": "healthy"}
 
 
-    mcp = FastAPIMCP(
-        include=["get_service_status", "get_current_user_profile", "list_users"]
+    mcp = FastApiMCP(
+        app, 
+        include_operations=["get_service_status", "get_current_user_profile", "list_users"]
     )
     app.mount("/mcp", mcp)
 
