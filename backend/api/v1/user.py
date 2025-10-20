@@ -60,6 +60,7 @@ def create_user(
     "/",
     response_model=list[UserRead],
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_users",
 )
 def get_users(
         *,

@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import FastAPIMCP
 
 # v1 routers
 from backend.api.v1 import (
@@ -79,7 +80,7 @@ def create_app() -> FastAPI:
 
 
     # Basic service endpoints
-    @app.get("/", tags=["Service"])
+    @app.get("/", tags=["Service"], operation_id="get_service_status")
     def root() -> Dict[str, Any]:
         """Root endpoint to verify the service is running."""
         return {"status": "ok", "service": "NUGAMOTO API"}
@@ -89,6 +90,12 @@ def create_app() -> FastAPI:
     def health() -> Dict[str, Any]:
         """Health check endpoint."""
         return {"status": "healthy"}
+
+
+    mcp = FastAPIMCP(
+        include=["get_service_status", "get_current_user_profile", "list_users"]
+    )
+    app.mount("/mcp", mcp)
 
 
     return app
