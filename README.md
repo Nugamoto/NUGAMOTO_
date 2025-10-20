@@ -84,6 +84,82 @@ streamlit run frontend/app.py
 uvicorn backend.main:app
 ```
 
+## MCP Quick Test
+
+Follow this checklist once to verify that the MCP bridge works:
+
+1. Start the FastAPI server (reload flag optional during development):
+
+   ```bash
+   uvicorn backend.main:app --reload
+   ```
+
+2. (First-time setup) Create yourself an account by calling the registration endpoint. Replace the sample data with your own email/password. You only need to do this once per database.
+
+   ```bash
+   curl -X POST "http://localhost:8000/v1/auth/register" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Demo User", "email": "demo@example.com", "password": "demo-password"}'
+   ```
+
+3. Use the bundled CLI to log in and fetch an access token. The command prints the token and, if you pass `--save-token`, writes it to a file for later reuse.
+
+   ```bash
+   python mcp_cli.py login --email demo@example.com --password "demo-password" --save-token .token
+   ```
+
+4. List the available MCP tools and execute a protected one (e.g. `get_current_user_profile`). Pass the token string if the route needs authentication:
+
+   ```bash
+   python mcp_cli.py list --token "$(cat .token)"
+   python mcp_cli.py call get_current_user_profile --token "$(cat .token)"
+   ```
+
+5. Connect from IDE agents (VS Code / Continue / Copilot Agent Mode) via SSE. Supply the same bearer token so authenticated routes continue to work:
+
+   ```json
+   {
+     "type": "sse",
+     "serverUrl": "http://localhost:8000/mcp",
+     "headers": {
+       "Authorization": "Bearer <your-access-token>"
+     }
+   }
+   ```
+
+6. When the access token expires, re-run the login command (step 3) or call `/v1/auth/refresh` with the stored refresh token to obtain a new one.
+
+### Beginner-Friendly Walkthrough
+
+If you are starting from scratch, these commands take you from cloning the repo to running your first MCP query:
+
+```bash
+# 1) Prepare a virtual environment and install dependencies
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2) Initialize the SQLite database with sample data (optional but handy)
+python -m backend.db.init_db --reset
+python -m backend.db.seed_db
+
+# 3) Launch the API
+uvicorn backend.main:app --reload
+
+# 4) Register a user (if you did not run the seed script or need a new account)
+curl -X POST "http://localhost:8000/v1/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Demo User", "email": "demo@example.com", "password": "demo-password"}'
+
+# 5) Log in through the CLI and save the access token to a file
+python mcp_cli.py login --email demo@example.com --password "demo-password" --save-token .token
+
+# 6) Ask MCP for your user profile while passing the saved token
+python mcp_cli.py call get_current_user_profile --token "$(cat .token)"
+```
+
+The CLI defaults to `http://localhost:8000/mcp`. To target another host or port (for example when the API runs on a remote machine or inside Docker), add `--server "http://<host>:<port>/mcp"` to every command.
+
 ## Tests & Quality
 
 ```bash
