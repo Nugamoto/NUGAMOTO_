@@ -8,15 +8,14 @@ import json
 from contextlib import asynccontextmanager
 from getpass import getpass
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
-from requests.exceptions import HTTPError, RequestException
-
 from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import Tool
+from requests.exceptions import HTTPError, RequestException
 
 DEFAULT_SERVER_URL = "http://localhost:8000/mcp"
 
@@ -34,10 +33,9 @@ def derive_api_base(server_url: str) -> str:
 
 
 @asynccontextmanager
-async def session_scope(server_url: str, token: str | None = None) -> AsyncIterator[ClientSession]:
-    """Create a connected MCP client session for the given server URL."""
+async def session_scope(server_url: str, token: str | None = None):
     headers = {"Authorization": f"Bearer {token}"} if token else None
-    async with sse_client(server_url, headers=headers) as (read_stream, write_stream):
+    async with streamablehttp_client(server_url, headers=headers) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             yield session

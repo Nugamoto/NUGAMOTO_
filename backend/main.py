@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        faopenapi_url="/openapi.json",
     )
 
     # CORS settings based on environment
@@ -93,10 +93,10 @@ def create_app() -> FastAPI:
 
 
     mcp = FastApiMCP(
-        app, 
-        include_operations=["get_service_status", "get_current_user_profile", "list_users"]
+        app,
+        include_operations=["get_service_status", "get_current_user_profile", "list_users"],
     )
-    app.mount("/mcp", mcp)
+    mcp.mount_http()
 
 
     return app
