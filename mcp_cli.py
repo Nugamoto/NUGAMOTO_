@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from contextlib import asynccontextmanager
 from getpass import getpass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 from urllib.parse import urlparse
 
 import requests
@@ -32,10 +33,64 @@ def derive_api_base(server_url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+GLOBAL_OPTION_NAMES = ("--server", "--api")
+
+
+def normalize_global_options(argv: Sequence[str]) -> list[str]:
+    """Ensure global options appear before subcommands.
+
+    argparse stops looking for top-level options once it encounters the
+    sub-command token.  Users naturally expect to be able to place global
+    options after the sub-command (``mcp_cli.py list --server ...``).  To
+    support that workflow we reorder recognised global options to the front
+    before handing the argument list to argparse.
+    """
+
+    if not argv:
+        return []
+
+    reordered: list[str] = []
+    remaining: list[str] = []
+
+    i = 0
+    length = len(argv)
+    while i < length:
+        token = argv[i]
+        matched = next(
+            (name for name in GLOBAL_OPTION_NAMES if token == name or token.startswith(f"{name}=")),
+            None,
+        )
+
+        if matched is None:
+            remaining.append(token)
+            i += 1
+            continue
+
+        reordered.append(token)
+        if "=" in token:
+            i += 1
+            continue
+
+        next_index = i + 1
+        if next_index >= length:
+            # Let argparse raise the appropriate error for the missing value
+            # by keeping the dangling option in place.
+            remaining.append(token)
+            reordered.pop()  # remove the option we just appended
+            i += 1
+            continue
+
+        reordered.append(argv[next_index])
+        i += 2
+
+    return reordered + remaining
+
+
 @asynccontextmanager
 async def session_scope(server_url: str, token: str | None = None):
     headers = {"Authorization": f"Bearer {token}"} if token else None
-    async with streamablehttp_client(server_url, headers=headers) as (read_stream, write_stream):
+    async with streamablehttp_client(server_url, headers=headers) as stream_parts:
+        read_stream, write_stream, *_ = stream_parts
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             yield session
@@ -188,9 +243,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def async_main() -> None:
+async def async_main(argv: Sequence[str] | None = None) -> None:
     parser = build_parser()
-    args = parser.parse_args()
+    normalized_argv = normalize_global_options(argv or sys.argv[1:])
+    args = parser.parse_args(normalized_argv)
 
     server_url: str = args.server
     api_base_url: str = args.api or derive_api_base(server_url)
