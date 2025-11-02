@@ -9,6 +9,7 @@ from fastapi_mcp import FastApiMCP
 
 # v1 routers
 from backend.api.v1 import (
+
     auth,
     user_me,
     ai_model_output,
@@ -46,7 +47,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
-        faopenapi_url="/openapi.json",
+        openapi_url="/openapi.json",
     )
 
     # CORS settings based on environment
@@ -87,17 +88,24 @@ def create_app() -> FastAPI:
 
 
     @app.get("/health", tags=["Service"])
+    @app.get("/health", tags=["Service"], operation_id="health_check")
     def health() -> Dict[str, Any]:
         """Health check endpoint."""
         return {"status": "healthy"}
 
-
-    mcp = FastApiMCP(
-        app,
-        include_operations=["get_service_status", "get_current_user_profile", "list_users"],
-    )
-    mcp.mount_http()
-
+    # ===== MCP SETUP =====
+    # Mount MCP server with only the GET user endpoints for now
+    if os.getenv("ENABLE_MCP", "true").lower() == "true":
+        mcp = FastApiMCP(
+            app,
+            include_operations=[
+                "get_service_status",
+                "list_users",
+                "get_user_by_id",
+                "get_user_by_email",
+            ],
+        )
+        mcp.mount_http()
 
     return app
 
