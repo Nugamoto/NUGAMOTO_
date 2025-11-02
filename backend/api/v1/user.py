@@ -76,6 +76,7 @@ def get_users(
     "/{user_id}",
     response_model=UserRead,
     dependencies=[Depends(require_same_user)],
+    operation_id="get_user_by_id",
 )
 def get_user_by_id(
         *,
@@ -152,6 +153,7 @@ def delete_user(
     "/by-email/{email}",
     response_model=UserRead,
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_user_by_email",
 )
 def get_user_by_email(
         *,
