@@ -25,6 +25,8 @@ from backend.api.v1 import (
     user_credentials,
     user_health,
 )
+from backend.core.mcp_middleware import MCPAuthMiddleware
+from backend.services.mcp_session import get_mcp_session
 
 
 def create_app() -> FastAPI:
@@ -58,6 +60,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # MCP Auth Middleware (adds token from session to requests)
+    app.add_middleware(MCPAuthMiddleware)
 
     # Public routers (no auth required)
     app.include_router(auth.router, prefix="/v1")
@@ -93,6 +98,22 @@ def create_app() -> FastAPI:
         """Health check endpoint."""
         return {"status": "healthy"}
 
+
+    @app.get(
+        "/session/status",
+        summary="Get MCP session status",
+        operation_id="get_mcp_session_status",
+    )
+    def get_session_status() -> dict:
+        """Get current MCP session authentication status."""
+        mcp_session = get_mcp_session()
+        return {
+            "authenticated": mcp_session.is_authenticated(),
+            "user_id": mcp_session.get_user_id(),
+        }
+
+
+
     # ===== MCP SETUP =====
     # Mount MCP server with auth and user endpoints
     if os.getenv("ENABLE_MCP", "true").lower() == "true":
@@ -101,9 +122,11 @@ def create_app() -> FastAPI:
             include_operations=[
                 # Service
                 "get_service_status",
+                "get_mcp_session_status",
                 # Auth
                 "register_user",
                 "login_user",
+                "logout_user",
                 # Users
                 "list_users",
                 "get_user_by_id",
@@ -115,5 +138,5 @@ def create_app() -> FastAPI:
     return app
 
 
-# ASGI entrypoint
+# ASGI
 app = create_app()
