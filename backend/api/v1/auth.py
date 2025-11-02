@@ -16,6 +16,7 @@ from backend.schemas.user import UserCreate
 from backend.schemas.user_credentials import UserCredentialsCreate
 from backend.security import create_access_token, create_refresh_token, decode_token
 from backend.security.passwords import verify_password
+from backend.services.mcp_session import get_mcp_session
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -134,6 +135,11 @@ def register(
 
     access = create_access_token(user_id=user.id, extra_claims=claims)
     refresh = create_refresh_token(user_id=user.id)
+
+    # Store tokens in MCP session for tool usage
+    mcp_session = get_mcp_session()
+    mcp_session.set_tokens(access, refresh, user.id)
+
     return TokenPair(access_token=access, refresh_token=refresh, token_type="bearer")
 
 
@@ -175,6 +181,10 @@ def login(
 
     access = create_access_token(user_id=user_orm.id, extra_claims=claims)
     refresh = create_refresh_token(user_id=user_orm.id)
+
+    # Store tokens in MCP session for tool usage
+    mcp_session = get_mcp_session()
+    mcp_session.set_tokens(access, refresh, user_orm.id)
 
     return TokenPair(access_token=access, refresh_token=refresh, token_type="bearer")
 
@@ -232,4 +242,8 @@ def refresh(
 )
 def logout() -> Response:
     """Stateless logout. Client must delete stored tokens."""
+    # Clear MCP session tokens
+    mcp_session = get_mcp_session()
+    mcp_session.clear()
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
