@@ -94,12 +94,17 @@ def create_app() -> FastAPI:
         return {"status": "healthy"}
 
     # ===== MCP SETUP =====
-    # Mount MCP server with only the GET user endpoints for now
+    # Mount MCP server with auth and user endpoints
     if os.getenv("ENABLE_MCP", "true").lower() == "true":
         mcp = FastApiMCP(
             app,
             include_operations=[
+                # Service
                 "get_service_status",
+                # Auth
+                "register_user",
+                "login_user",
+                # Users
                 "list_users",
                 "get_user_by_id",
                 "get_user_by_email",
