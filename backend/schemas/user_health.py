@@ -13,7 +13,7 @@ from backend.core.enums import Gender, ActivityLevel
 class _UserHealthProfileBase(BaseModel):
     """Base schema for user health profile with common fields."""
 
-    age: Annotated[int | None, Field(
+    age: Annotated[float | int | None, Field(
         None,
         ge=10,
         le=120,
@@ -25,7 +25,7 @@ class _UserHealthProfileBase(BaseModel):
         max_length=50,
         description="User's gender"
     )]
-    height_cm: Annotated[int | None, Field(
+    height_cm: Annotated[float | int | None, Field(
         None,
         ge=50,
         le=300,
@@ -60,6 +60,40 @@ class _UserHealthProfileBase(BaseModel):
         validate_assignment=True,
         from_attributes=True
     )
+
+    @field_validator('age', 'height_cm', mode='before')
+    def coerce_int_fields(cls, v):
+        """Coerce values to int when they are numerically integral.
+
+        Accepts values like 32.0 or "168" and converts them to int,
+        while rejecting non-integral floats like 32.5.
+        """
+        if v is None:
+            return v
+        # Allow string numbers
+        if isinstance(v, str):
+            v = v.strip()
+            if v == "":
+                return None
+            try:
+                # Try int first for pure integer strings
+                return int(v)
+            except ValueError:
+                try:
+                    f = float(v)
+                except ValueError:
+                    raise ValueError("Value must be an integer or integer-like number")
+                if f.is_integer():
+                    return int(f)
+                raise ValueError("Value must be an integer without fractional part")
+
+        # Allow floats that are integral (e.g., 32.0)
+        if isinstance(v, float):
+            if v.is_integer():
+                return int(v)
+            raise ValueError("Value must be an integer without fractional part")
+
+        return v
 
     @field_validator('gender')
     def validate_gender(cls, v: str | None) -> str | None:
