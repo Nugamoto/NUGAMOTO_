@@ -50,6 +50,7 @@ def _is_admin(credentials: Optional[HTTPAuthorizationCredentials]) -> bool:
     status_code=status.HTTP_201_CREATED,
     summary="Create a new AI model output",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="create_ai_output",
 )
 def create_ai_output(
         output_data: AIModelOutputCreate,
@@ -77,6 +78,7 @@ def create_ai_output(
     status_code=status.HTTP_200_OK,
     summary="Get a specific AI output by ID",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_ai_output_by_id",
 )
 def get_ai_output(
         output_id: int,
@@ -140,6 +142,7 @@ def delete_ai_output(
     status_code=status.HTTP_200_OK,
     summary="Get all AI outputs with optional filtering",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_ai_outputs",
 )
 def get_all_ai_outputs(
         user_id: int | None = Query(None, gt=0, description="Filter by user ID"),
@@ -185,6 +188,7 @@ def get_all_ai_outputs(
     status_code=status.HTTP_200_OK,
     summary="Get all AI outputs for a specific target entity",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_ai_outputs_by_target",
 )
 def get_ai_outputs_by_target(
         target_type: AIOutputTargetType,

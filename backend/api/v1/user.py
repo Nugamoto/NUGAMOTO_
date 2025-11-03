@@ -29,6 +29,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
     response_model=UserRead,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_super_admin)],
+    operation_id="create_user",
 )
 def create_user(
         *,

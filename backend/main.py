@@ -127,10 +127,18 @@ def create_app() -> FastAPI:
                 "register_user",
                 "login_user",
                 "logout_user",
+                "refresh_token",
                 # Users
                 "list_users",
                 "get_user_by_id",
                 "get_user_by_email",
+                "create_user",
+                # AI Outputs
+                "create_ai_output",
+                "get_ai_output_by_id",
+                "list_ai_outputs",
+                "list_ai_outputs_by_target",
+                "get_ai_output_summary",
             ],
         )
         mcp.mount_http()
