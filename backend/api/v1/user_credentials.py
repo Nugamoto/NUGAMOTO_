@@ -26,6 +26,7 @@ router = APIRouter(prefix="/users", tags=["User Credentials"])
     status_code=status.HTTP_201_CREATED,
     summary="Create user credentials",
     dependencies=[Depends(require_same_user)],
+    operation_id="create_user_credentials",
 )
 def create_user_credentials(
         user_id: int,
@@ -86,6 +87,7 @@ def create_user_credentials(
     response_model=UserCredentialsRead,
     summary="Get user credentials",
     dependencies=[Depends(require_same_user)],
+    operation_id="get_user_credentials",
 )
 def get_user_credentials(
         user_id: int,
@@ -171,6 +173,7 @@ def update_user_credentials(
     response_model=list[UserCredentialsSummary],
     summary="Get all user credentials summary",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_user_credentials_summary",
 )
 def get_all_user_credentials_summary(
         db: Annotated[Session, Depends(get_db)],
