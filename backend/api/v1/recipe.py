@@ -47,6 +47,7 @@ reviews_router = APIRouter(prefix="/{recipe_id}/reviews", tags=["Recipe Reviews"
     status_code=status.HTTP_201_CREATED,
     summary="Create a new recipe",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="create_recipe",
 )
 def create_recipe(
         recipe_data: RecipeCreate,
@@ -78,6 +79,7 @@ def create_recipe(
     response_model=list[RecipeRead],
     summary="Get all recipes with optional filtering",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_recipes",
 )
 def get_all_recipes(
         db: Annotated[Session, Depends(get_db)],
@@ -138,6 +140,7 @@ def get_all_recipes(
     response_model=RecipeSummary,
     summary="Get recipe statistics summary",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_recipe_summary",
 )
 def get_recipe_summary(
         db: Annotated[Session, Depends(get_db)]
@@ -158,6 +161,7 @@ def get_recipe_summary(
     response_model=list[RecipeRead],
     summary="Get recipe suggestions by available ingredients",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_recipe_suggestions_by_ingredients",
 )
 def get_recipe_suggestions_by_ingredients(
         food_item_ids: Annotated[list[int], Query(description="List of available food item IDs")],
@@ -193,6 +197,7 @@ def get_recipe_suggestions_by_ingredients(
     response_model=list[RecipeRead],
     summary="Get AI-generated recipes",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_ai_generated_recipes",
 )
 def get_ai_generated_recipes(
         db: Annotated[Session, Depends(get_db)],
@@ -217,6 +222,7 @@ def get_ai_generated_recipes(
     response_model=RecipeRead,
     summary="Get a recipe by ID",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_recipe_by_id",
 )
 def get_recipe(
         recipe_id: int,
@@ -255,6 +261,7 @@ def get_recipe(
     response_model=RecipeWithDetails,
     summary="Get a recipe with full details",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_recipe_details",
 )
 def get_recipe_details(
         recipe_id: int,
@@ -377,6 +384,7 @@ def delete_recipe(
     "/{recipe_id}/cook",
     response_model=RecipeCookResponse,
     dependencies=[Depends(require_kitchen_member())],  # members can cook
+    operation_id="cook_recipe",
 )
 async def cook_recipe_endpoint(
         recipe_id: int,
@@ -432,6 +440,7 @@ async def cook_recipe_endpoint(
     status_code=status.HTTP_201_CREATED,
     summary="Add an ingredient to a recipe",
     dependencies=[Depends(require_recipe_owner_or_admin)],
+    operation_id="add_recipe_ingredient",
 )
 def add_recipe_ingredient(
         recipe_id: int,
@@ -481,6 +490,7 @@ def add_recipe_ingredient(
     response_model=list[RecipeIngredientRead],
     summary="Get all ingredients for a recipe",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_recipe_ingredients",
 )
 def get_recipe_ingredients(
         recipe_id: int,
@@ -618,6 +628,7 @@ def delete_recipe_ingredient(
     status_code=status.HTTP_201_CREATED,
     summary="Add a step to a recipe",
     dependencies=[Depends(require_recipe_owner_or_admin)],
+    operation_id="add_recipe_step",
 )
 def add_recipe_step(
         recipe_id: int,
@@ -661,6 +672,7 @@ def add_recipe_step(
     response_model=list[RecipeStepRead],
     summary="Get all steps for a recipe",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_recipe_steps",
 )
 def get_recipe_steps(
         recipe_id: int,
@@ -938,6 +950,7 @@ def delete_recipe_nutrition(
     status_code=status.HTTP_201_CREATED,
     summary="Create or update a recipe review",
     dependencies=[Depends(require_same_user)],
+    operation_id="upsert_recipe_review",
 )
 def create_recipe_review(
         recipe_id: int,
@@ -981,6 +994,7 @@ def create_recipe_review(
     response_model=list[RecipeReviewRead],
     summary="Get all reviews for a recipe",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_recipe_reviews",
 )
 def get_recipe_reviews(
         recipe_id: int,
@@ -1018,6 +1032,7 @@ def get_recipe_reviews(
     response_model=RecipeRatingSummary,
     summary="Get rating summary for a recipe",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_recipe_rating_summary",
 )
 def get_recipe_rating_summary(
         recipe_id: int,
