@@ -40,6 +40,7 @@ users_router = APIRouter(prefix="/users", tags=["Kitchen Users"])
     response_model=KitchenRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new kitchen",
+    operation_id="create_kitchen",
 )
 def create_kitchen(
         kitchen_data: KitchenCreate,
@@ -81,6 +82,7 @@ def create_kitchen(
     response_model=list[KitchenRead],
     status_code=status.HTTP_200_OK,
     summary="Get kitchens for current user",
+    operation_id="list_kitchens",
 )
 def get_all_kitchens(
         db: Session = Depends(get_db),
@@ -105,6 +107,7 @@ def get_all_kitchens(
     status_code=status.HTTP_200_OK,
     summary="Get kitchen details with users",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_kitchen_by_id",
 )
 def get_kitchen(kitchen_id: int, db: Session = Depends(get_db)) -> KitchenWithUsers:
     """Retrieve a kitchen by ID including all associated users.
@@ -208,6 +211,7 @@ def delete_kitchen(
     status_code=status.HTTP_201_CREATED,
     summary="Add user to kitchen",
     dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
+    operation_id="add_user_to_kitchen",
 )
 def add_user_to_kitchen(
         kitchen_id: int,
@@ -258,6 +262,7 @@ def add_user_to_kitchen(
     status_code=status.HTTP_200_OK,
     summary="Get user's role in kitchen",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_user_kitchen_relationship",
 )
 def get_user_role_in_kitchen(
         kitchen_id: int,
@@ -363,6 +368,7 @@ def remove_user_from_kitchen(
     status_code=status.HTTP_200_OK,
     summary="Get all kitchens for a user",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_user_kitchens",
 )
 def get_user_kitchens(
         user_id: int,
