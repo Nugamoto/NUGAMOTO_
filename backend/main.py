@@ -137,11 +137,13 @@ def create_app() -> FastAPI:
                 "create_user_credentials",
                 "get_user_credentials",
                 "get_user_credentials_summary",
+                "update_user_credentials",
                 # User Health Profiles
                 "create_user_health_profile",
                 "get_user_health_profile",
                 "get_health_profiles_summary",
                 "search_health_profiles",
+                "update_user_health_profile",
                 # AI Outputs
                 "create_ai_output",
                 "get_ai_output_by_id",

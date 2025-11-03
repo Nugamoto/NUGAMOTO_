@@ -128,6 +128,7 @@ def get_user_credentials(
     response_model=UserCredentialsRead,
     summary="Update user credentials",
     dependencies=[Depends(require_same_user)],
+    operation_id="update_user_credentials",
 )
 def update_user_credentials(
         user_id: int,

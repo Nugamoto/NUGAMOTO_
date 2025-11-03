@@ -144,6 +144,7 @@ def get_user_health_profile(
     response_model=UserHealthProfileRead,
     summary="Update user health profile",
     dependencies=[Depends(require_same_user)],
+    operation_id="update_user_health_profile",
 )
 def update_health_profile(
     user_id: int,
