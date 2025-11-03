@@ -23,7 +23,7 @@ from backend.services.conversions.unit_conversion_service import UnitConversionS
 router = APIRouter(prefix="/ai", tags=["AI Services"])
 
 
-@router.post("/recipes", response_model=RecipeWithAIOutput)
+@router.post("/recipes", response_model=RecipeWithAIOutput, operation_id="generate_ai_recipe")
 async def generate_recipe(
         *,
         db: Annotated[Session, Depends(get_db)],
@@ -100,7 +100,7 @@ async def generate_recipe(
 
 
 @router.post("/recipes/{ai_output_id}/convert-to-recipe-create", response_model=RecipeCreate,
-             dependencies=[Depends(require_same_user)])
+             dependencies=[Depends(require_same_user)], operation_id="convert_ai_recipe_to_create")
 async def convert_ai_recipe_to_create(
         *,
         db: Annotated[Session, Depends(get_db)],

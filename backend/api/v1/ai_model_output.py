@@ -221,6 +221,7 @@ def get_ai_outputs_by_target(
     status_code=status.HTTP_200_OK,
     summary="Get AI output statistics summary",
     dependencies=[Depends(require_super_admin)],
+    operation_id="get_ai_output_summary",
 )
 def get_ai_output_summary(db: Session = Depends(get_db)) -> AIOutputSummary:
     """Retrieve summary statistics for all AI outputs.
