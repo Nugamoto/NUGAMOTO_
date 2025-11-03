@@ -37,6 +37,7 @@ operations_router = APIRouter(prefix="/operations", tags=["Food Item Operations"
     response_model=FoodItemRead,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(get_current_user_id)],
+    operation_id="create_food_item",
 )
 def create_food_item(
         *,
@@ -77,6 +78,7 @@ def create_food_item(
     "/",
     response_model=list[FoodItemRead],
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_food_items",
 )
 def get_food_items(
         *,
@@ -105,6 +107,7 @@ def get_food_items(
     "/{food_item_id}",
     response_model=FoodItemRead,
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_food_item_by_id",
 )
 def get_food_item_by_id(
         *,
@@ -235,6 +238,7 @@ def delete_food_item(
     "/{food_item_id}/with-conversions",
     response_model=FoodItemWithConversions,
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_food_item_with_conversions",
 )
 def get_food_item_with_conversions(
         *,
@@ -272,6 +276,7 @@ def get_food_item_with_conversions(
     "/{food_item_id}/with-aliases",
     response_model=FoodItemWithAliases,
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_food_item_with_aliases",
 )
 def get_food_item_with_aliases(
         *,
@@ -415,6 +420,7 @@ def get_aliases_for_food_item(
     "/users/{user_id}/",
     response_model=list[FoodItemAliasRead],
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_user_aliases",
 )
 def get_all_aliases_for_user(
         *,
@@ -491,6 +497,7 @@ def delete_alias_by_id(
     response_model=FoodItemUnitConversionRead,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(get_current_user_id)],
+    operation_id="create_food_item_unit_conversion",
 )
 def create_food_unit_conversion(
         *,
@@ -549,6 +556,7 @@ def create_food_unit_conversion(
     "/{food_item_id}/",
     response_model=list[FoodItemUnitConversionRead],
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_food_item_unit_conversions",
 )
 def get_food_unit_conversions(
         *,
@@ -625,6 +633,7 @@ def delete_food_unit_conversion(
     "/search-by-alias",
     response_model=list[FoodItemRead],
     dependencies=[Depends(get_current_user_id)],
+    operation_id="search_food_items_by_alias",
 )
 def search_food_items_by_alias(
         *,
@@ -655,6 +664,7 @@ def search_food_items_by_alias(
     "/{food_item_id}/convert",
     response_model=FoodConversionResult,
     dependencies=[Depends(get_current_user_id)],
+    operation_id="convert_food_units",
 )
 def convert_food_units(
         *,
@@ -738,6 +748,7 @@ def convert_food_units(
 @operations_router.get(
     "/{food_item_id}/can-convert/{from_unit_id}/{to_unit_id}",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="can_convert_food_units",
 )
 def can_convert_food_units(
         *,
