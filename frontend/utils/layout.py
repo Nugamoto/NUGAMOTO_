@@ -206,18 +206,18 @@ def _render_topbar() -> None:
                     "Profile",
                     key="tb_profile_btn",
                     on_click=lambda: st.session_state.update(_nav_target="pages/profile.py"),
-                    use_container_width=True,
+                    width="stretch",
                 )
             with r3:
                 if email:
-                    if st.button("Logout", key="tb_logout_btn", use_container_width=True):
+                    if st.button("Logout", key="tb_logout_btn", width="stretch"):
                         _perform_logout()
                 else:
                     st.button(
                         "Login",
                         key="tb_login_btn",
                         on_click=lambda: st.session_state.update(_nav_target="pages/login.py"),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
         st.markdown("</div>", unsafe_allow_html=True)
@@ -244,7 +244,7 @@ def render_sidebar() -> None:
 
     st.sidebar.image(
         _logo_path(),
-        use_container_width=True,
+        width="stretch",
         output_format="PNG",
         clamp=True,
         caption=None,

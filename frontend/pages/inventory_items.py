@@ -127,7 +127,7 @@ class InventoryController:
 
         event = st.dataframe(
             df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             selection_mode="multi-row",
             on_select="rerun",
