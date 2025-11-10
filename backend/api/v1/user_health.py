@@ -26,6 +26,7 @@ router = APIRouter(prefix="/users", tags=["User Health Profiles"])
     status_code=status.HTTP_201_CREATED,
     summary="Create user health profile",
     dependencies=[Depends(require_same_user)],
+    operation_id="create_user_health_profile",
 )
 def create_health_profile(
     user_id: int,
@@ -99,6 +100,7 @@ def create_health_profile(
     response_model=UserHealthProfileRead,
     summary="Get user health profile",
     dependencies=[Depends(require_same_user)],
+    operation_id="get_user_health_profile",
 )
 def get_user_health_profile(
     user_id: int,
@@ -142,6 +144,7 @@ def get_user_health_profile(
     response_model=UserHealthProfileRead,
     summary="Update user health profile",
     dependencies=[Depends(require_same_user)],
+    operation_id="update_user_health_profile",
 )
 def update_health_profile(
     user_id: int,
@@ -197,6 +200,7 @@ def update_health_profile(
     response_model=list[UserHealthProfileSummary],
     summary="Get all health profiles summary",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_health_profiles_summary",
 )
 def get_all_health_profiles_summary(
         db: Annotated[Session, Depends(get_db)],
@@ -224,6 +228,7 @@ def get_all_health_profiles_summary(
     response_model=list[UserHealthProfileSummary],
     summary="Search health profiles by criteria",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="search_health_profiles",
 )
 def search_health_profiles(
         db: Annotated[Session, Depends(get_db)],

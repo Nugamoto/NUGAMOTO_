@@ -40,6 +40,7 @@ conversions_router = APIRouter(prefix="/units", tags=["Unit Conversion"])
     status_code=status.HTTP_201_CREATED,
     summary="Create a new unit",
     dependencies=[Depends(get_current_user_id)],  # any authenticated user can create
+    operation_id="create_unit",
 )
 def create_unit(
     unit_data: UnitCreate,
@@ -61,6 +62,7 @@ def create_unit(
     response_model=list[UnitRead],
     summary="Get all units",
     dependencies=[Depends(get_current_user_id)],  # any authenticated user can read
+    operation_id="list_units",
 )
 def get_all_units(
     db: Annotated[Session, Depends(get_db)],
@@ -75,6 +77,7 @@ def get_all_units(
     response_model=UnitRead,
     summary="Get a single unit by ID",
     dependencies=[Depends(get_current_user_id)],  # any authenticated user can read
+    operation_id="get_unit_by_id",
 )
 def get_unit_by_id(
     unit_id: int,
@@ -159,6 +162,7 @@ def delete_unit(
     response_model=UnitWithConversions,
     summary="Get unit with available conversions",
     dependencies=[Depends(get_current_user_id)],  # any authenticated user can read
+    operation_id="get_unit_with_conversions",
 )
 def get_unit_conversions(
     unit_id: int,
@@ -184,6 +188,7 @@ def get_unit_conversions(
     status_code=status.HTTP_201_CREATED,
     summary="Create a new unit conversion",
     dependencies=[Depends(get_current_user_id)],  # any authenticated user can create
+    operation_id="create_unit_conversion",
 )
 def create_unit_conversion(
     conversion_data: UnitConversionCreate,
@@ -224,6 +229,7 @@ def create_unit_conversion(
     response_model=list[UnitConversionRead],
     summary="Get unit conversions with optional filtering",
     dependencies=[Depends(get_current_user_id)],  # any authenticated user can read
+    operation_id="list_unit_conversions",
 )
 def get_unit_conversions_filtered(
     db: Annotated[Session, Depends(get_db)],
@@ -306,6 +312,7 @@ def delete_unit_conversion(
     response_model=ConversionResult,
     summary="Convert value between units",
     dependencies=[Depends(get_current_user_id)],  # any authenticated user can convert
+    operation_id="convert_units",
 )
 def convert_value_between_units(
     from_unit_id: int,
@@ -362,6 +369,7 @@ def convert_value_between_units(
     "/{from_unit_id}/can-convert-to/{to_unit_id}",
     summary="Check if conversion between units is possible",
     dependencies=[Depends(get_current_user_id)],  # any authenticated user can check
+    operation_id="can_convert_units",
 )
 def check_conversion_possibility(
     from_unit_id: int,

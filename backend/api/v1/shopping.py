@@ -42,6 +42,7 @@ products_router = APIRouter(prefix="/shopping-products", tags=["Shopping Product
     status_code=status.HTTP_201_CREATED,
     summary="Create shopping product",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="create_shopping_product",
 )
 def create_shopping_product(
     product_data: ShoppingProductCreate,
@@ -97,6 +98,7 @@ def create_shopping_product(
     status_code=status.HTTP_200_OK,
     summary="Search shopping products",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_shopping_products",
 )
 def search_shopping_products(
     food_item_id: int | None = Query(None, description="Filter by food item ID"),
@@ -145,6 +147,7 @@ def search_shopping_products(
     status_code=status.HTTP_200_OK,
     summary="Get shopping product by ID",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_shopping_product_by_id",
 )
 def get_shopping_product(
     product_id: int,
@@ -250,6 +253,7 @@ def delete_shopping_product(
     status_code=status.HTTP_200_OK,
     summary="Get products for food item",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_shopping_products_by_food_item",
 )
 def get_products_for_food_item(
     food_item_id: int,
@@ -287,6 +291,7 @@ def get_products_for_food_item(
     status_code=status.HTTP_201_CREATED,
     summary="Create shopping list",
     dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
+    operation_id="create_shopping_list",
 )
 def create_shopping_list(
     kitchen_id: int,
@@ -332,6 +337,7 @@ def create_shopping_list(
     status_code=status.HTTP_200_OK,
     summary="Get kitchen shopping lists",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="list_kitchen_shopping_lists",
 )
 def get_kitchen_shopping_lists(
     kitchen_id: int,
@@ -355,6 +361,7 @@ def get_kitchen_shopping_lists(
     status_code=status.HTTP_200_OK,
     summary="Get shopping list by ID",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_shopping_list_by_id",
 )
 def get_shopping_list(
     kitchen_id: int,
@@ -397,6 +404,7 @@ def get_shopping_list(
     status_code=status.HTTP_200_OK,
     summary="Get shopping list with products and totals",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_shopping_list_with_products",
 )
 def get_shopping_list_with_products(
     kitchen_id: int,
@@ -561,6 +569,7 @@ def delete_shopping_list(
     status_code=status.HTTP_201_CREATED,
     summary="Assign product to shopping list",
     dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
+    operation_id="create_shopping_product_assignment",
 )
 def assign_product_to_list(
     kitchen_id: int,
@@ -633,6 +642,7 @@ def assign_product_to_list(
     status_code=status.HTTP_201_CREATED,
     summary="Create product and assign to shopping list",
     dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
+    operation_id="create_and_assign_shopping_product",
 )
 def create_product_and_assign_to_list(
     kitchen_id: int,
@@ -734,6 +744,7 @@ def create_product_and_assign_to_list(
     status_code=status.HTTP_200_OK,
     summary="Get shopping list products",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="list_shopping_product_assignments",
 )
 def get_shopping_list_products(
     kitchen_id: int,

@@ -56,12 +56,14 @@ class Settings(BaseSettings):
     ADMIN_EMAILS: str = ""
     ADMIN_EMAIL_DOMAINS: str = ""
 
+    # MCP Configuration
+    ENABLE_MCP: bool = True
+
     class Config:
         # pydantic-settings will also read the .env directly for its own values.
         # We still load dotenv above so that code using os.getenv(...) also sees them.
         env_file = str(PROJECT_ROOT / ".env")
         env_file_encoding = "utf-8"
-
 
 # Singleton settings instance
 settings = Settings()

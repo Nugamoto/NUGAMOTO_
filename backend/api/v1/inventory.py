@@ -41,6 +41,7 @@ inventory_items_router = APIRouter(prefix="/items", tags=["Inventory Items"])
     status_code=status.HTTP_201_CREATED,
     summary="Create a new storage location",
     dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
+    operation_id="create_storage_location",
 )
 def create_storage_location(
         *,
@@ -67,6 +68,7 @@ def create_storage_location(
     response_model=list[StorageLocationRead],
     summary="Get all storage locations for a kitchen",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="list_storage_locations",
 )
 def get_kitchen_storage_locations(
         *,
@@ -82,6 +84,7 @@ def get_kitchen_storage_locations(
     response_model=StorageLocationRead,
     summary="Get a storage location by ID",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_storage_location_by_id",
 )
 def get_storage_location(
         *,
@@ -156,6 +159,7 @@ def delete_storage_location(
     status_code=status.HTTP_201_CREATED,
     summary="Create or update an inventory item",
     dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
+    operation_id="create_or_update_inventory_item",
 )
 def create_or_update_inventory_item(
         *,
@@ -182,6 +186,7 @@ def create_or_update_inventory_item(
     response_model=list[InventoryItemRead],
     summary="Get all inventory items for a kitchen",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="list_inventory_items",
 )
 def get_kitchen_inventory(
         *,
@@ -197,6 +202,7 @@ def get_kitchen_inventory(
     response_model=InventoryItemRead,
     summary="Get an inventory item by ID",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_inventory_item_by_id",
 )
 def get_inventory_item(
         *,
@@ -270,6 +276,7 @@ def delete_inventory_item(
     response_model=list[InventoryItemRead],
     summary="Get items that are low in stock",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_low_stock_inventory_items",
 )
 def get_low_stock_items(
         *,
@@ -285,6 +292,7 @@ def get_low_stock_items(
     response_model=list[InventoryItemRead],
     summary="Get items that are expiring soon",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_expiring_inventory_items",
 )
 def get_expiring_items(
         *,
@@ -301,6 +309,7 @@ def get_expiring_items(
     response_model=list[InventoryItemRead],
     summary="Get items that have already expired",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_expired_inventory_items",
 )
 def get_expired_items(
         *,

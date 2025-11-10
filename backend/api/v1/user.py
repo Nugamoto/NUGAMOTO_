@@ -29,6 +29,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
     response_model=UserRead,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_super_admin)],
+    operation_id="create_user",
 )
 def create_user(
         *,
@@ -76,6 +77,7 @@ def get_users(
     "/{user_id}",
     response_model=UserRead,
     dependencies=[Depends(require_same_user)],
+    operation_id="get_user_by_id",
 )
 def get_user_by_id(
         *,
@@ -152,6 +154,7 @@ def delete_user(
     "/by-email/{email}",
     response_model=UserRead,
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_user_by_email",
 )
 def get_user_by_email(
         *,

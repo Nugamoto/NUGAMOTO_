@@ -16,6 +16,7 @@ from backend.schemas.user import UserCreate
 from backend.schemas.user_credentials import UserCredentialsCreate
 from backend.security import create_access_token, create_refresh_token, decode_token
 from backend.security.passwords import verify_password
+from backend.services.mcp_session import get_mcp_session
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -65,6 +66,7 @@ def _admin_claims_for_email(email: str) -> dict:
     response_model=TokenPair,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new account",
+    operation_id="register_user",
 )
 def register(
         payload: RegisterRequest,
@@ -133,10 +135,20 @@ def register(
 
     access = create_access_token(user_id=user.id, extra_claims=claims)
     refresh = create_refresh_token(user_id=user.id)
+
+    # Store tokens in MCP session for tool usage
+    mcp_session = get_mcp_session()
+    mcp_session.set_tokens(access, refresh, user.id)
+
     return TokenPair(access_token=access, refresh_token=refresh, token_type="bearer")
 
 
-@router.post("/login", response_model=TokenPair, summary="Authenticate and issue tokens")
+@router.post(
+    "/login",
+    response_model=TokenPair,
+    summary="Authenticate and issue tokens",
+    operation_id="login_user",
+)
 def login(
         payload: LoginRequest,
         db: Annotated[Session, Depends(get_db)],
@@ -170,10 +182,19 @@ def login(
     access = create_access_token(user_id=user_orm.id, extra_claims=claims)
     refresh = create_refresh_token(user_id=user_orm.id)
 
+    # Store tokens in MCP session for tool usage
+    mcp_session = get_mcp_session()
+    mcp_session.set_tokens(access, refresh, user_orm.id)
+
     return TokenPair(access_token=access, refresh_token=refresh, token_type="bearer")
 
 
-@router.post("/refresh", response_model=TokenPair, summary="Refresh access token")
+@router.post(
+    "/refresh",
+    response_model=TokenPair,
+    summary="Refresh access token",
+    operation_id="refresh_token",
+)
 def refresh(
         refresh_token: str,
         db: Annotated[Session, Depends(get_db)],
@@ -213,7 +234,16 @@ def refresh(
     return TokenPair(access_token=access, refresh_token=new_refresh, token_type="bearer")
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Logout (stateless)")
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Logout (stateless)",
+    operation_id="logout_user",
+)
 def logout() -> Response:
     """Stateless logout. Client must delete stored tokens."""
+    # Clear MCP session tokens
+    mcp_session = get_mcp_session()
+    mcp_session.clear()
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)

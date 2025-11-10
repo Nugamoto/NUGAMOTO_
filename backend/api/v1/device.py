@@ -43,6 +43,7 @@ summary_router = APIRouter(prefix="/kitchens/{kitchen_id}/devices", tags=["Devic
     status_code=status.HTTP_201_CREATED,
     summary="Create device type",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="create_device_type",
 )
 def create_device_type(
         device_type_data: DeviceTypeCreate,
@@ -84,6 +85,7 @@ def create_device_type(
     status_code=status.HTTP_200_OK,
     summary="Get all device types",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="list_device_types",
 )
 def get_all_device_types(
         category: str | None = Query(None, description="Filter by category"),
@@ -109,6 +111,7 @@ def get_all_device_types(
     status_code=status.HTTP_200_OK,
     summary="Get device type by ID",
     dependencies=[Depends(get_current_user_id)],
+    operation_id="get_device_type_by_id",
 )
 def get_device_type(
         device_type_id: int,
@@ -227,6 +230,7 @@ def delete_device_type(
     status_code=status.HTTP_201_CREATED,
     summary="Create appliance",
     dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
+    operation_id="create_appliance",
 )
 def create_appliance(
         kitchen_id: int,
@@ -274,6 +278,7 @@ def create_appliance(
     status_code=status.HTTP_200_OK,
     summary="Get kitchen appliances",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="list_kitchen_appliances",
 )
 def get_kitchen_appliances(
         kitchen_id: int,
@@ -297,6 +302,7 @@ def get_kitchen_appliances(
     status_code=status.HTTP_200_OK,
     summary="Search kitchen appliances",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="search_kitchen_appliances",
 )
 def search_kitchen_appliances(
         kitchen_id: int,
@@ -333,6 +339,7 @@ def search_kitchen_appliances(
     status_code=status.HTTP_200_OK,
     summary="Get appliance by ID",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_appliance_by_id",
 )
 def get_appliance(
         kitchen_id: int,
@@ -481,6 +488,7 @@ def delete_appliance(
     status_code=status.HTTP_201_CREATED,
     summary="Create kitchen tool",
     dependencies=[Depends(require_kitchen_role({KitchenRole.OWNER, KitchenRole.ADMIN}))],
+    operation_id="create_kitchen_tool",
 )
 def create_kitchen_tool(
         kitchen_id: int,
@@ -528,6 +536,7 @@ def create_kitchen_tool(
     status_code=status.HTTP_200_OK,
     summary="Get kitchen tools",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="list_kitchen_tools",
 )
 def get_kitchen_tools(
         kitchen_id: int,
@@ -551,6 +560,7 @@ def get_kitchen_tools(
     status_code=status.HTTP_200_OK,
     summary="Search kitchen tools",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="search_kitchen_tools",
 )
 def search_kitchen_tools(
         kitchen_id: int,
@@ -586,6 +596,7 @@ def search_kitchen_tools(
     status_code=status.HTTP_200_OK,
     summary="Get kitchen tool by ID",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_kitchen_tool_by_id",
 )
 def get_kitchen_tool(
         kitchen_id: int,
@@ -734,6 +745,7 @@ def delete_kitchen_tool(
     status_code=status.HTTP_200_OK,
     summary="Get kitchen device summary",
     dependencies=[Depends(require_kitchen_member())],
+    operation_id="get_kitchen_device_summary",
 )
 def get_kitchen_device_summary(
         kitchen_id: int,
