@@ -122,7 +122,7 @@ class StorageLocationsController:
         df = pd.DataFrame(df_data).sort_values("ID")
         event = st.dataframe(
             df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             on_select="rerun",
             selection_mode="multi-row",
