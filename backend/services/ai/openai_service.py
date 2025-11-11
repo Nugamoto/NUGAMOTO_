@@ -59,8 +59,23 @@ class OpenAIService(AIService):
         if not self.model:
             raise OpenAIServiceError("OpenAI Model is required")
         self.prompt_builder = PromptBuilder(db)
+        
+        # Determine parameter compatibility based on model type
+        # GPT-5 and O1 models are reasoning models with restricted parameters
+        model_lower = self.model.lower()
+        is_reasoning_model = (
+            model_lower.startswith("gpt-5") or 
+            model_lower.startswith("o1") or 
+            model_lower.startswith("o3")
+        )
+        
+        # Reasoning models use max_completion_tokens and don't support temperature
+        self.use_completion_tokens = is_reasoning_model
+        self.supports_temperature = not is_reasoning_model
+        
         logger.debug(f"Initialized OpenAIService with model: {model}")
-
+        logger.debug(f"Using {'max_completion_tokens' if self.use_completion_tokens else 'max_tokens'}")
+        logger.debug(f"Temperature support: {self.supports_temperature}")
     async def generate_recipe(
             self,
             request: "RecipeGenerationRequest",
@@ -227,7 +242,7 @@ class OpenAIService(AIService):
             user_content: User prompt content.
             response_model: Pydantic model class for structured output.
             max_tokens: Maximum tokens for response.
-            temperature: Temperature for response generation.
+            temperature: Temperature for response generation (ignored for reasoning models).
 
         Returns:
             Parsed and validated Pydantic model instance.
@@ -243,17 +258,31 @@ class OpenAIService(AIService):
 
             logger.info(f"Making OpenAI API request with structured output: {response_model.__name__}")
             logger.debug(f"Model: {self.model}")
-            logger.debug(f"Temperature: {temperature}")
-            logger.debug(f"Max completion tokens: {max_tokens}")
+            if self.supports_temperature:
+                logger.debug(f"Temperature: {temperature}")
+            else:
+                logger.debug("Temperature: not supported (using default=1)")
+            logger.debug(f"Max tokens: {max_tokens}")
+
+            # Build API call parameters based on model compatibility
+            api_params = {
+                "model": self.model,
+                "messages": messages,
+                "response_format": response_model,
+            }
+        
+            # Use the appropriate token parameter
+            if self.use_completion_tokens:
+                api_params["max_completion_tokens"] = max_tokens
+            else:
+                api_params["max_tokens"] = max_tokens
+        
+            # Only add temperature for models that support it
+            if self.supports_temperature:
+                api_params["temperature"] = temperature
 
             # Use beta.chat.completions.parse with existing recipe schemas
-            completion = self.client.beta.chat.completions.parse(
-                model=self.model,
-                messages=messages,
-                response_format=response_model,
-                max_completion_tokens=max_tokens,  # Changed from max_tokens
-                temperature=temperature
-            )
+            completion = self.client.beta.chat.completions.parse(**api_params)
 
             logger.info("Received structured response from OpenAI")
             logger.debug(f"Response ID: {completion.id}")
@@ -286,7 +315,7 @@ class OpenAIService(AIService):
             system_content: System prompt content.
             user_content: User prompt content.
             max_tokens: Maximum tokens for response.
-            temperature: Temperature for response generation.
+            temperature: Temperature for response generation (ignored for reasoning models).
 
         Returns:
             Dictionary containing the JSON response.
@@ -302,16 +331,30 @@ class OpenAIService(AIService):
 
             logger.info("Making OpenAI API request with JSON response format")
             logger.debug(f"Model: {self.model}")
-            logger.debug(f"Temperature: {temperature}")
-            logger.debug(f"Max completion tokens: {max_tokens}")
+            if self.supports_temperature:
+                logger.debug(f"Temperature: {temperature}")
+            else:
+                logger.debug("Temperature: not supported (using default=1)")
+            logger.debug(f"Max tokens: {max_tokens}")
 
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                response_format=ResponseFormatJSONObject(type="json_object"),
-                max_completion_tokens=max_tokens,  # Changed from max_tokens
-                temperature=temperature
-            )
+            # Build API call parameters based on model compatibility
+            api_params = {
+                "model": self.model,
+                "messages": messages,
+                "response_format": ResponseFormatJSONObject(type="json_object"),
+            }
+        
+            # Use the appropriate token parameter
+            if self.use_completion_tokens:
+                api_params["max_completion_tokens"] = max_tokens
+            else:
+                api_params["max_tokens"] = max_tokens
+        
+            # Only add temperature for models that support it
+            if self.supports_temperature:
+                api_params["temperature"] = temperature
+
+            completion = self.client.chat.completions.create(**api_params)
 
             logger.info("Received JSON response from OpenAI")
             logger.debug(f"Response ID: {completion.id}")
