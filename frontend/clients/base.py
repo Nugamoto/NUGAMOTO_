@@ -105,7 +105,7 @@ class BaseClient:
             params=params,
             json=json_data,
             data=data,
-            timeout=30,
+            timeout=90,
         )
 
         if resp.status_code == 401 and retry_on_401 and self._refresh_token:
