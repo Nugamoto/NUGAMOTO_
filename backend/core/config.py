@@ -43,8 +43,9 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite:///./nugamoto.sqlite"
 
-    # API keys (example)
+    # API keys and models
     OPENAI_API_KEY: str = "dummy-key"
+    OPENAI_MODEL: str = "gpt-4o-mini"
 
     # JWT
     SECRET_KEY: str = "CHANGE_ME_TO_A_SECURE_RANDOM_VALUE"
@@ -57,7 +58,7 @@ class Settings(BaseSettings):
     ADMIN_EMAIL_DOMAINS: str = ""
 
     # MCP Configuration
-    ENABLE_MCP: bool = True
+    ENABLE_MCP: bool = False
 
     class Config:
         # pydantic-settings will also read the .env directly for its own values.

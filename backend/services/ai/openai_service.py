@@ -39,7 +39,7 @@ class OpenAIService(AIService):
     def __init__(
             self,
             db: Session,
-            model: str = "gpt-4o-mini",
+            model: str | None = None,
             api_key: str | None = None
     ):
         """Initialize the OpenAI service.
@@ -55,7 +55,9 @@ class OpenAIService(AIService):
             raise OpenAIServiceError("OpenAI API key is required")
 
         self.client = OpenAI(api_key=self.api_key)
-        self.model = model
+        self.model = model or settings.OPENAI_MODEL
+        if not self.model:
+            raise OpenAIServiceError("OpenAI Model is required")
         self.prompt_builder = PromptBuilder(db)
         logger.debug(f"Initialized OpenAIService with model: {model}")
 
@@ -242,14 +244,14 @@ class OpenAIService(AIService):
             logger.info(f"Making OpenAI API request with structured output: {response_model.__name__}")
             logger.debug(f"Model: {self.model}")
             logger.debug(f"Temperature: {temperature}")
-            logger.debug(f"Max tokens: {max_tokens}")
+            logger.debug(f"Max completion tokens: {max_tokens}")
 
             # Use beta.chat.completions.parse with existing recipe schemas
             completion = self.client.beta.chat.completions.parse(
                 model=self.model,
                 messages=messages,
                 response_format=response_model,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,  # Changed from max_tokens
                 temperature=temperature
             )
 
@@ -301,13 +303,13 @@ class OpenAIService(AIService):
             logger.info("Making OpenAI API request with JSON response format")
             logger.debug(f"Model: {self.model}")
             logger.debug(f"Temperature: {temperature}")
-            logger.debug(f"Max tokens: {max_tokens}")
+            logger.debug(f"Max completion tokens: {max_tokens}")
 
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 response_format=ResponseFormatJSONObject(type="json_object"),
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,  # Changed from max_tokens
                 temperature=temperature
             )
 
